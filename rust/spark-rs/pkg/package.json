@@ -1,0 +1,23 @@
+{
+  "name": "spark-rs",
+  "type": "module",
+  "collaborators": [
+    "World Labs Technologies"
+  ],
+  "version": "0.1.0",
+  "license": "Proprietary",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sparkjs-dev/spark"
+  },
+  "files": [
+    "spark_rs_bg.wasm",
+    "spark_rs.js",
+    "spark_rs.d.ts"
+  ],
+  "main": "spark_rs.js",
+  "types": "spark_rs.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
