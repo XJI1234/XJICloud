@@ -12,7 +12,7 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: () => (useAuthStore().isAuthenticated ? '/app/layer' : '/login'),
+      redirect: () => (useAuthStore().isAuthenticated ? '/app/home' : '/login'),
     },
     {
       path: '/app',
@@ -20,9 +20,23 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         {
+          path: '',
+          redirect: { name: 'home' },
+        },
+        {
+          path: 'home',
+          name: 'home',
+          component: () => import('@/views/HomeView.vue'),
+        },
+        {
           path: 'projects',
           name: 'projects',
           component: () => import('@/views/ProjectListView.vue'),
+        },
+        {
+          path: 'upload',
+          name: 'upload',
+          component: () => import('@/views/UploadView.vue'),
         },
         {
           path: 'layer',
@@ -38,7 +52,7 @@ router.beforeEach((to) => {
   const authStore = useAuthStore()
   if (to.meta.public) {
     if (authStore.isAuthenticated && to.name === 'login') {
-      return { name: 'layer' }
+      return { name: 'home' }
     }
     return true
   }

@@ -25,7 +25,7 @@ async function submit() {
       await authStore.login(username.value.trim(), password.value)
     }
 
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/app/layer'
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/app/home'
     await router.push(redirect)
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : '登录失败，请稍后重试'

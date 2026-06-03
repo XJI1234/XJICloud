@@ -817,7 +817,7 @@ onBeforeUnmount(() => {
         <section v-if="activeSidePanel === 'info'" class="section-card info-card">
           <p class="info-project-context">当前项目：{{ activeProjectName }}</p>
           <button class="side-button primary" type="button" @click="openFilePicker">
-            选择云端模型
+            选择模型
           </button>
           <button class="side-button" type="button" @click="triggerUpload">
             上传模型

@@ -23,14 +23,12 @@
   gap: 12px;
 }
 
-.cloud-brand-mark {
-  width: 36px;
-  height: 36px;
+.cloud-brand-logo {
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: #1f6feb;
-  font-weight: 700;
+  object-fit: contain;
+  background: #1b2a3d;
 }
 
 .cloud-brand-title {
@@ -83,8 +81,53 @@
   padding: 0;
 }
 
+.cloud-user-menu-root {
+  position: relative;
+}
+
 .cloud-user-chip {
   padding: 6px 12px;
+}
+
+.cloud-user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 220px;
+  padding: 8px;
+  border: 1px solid #243041;
+  border-radius: 10px;
+  background: #151d27;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.cloud-user-menu-info {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #243041;
+  margin-bottom: 8px;
+}
+
+.cloud-user-menu-info strong {
+  font-size: 14px;
+}
+
+.cloud-user-menu-info span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.cloud-user-menu-item {
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border-radius: 8px;
+}
+
+.cloud-user-menu-item:hover {
+  background: #1b2a3d;
 }
 
 .cloud-body {
@@ -333,4 +376,238 @@
 .layer-viewer-root .floating-collapsed-toggle {
   top: 50%;
   right: 12px;
+}
+
+.home-page {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at center, rgba(31, 111, 235, 0.08), transparent 55%), #0f1419;
+}
+
+.home-hero {
+  width: min(560px, 100%);
+  text-align: center;
+}
+
+.home-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.home-primary-button,
+.home-secondary-button {
+  min-height: 56px;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.home-primary-button {
+  background: #1f6feb;
+  border-color: #3b82f6;
+}
+
+.home-secondary-button {
+  background: #1b2a3d;
+}
+
+.home-recent-section {
+  text-align: left;
+}
+
+.home-recent-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #cbd5e1;
+}
+
+.home-recent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.home-recent-link {
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: 10px;
+  background: rgba(27, 42, 61, 0.8);
+}
+
+.home-recent-link:hover {
+  background: #243041;
+}
+
+.home-recent-empty,
+.home-error {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.home-error {
+  color: #f87171;
+}
+
+.home-dialog {
+  width: min(480px, calc(100vw - 32px));
+}
+
+.home-dialog-body {
+  display: grid;
+  gap: 12px;
+}
+
+.home-project-picker {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.home-picker-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+  border-radius: 10px;
+  background: #1b2a3d;
+}
+
+.home-picker-item.is-selected {
+  border-color: #3b82f6;
+  background: rgba(31, 111, 235, 0.18);
+}
+
+.home-picker-item span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.projects-current-card {
+  margin-bottom: 16px;
+}
+
+.projects-current-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.projects-current-title {
+  margin: 4px 0 8px;
+  font-size: 28px;
+}
+
+.projects-current-description,
+.projects-current-meta,
+.project-card-meta {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.projects-current-actions {
+  margin-top: 16px;
+}
+
+.project-list-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  text-align: left;
+  border: 0;
+  border-top: 1px solid #243041;
+  border-radius: 0;
+  background: transparent;
+}
+
+.project-list-row:first-of-type {
+  border-top: 0;
+}
+
+.project-list-row.is-active {
+  background: rgba(31, 111, 235, 0.12);
+}
+
+.project-list-copy {
+  flex: 1;
+}
+
+.project-list-badge {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(31, 111, 235, 0.2);
+  color: #93c5fd;
+  font-size: 12px;
+}
+
+.upload-page {
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+}
+
+.upload-header {
+  margin-bottom: 16px;
+}
+
+.upload-title {
+  margin: 4px 0 0;
+}
+
+.upload-current-card,
+.upload-empty-card {
+  max-width: 720px;
+}
+
+.upload-project-name {
+  margin: 4px 0 8px;
+}
+
+.upload-project-description,
+.upload-empty-text,
+.upload-status,
+.upload-error {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.upload-error {
+  color: #f87171;
+}
+
+@media (max-width: 720px) {
+  .home-actions,
+  .projects-create-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-header {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    padding: 12px;
+  }
+
+  .cloud-top-nav {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }

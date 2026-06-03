@@ -25,7 +25,7 @@
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| 前端 | `src/` | 登录、工程项目、图层查看（`/app/layer`） |
+| 前端 | `src/` | 主页、登录、工程项目、数据上传、模型查看（`/app/layer`） |
 | 后端 | `backend/` | REST API、JWT、模型上传/下载、配置持久化 |
 | 部署样例 | `deploy/` | Nginx、生产 `application` 模板 |
 | 桌面端 | `electron/` | 可选，本地文件对话框 |
@@ -92,9 +92,10 @@ npm run dev
 
 ### 4. 使用流程
 
-1. 注册并登录  
-2. **工程项目** → 创建项目 → 上传 `.ply` / `.spz`  
-3. **图层管理** → 选择云端模型 → 查看 / 标注 / 编辑 / 导出  
+1. 注册并登录 → 进入 **主页**（空屏）  
+2. **新建项目** 或 **打开项目**（对话框选工程）；也可点击 **最近项目**  
+3. **工程项目** 页查看/切换当前工程，上传 `.ply` / `.spz`  
+4. 左侧栏 **数据上传** 可继续上传模型；**模型查看** 中加载模型并进行标注 / 编辑 / 导出  
 
 ## Linux 服务器部署
 
@@ -161,10 +162,10 @@ curl http://127.0.0.1:8080/actuator/health
 
 ### 验收清单
 
-- [ ] 可注册 / 登录  
-- [ ] 创建项目、上传 PLY/SPZ，在 `/app/layer` 加载  
+- [ ] 可注册 / 登录，进入主页（新建 / 打开 / 最近项目）  
+- [ ] 工程项目页可切换当前工程并上传 PLY/SPZ；左侧栏「模型查看」加载模型  
 - [ ] 标注、编辑、导出 SPZ，保存配置后刷新可恢复  
-- [ ] 顶栏 / 侧栏云平台外壳正常（GIS / 双屏为占位）  
+- [ ] 左上角 logo、右上角用户菜单（退出登录）；左栏：航线规划 / 数据上传 / 模型查看  
 
 ## REST API 摘要
 
@@ -234,7 +235,7 @@ XJICloud/
 ├── backend/                 # Spring Boot 3
 │   └── src/main/java/com/xjicloud/
 ├── src/
-│   ├── views/               # Login、Projects、LayerViewer
+│   ├── views/               # Home、Login、Projects、Upload、LayerViewer
 │   ├── layouts/CloudLayout.vue
 │   ├── components/SparkViewport.vue
 │   ├── api/                 # REST 客户端

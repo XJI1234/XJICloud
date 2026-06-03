@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
 import { useAuthStore } from '@/stores/auth'
@@ -7,6 +7,9 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const userMenuOpen = ref(false)
+const userMenuRootRef = ref<HTMLElement | null>(null)
+
 const cameraStatus = inject(CAMERA_STATUS_KEY, ref<CameraStatus>({
   longitude: '--',
   latitude: '--',
@@ -18,19 +21,17 @@ const brandTitle = 'XJI Cloud'
 const brandSubtitle = '建模解决方案云平台'
 
 const navItems = [
-  { label: '搜索索引', route: null },
   { label: '工程项目', route: '/app/projects' },
+  { label: '搜索索引', route: null },
   { label: '双屏显示', route: null },
   { label: '用户空间', route: null },
   { label: '热力展示', route: null },
 ] as const
 
 const toolItems = [
-  { label: '图层管理', route: '/app/layer', icon: 'layers' },
   { label: '航线规划', route: null, icon: 'route' },
-  { label: '三维视图', route: null, icon: 'view3d' },
-  { label: 'GIS', route: null, icon: 'gis' },
-  { label: '工具箱', route: null, icon: 'toolbox' },
+  { label: '数据上传', route: '/app/upload', icon: 'upload' },
+  { label: '模型查看', route: '/app/layer', icon: 'view' },
 ] as const
 
 function isActiveNav(path: string | null) {
@@ -48,10 +49,46 @@ function showComingSoon(label: string) {
   window.alert(`${label} 功能即将推出`)
 }
 
+function toggleUserMenu() {
+  userMenuOpen.value = !userMenuOpen.value
+}
+
+function closeUserMenu() {
+  userMenuOpen.value = false
+}
+
 function logout() {
+  closeUserMenu()
   authStore.logout()
   router.push('/login')
 }
+
+function onDocumentClick(event: MouseEvent) {
+  if (!userMenuOpen.value) {
+    return
+  }
+
+  const target = event.target
+  if (userMenuRootRef.value && target instanceof Node && !userMenuRootRef.value.contains(target)) {
+    closeUserMenu()
+  }
+}
+
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeUserMenu()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onDocumentKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onDocumentKeydown)
+})
 
 const statusText = computed(() => cameraStatus.value)
 </script>
@@ -60,7 +97,7 @@ const statusText = computed(() => cameraStatus.value)
   <div class="cloud-shell">
     <header class="cloud-header">
       <div class="cloud-brand">
-        <div class="cloud-brand-mark">XJI</div>
+        <img class="cloud-brand-logo" src="/logo.jpg" alt="XJI Cloud" />
         <div>
           <h1 class="cloud-brand-title">{{ brandTitle }}</h1>
           <p class="cloud-brand-subtitle">{{ brandSubtitle }}</p>
@@ -85,9 +122,21 @@ const statusText = computed(() => cameraStatus.value)
         <button class="cloud-icon-button" type="button" title="下载" @click="showComingSoon('下载')">下</button>
         <button class="cloud-icon-button" type="button" title="语言">中</button>
         <button class="cloud-icon-button" type="button" title="帮助" @click="showComingSoon('帮助')">?</button>
-        <button class="cloud-user-chip" type="button" @click="logout">
-          {{ authStore.displayName || authStore.username || '用户' }}
-        </button>
+
+        <div ref="userMenuRootRef" class="cloud-user-menu-root">
+          <button class="cloud-user-chip" type="button" @click.stop="toggleUserMenu">
+            {{ authStore.displayName || authStore.username || '用户' }}
+          </button>
+          <div v-if="userMenuOpen" class="cloud-user-menu" role="menu">
+            <div class="cloud-user-menu-info">
+              <strong>{{ authStore.displayName || '未设置显示名' }}</strong>
+              <span>@{{ authStore.username || 'unknown' }}</span>
+            </div>
+            <button class="cloud-user-menu-item" type="button" role="menuitem" @click="logout">
+              退出登录
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
