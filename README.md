@@ -1,117 +1,199 @@
-# XJI Viewer
+# XJI Cloud
 
-基于 [Spark 2.0](https://github.com/sparkjs-dev/spark) 的 3D Gaussian Splatting（3DGS）模型查看与编辑工作台。支持在浏览器或 Electron 桌面端加载 PLY / SPZ 模型，进行实时渲染、标注、局部编辑与导出。
+建模解决方案云平台 — 基于 [Spark 2.0](https://github.com/sparkjs-dev/spark) 的 3D Gaussian Splatting（3DGS）模型查看与编辑。支持 **Linux 云部署**（前后端分离）与 **Electron 桌面版**。
+
+**仓库地址：** [github.com/XJI1234/XJICloud](https://github.com/XJI1234/XJICloud)
 
 ![Vue 3](https://img.shields.io/badge/Vue-3.5-42b883)
-![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178c6)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F)
+![Java](https://img.shields.io/badge/Java-17-ED8B00)
 ![Three.js](https://img.shields.io/badge/Three.js-r180-black)
-![Electron](https://img.shields.io/badge/Electron-37-47848f)
+
+## 架构概览
+
+```
+浏览器 / Electron
+       │
+       ▼
+  Vue 3 前端 (Vite)          ──►  SparkViewport + WASM
+       │  /api/v1
+       ▼
+  Spring Boot 后端 (JWT)
+       ├── H2 / PostgreSQL（元数据）
+       └── 本地磁盘 /data/xjicloud（模型与 viewer.json）
+```
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| 前端 | `src/` | 登录、工程项目、图层查看（`/app/layer`） |
+| 后端 | `backend/` | REST API、JWT、模型上传/下载、配置持久化 |
+| 部署样例 | `deploy/` | Nginx、生产 `application` 模板 |
+| 桌面端 | `electron/` | 可选，本地文件对话框 |
+| 渲染核心 | `src/lib/spark/`、`rust/` | Spark 2.0 + WASM |
+
+后端为 **跨平台 Java**，开发可在 Windows/macOS 进行；**生产与测试推荐 Linux**（路径、Nginx、systemd 均按 Linux 约定）。
 
 ## 功能特性
 
-### 模型查看
-- 加载 **PLY**、**SPZ** 格式的 3DGS 模型
-- 基于 Spark 2.0 的高性能 WebGL 渲染，带载入揭示动画
-- 左键旋转、右键平移、滚轮缩放
-- 重置视角 / 保存默认视角（写入同目录配置文件）
-- 屏幕平面顺时针 / 逆时针旋转（15° 步进）
+### 云平台（Web）
 
-### 标注与测量
-- **气泡标注**：点击模型表面添加文字标注，支持拖拽 reposition
-- **立方体标记**：拖拽绘制 3D 立方体框，可添加标签文字
-- 标注配置持久化到 `.viewer.json`
+- 用户注册 / 登录（JWT）
+- **工程项目**：创建项目、上传 PLY/SPZ、列表选模
+- **图层查看**（`/app/layer`）：与桌面版相同的查看、标注、编辑、导出
+- 查看器配置（`.viewer.json` v2 结构）存服务端，刷新可恢复
+- 导出 SPZ 在浏览器生成后上传服务器
 
-### 模型编辑
-- **颜色标记**：画笔为 splat 着色
-- **模型擦除**：将选中区域 splat 透明度置零
-- **橡皮擦**：恢复原始颜色与透明度
-- 可调节画笔半径与深度
-- 支持撤回 / 重做（最多 24 步）
-- 导出编辑结果为 **SPZ** 文件
+### 模型能力（Spark 渲染）
 
-### 项目信息
-- 管理项目名称及内置字段（经纬度、建筑名称、楼层数、高度）
-- 支持自定义字段，随模型目录一并保存
+- PLY / SPZ 加载，WebGL 高性能渲染
+- 气泡标注、立方体标记、颜色标记 / 擦除 / 橡皮擦
+- 撤销重做、默认视角、屏幕平面旋转
+- 项目信息字段（经纬度、建筑名称等，可自定义）
 
-### 运行形态
-- **Web 版**：通过 Vite 开发服务器或静态构建产物运行（需浏览器支持 File System Access API 以读写配置文件）
-- **桌面版**：Electron 封装，提供原生文件对话框与目录读写
+### 桌面版（Electron）
 
-## 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| 前端框架 | Vue 3 + TypeScript + Vite |
-| 3D 渲染 | Three.js + Spark 2.0（`SparkRenderer` / `SplatMesh` / Dyno 着色器管线） |
-| 高性能计算 | Rust → WebAssembly（`spark-rs`、`spark-worker-rs`） |
-| 桌面端 | Electron 37 |
-| 构建打包 | electron-builder（NSIS 安装包 + 便携版） |
+- 本地目录打开模型，不依赖云后端
+- 构建：`npm run electron:build` → `release/`
 
 ## 环境要求
 
-- **Node.js** ≥ 18
-- **npm** ≥ 9
-- （可选）**Rust** ≥ 1.82 + `wasm32-unknown-unknown` 目标，仅在需要重新编译 WASM 模块时
+| 用途 | 依赖 |
+|------|------|
+| 前端 | Node.js ≥ 18，npm ≥ 9 |
+| 后端 | Java 17+，Maven 3.9+ |
+| 生产数据库（可选） | PostgreSQL 14+（`prod` profile） |
+| 重编 WASM（可选） | Rust ≥ 1.82，`wasm32-unknown-unknown` |
 
-## 快速开始
+## 快速开始（本地开发）
 
-### 安装依赖
+### 1. 安装前端依赖
 
 ```bash
-npm run deps:install
+npm install
+# 或 npm run deps:install  # 使用 npmmirror 加速
 ```
 
-> 该命令使用 npmmirror 镜像加速 npm 与 Electron 下载，适合国内网络环境。也可直接使用 `npm install`。
+### 2. 启动后端
 
-### Web 开发模式
+```bash
+cd backend
+mvn spring-boot:run
+```
+
+默认 **dev** profile：H2 数据库 `./data/xjicloud-db`，模型目录 `./data/xjicloud`，端口 **8080**。
+
+### 3. 启动前端
 
 ```bash
 npm run dev
 ```
 
-浏览器访问 `http://127.0.0.1:5174`。
+浏览器访问 **http://127.0.0.1:5174/login**（Vite 已将 `/api` 代理到 `8080`）。
 
-### Electron 桌面开发模式
+### 4. 使用流程
+
+1. 注册并登录  
+2. **工程项目** → 创建项目 → 上传 `.ply` / `.spz`  
+3. **图层管理** → 选择云端模型 → 查看 / 标注 / 编辑 / 导出  
+
+## Linux 服务器部署
+
+以下命令在 **Ubuntu / Debian 等 Linux** 上验证；JAR 与路径均按 Linux 约定。
+
+### 1. 构建
 
 ```bash
-npm run electron:dev
-```
-
-同时启动 Vite 开发服务器与 Electron 窗口。
-
-### 构建
-
-```bash
-# 前端静态资源
+# 前端
+npm ci
 npm run build
+# 产物：dist/
 
-# Windows 桌面安装包（NSIS + 便携版）
-npm run electron:build
+# 后端
+cd backend
+mvn -DskipTests package
+# 产物：backend/target/xjicloud-backend-1.0.0.jar
 ```
 
-产物输出至 `release/` 目录。
-
-### 重新编译 Rust WASM（可选）
+### 2. 数据目录与数据库
 
 ```bash
-npm run build:wasm
+sudo mkdir -p /data/xjicloud
+sudo chown "$USER:$USER" /data/xjicloud
 ```
 
-编译结果写入 `rust/spark-rs/pkg/` 与 `rust/spark-worker-rs/pkg/`。
+**方式 A — 快速试跑（H2，无需 PostgreSQL）**
 
-## 使用说明
+```bash
+cd backend
+java -jar target/xjicloud-backend-1.0.0.jar \
+  --spring.profiles.active=dev \
+  --xjicloud.storage.root=/data/xjicloud \
+  --xjicloud.cors.allowed-origins=http://你的服务器IP,https://你的域名
+```
 
-### 打开模型
+**方式 B — 生产（PostgreSQL）**
 
-1. 点击侧边栏 **打开模型目录**
-2. 选择包含 `.ply` 或 `.spz` 文件的文件夹
-3. 若目录中有多个模型，会弹出选择对话框
+```bash
+# 创建库与用户后，使用 deploy/application-prod.yml.example 作为参考
+java -jar target/xjicloud-backend-1.0.0.jar \
+  --spring.profiles.active=prod \
+  --spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/xjicloud \
+  --spring.datasource.username=xjicloud \
+  --spring.datasource.password=你的密码 \
+  --xjicloud.jwt.secret=至少32位的随机密钥 \
+  --xjicloud.storage.root=/data/xjicloud \
+  --xjicloud.cors.allowed-origins=https://你的域名
+```
 
-桌面版通过 Electron 原生对话框；Web 版需 Chrome / Edge 等支持 [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) 的浏览器。
+### 3. Nginx
 
-### 配置文件
+复制并按环境修改 [`deploy/nginx.conf.example`](deploy/nginx.conf.example)：
 
-每个模型会在同目录下自动生成或读取 `{模型名}.viewer.json`，结构示例：
+- `/` → `dist/` 静态文件，`try_files` 回退 `index.html`（SPA）
+- `/api/` → `http://127.0.0.1:8080`
+- `client_max_body_size` 建议 ≥ 2G（大模型上传）
+
+### 4. 健康检查
+
+```bash
+curl http://127.0.0.1:8080/actuator/health
+```
+
+### 验收清单
+
+- [ ] 可注册 / 登录  
+- [ ] 创建项目、上传 PLY/SPZ，在 `/app/layer` 加载  
+- [ ] 标注、编辑、导出 SPZ，保存配置后刷新可恢复  
+- [ ] 顶栏 / 侧栏云平台外壳正常（GIS / 双屏为占位）  
+
+## REST API 摘要
+
+前缀：`/api/v1`（除登录外需 `Authorization: Bearer <token>`）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/auth/register`、`/auth/login` | 注册 / 登录 |
+| GET/POST | `/projects` | 项目列表 / 创建 |
+| GET | `/projects/{id}/models` | 模型列表 |
+| POST | `/projects/{id}/models/upload` | 上传模型（multipart） |
+| GET | `/models/{id}/download` | 下载模型（支持 `Range`） |
+| GET/PUT | `/models/{id}/viewer-config` | 读取 / 保存查看器 JSON |
+| POST | `/models/{id}/export` | 上传导出 SPZ |
+
+## 配置项
+
+| 配置键 | 默认值（dev） | 说明 |
+|--------|----------------|------|
+| `xjicloud.storage.root` | `./data/xjicloud` | 模型与 `viewer.json` 根目录；Linux 生产建议 `/data/xjicloud` |
+| `xjicloud.jwt.secret` | 见 `application.yml` | **生产必须修改** |
+| `xjicloud.cors.allowed-origins` | `http://127.0.0.1:5174,...` | 前端访问源，逗号分隔 |
+| `server.port` | `8080` | 后端端口 |
+
+前端可选环境变量：`VITE_API_BASE_URL`（留空则使用同源 `/api`，由 Nginx 或 Vite 代理）。
+
+## 查看器配置格式
+
+云端与本地均使用 **version 2** JSON（原 `{模型名}.viewer.json`）：
 
 ```json
 {
@@ -125,7 +207,7 @@ npm run build:wasm
   "projectInfo": {
     "projectName": "示例项目",
     "fields": [
-      { "key": "coordinates", "label": "经纬度", "value": "116.39, 39.90" },
+      { "key": "coordinates", "label": "经纬度", "value": "" },
       { "key": "buildingName", "label": "建筑名称", "value": "" },
       { "key": "floorCount", "label": "楼层数", "value": "" },
       { "key": "height", "label": "高度", "value": "" }
@@ -134,46 +216,39 @@ npm run build:wasm
 }
 ```
 
-### 快捷键
+## 快捷键（图层查看页）
 
 | 按键 | 功能 |
 |------|------|
-| `O` | 打开模型目录 |
-| `1` | 颜色标记模式 |
-| `2` | 模型擦除模式 |
-| `3` | 橡皮擦模式 |
-| `Esc` | 返回查看模式 |
-| `Ctrl+Z` / `Cmd+Z` | 撤回编辑 |
-| `Ctrl+Y` / `Cmd+Shift+Z` | 重做编辑 |
-| `Delete` | 删除选中的标注或立方体 |
+| `O` | 打开 / 选择模型 |
+| `1` / `2` / `3` | 颜色标记 / 擦除 / 橡皮擦 |
+| `Esc` | 查看模式 |
+| `Ctrl+Z` / `Cmd+Z` | 撤回 |
+| `Ctrl+Y` / `Cmd+Shift+Z` | 重做 |
+| `Delete` | 删除选中标注 |
 
 ## 项目结构
 
 ```
-Viewer/
+XJICloud/
+├── backend/                 # Spring Boot 3
+│   └── src/main/java/com/xjicloud/
 ├── src/
-│   ├── App.vue                 # 主界面与侧边栏逻辑
-│   ├── components/
-│   │   └── SparkViewport.vue   # Spark 渲染视口、编辑与标注
-│   ├── lib/spark/              # Spark 2.0 渲染库（TypeScript + GLSL）
-│   ├── utils/
-│   │   └── desktopRuntime.ts   # Electron 桌面桥接
-│   └── styles/
-├── electron/                   # Electron 主进程与 preload
-├── rust/
-│   ├── spark-lib/              # 共享 Rust 库（PLY/SPZ 编解码等）
-│   ├── spark-rs/               # 主 WASM 模块
-│   ├── spark-worker-rs/        # Worker WASM 模块（排序等）
-│   └── build_wasm.js           # WASM 构建脚本
-├── public/
-└── vite.config.ts
+│   ├── views/               # Login、Projects、LayerViewer
+│   ├── layouts/CloudLayout.vue
+│   ├── components/SparkViewport.vue
+│   ├── api/                 # REST 客户端
+│   └── services/viewerStorage.ts
+├── deploy/                  # nginx、application-prod 示例
+├── electron/
+└── rust/                    # WASM（spark-rs、spark-worker-rs）
 ```
 
 ## 致谢
 
-- 渲染核心基于 [Spark](https://github.com/sparkjs-dev/spark)（World Labs Technologies）
-- 3D 基础库 [Three.js](https://threejs.org/)
+- [Spark](https://github.com/sparkjs-dev/spark)（World Labs Technologies）
+- [Three.js](https://threejs.org/)
 
 ## License
 
-本项目应用层代码可自由使用。`src/lib/spark/` 与 `rust/` 下的 Spark 相关代码遵循 Spark 原始许可（Proprietary），使用前请参阅 [sparkjs-dev/spark](https://github.com/sparkjs-dev/spark) 仓库说明。
+应用层代码可自由使用。`src/lib/spark/` 与 `rust/` 下 Spark 相关代码遵循 Spark 原始许可（Proprietary），详见 [sparkjs-dev/spark](https://github.com/sparkjs-dev/spark)。

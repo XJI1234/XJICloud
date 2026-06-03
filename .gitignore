@@ -13,6 +13,8 @@ dist-ssr
 release
 *.local
 rust/target
+backend/data/
+data/
 
 # Editor directories and files
 .vscode/*
@@ -24,3 +26,4 @@ rust/target
 *.njsproj
 *.sln
 *.sw?
+Cookies

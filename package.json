@@ -16,10 +16,12 @@
   },
   "dependencies": {
     "fflate": "^0.8.2",
+    "pinia": "^2.3.1",
     "three": "^0.180.0",
     "three-mesh-bvh": "^0.9.10",
     "three-player-controller": "^0.4.5",
-    "vue": "^3.5.32"
+    "vue": "^3.5.32",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

@@ -1,0 +1,23 @@
+spring:
+  profiles:
+    active: prod
+  datasource:
+    url: jdbc:postgresql://localhost:5432/xjicloud
+    username: xjicloud
+    password: change-me
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+
+server:
+  port: 8080
+
+xjicloud:
+  jwt:
+    secret: replace-with-a-long-random-secret-at-least-32-characters
+    expiration-ms: 86400000
+  storage:
+    root: /data/xjicloud
+  cors:
+    allowed-origins: https://your-domain.example

@@ -1,0 +1,286 @@
+.cloud-shell {
+  display: grid;
+  grid-template-rows: 56px minmax(0, 1fr) 36px;
+  width: 100vw;
+  height: 100vh;
+  background: #0f1419;
+  color: #e2e8f0;
+}
+
+.cloud-header {
+  display: grid;
+  grid-template-columns: 280px 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid #243041;
+  background: linear-gradient(180deg, #151d27 0%, #111820 100%);
+}
+
+.cloud-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cloud-brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #1f6feb;
+  font-weight: 700;
+}
+
+.cloud-brand-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.cloud-brand-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.cloud-top-nav {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cloud-nav-link,
+.cloud-icon-button,
+.cloud-user-chip,
+.cloud-tool-button {
+  border-radius: 6px;
+}
+
+.cloud-nav-link {
+  padding: 8px 14px;
+  background: transparent;
+  border-color: transparent;
+  color: #cbd5e1;
+}
+
+.cloud-nav-link.is-active,
+.cloud-nav-link:hover {
+  background: #1b2a3d;
+  border-color: #2b3f57;
+}
+
+.cloud-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.cloud-user-chip {
+  padding: 6px 12px;
+}
+
+.cloud-body {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.cloud-tool-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 8px;
+  border-right: 1px solid #243041;
+  background: #111820;
+}
+
+.cloud-tool-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  font-size: 11px;
+}
+
+.cloud-tool-button.is-active {
+  background: #1f6feb;
+  border-color: #3b82f6;
+}
+
+.cloud-tool-glyph {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: #1b2a3d;
+  font-weight: 700;
+}
+
+.cloud-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cloud-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-top: 1px solid #243041;
+  background: rgba(17, 24, 32, 0.92);
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.cloud-status-metrics {
+  display: flex;
+  gap: 18px;
+}
+
+.cloud-status-hint {
+  color: #64748b;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at top, #1b2a3d 0%, #0f1419 55%);
+}
+
+.login-card {
+  width: min(420px, calc(100vw - 32px));
+  padding: 28px;
+  border-radius: 12px;
+  border: 1px solid #243041;
+  background: #151d27;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.login-eyebrow {
+  margin: 0;
+  color: #60a5fa;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-title {
+  margin: 8px 0 4px;
+  font-size: 24px;
+}
+
+.login-subtitle {
+  margin: 0 0 20px;
+  color: #94a3b8;
+}
+
+.login-mode-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.login-mode-button.is-active {
+  background: #1f6feb;
+  border-color: #3b82f6;
+}
+
+.login-form {
+  display: grid;
+  gap: 12px;
+}
+
+.login-field {
+  display: grid;
+  gap: 6px;
+}
+
+.login-error {
+  margin: 0;
+  color: #f87171;
+}
+
+.login-submit {
+  width: 100%;
+}
+
+.projects-page {
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+}
+
+.projects-header,
+.project-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.projects-header {
+  margin-bottom: 16px;
+}
+
+.projects-title {
+  margin: 4px 0 0;
+}
+
+.projects-create-card,
+.projects-list {
+  margin-bottom: 16px;
+}
+
+.projects-create-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+}
+
+.project-card {
+  padding: 14px 0;
+  border-top: 1px solid #243041;
+}
+
+.project-card:first-of-type {
+  border-top: 0;
+}
+
+.project-card-title {
+  margin: 0 0 4px;
+}
+
+.project-card-description,
+.projects-empty,
+.projects-error {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.project-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.info-project-context {
+  margin: 0 0 8px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.layer-viewer-root .app-shell {
+  height: 100%;
+}

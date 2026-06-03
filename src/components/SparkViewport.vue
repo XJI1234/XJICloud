@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { inject, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { VIEWER_STORAGE_KEY } from '@/services/viewerStorage'
 import * as THREE from 'three'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
@@ -107,7 +108,10 @@ const props = defineProps<{
   projectInfo: ProjectInfoConfig | null
   saveProjectInfoToken: number
   sceneInteractionLocked: boolean
+  cloudModelId: string | null
 }>()
+
+const storage = inject(VIEWER_STORAGE_KEY, null)
 
 const emit = defineEmits<{
   loaded: [info: LoadedModelInfo]
@@ -122,6 +126,7 @@ const emit = defineEmits<{
   'project-info-loaded': [info: ProjectInfoConfig]
   'undo-availability-change': [available: boolean]
   'redo-availability-change': [available: boolean]
+  'camera-change': [status: { longitude: string; latitude: string; elevation: string; viewHeight: string }]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -599,6 +604,25 @@ async function writeActiveViewerConfigFile(config: ViewerConfigFile) {
 }
 
 async function ensureViewerConfigFile(file = currentFile, directoryHandle = props.directoryHandle, filePath = props.filePath) {
+  if (props.cloudModelId && storage) {
+    currentConfigHandle = null
+    currentConfigPath = null
+    currentConfigFileName = 'viewer.json'
+
+    try {
+      const rawText = await storage.loadViewerConfigRaw(props.cloudModelId)
+      const nextConfig = coerceViewerConfig(rawText)
+      currentDefaultView = nextConfig.defaultView
+      configDirty = false
+      return nextConfig
+    } catch {
+      const emptyConfig = createEmptyViewerConfig()
+      currentDefaultView = emptyConfig.defaultView
+      configDirty = false
+      return emptyConfig
+    }
+  }
+
   if (filePath) {
     const configPath = getViewerConfigPath(filePath)
     if (!configPath) {
@@ -659,6 +683,18 @@ async function ensureViewerConfigFile(file = currentFile, directoryHandle = prop
 }
 
 async function saveViewerConfig(successMessage: string, failureMessage: string) {
+  if (props.cloudModelId && storage) {
+    try {
+      await storage.saveViewerConfig(props.cloudModelId, createViewerConfigSnapshot() as import('@/types/viewer').ViewerConfigFile)
+      configDirty = false
+      emit('status', successMessage)
+      return true
+    } catch {
+      emit('status', failureMessage)
+      return false
+    }
+  }
+
   if (!currentConfigHandle && !currentConfigPath) {
     emit('status', failureMessage)
     return false
@@ -2147,6 +2183,18 @@ async function exportCurrentMesh() {
     const exportName = `${currentFileBaseName}-painted.spz`
     const configContents = serializeViewerConfig(createViewerConfigSnapshot())
 
+    if (props.cloudModelId && storage) {
+      await storage.saveExport(props.cloudModelId, exportBytes, exportName)
+      await storage.saveViewerConfig(props.cloudModelId, createViewerConfigSnapshot() as import('@/types/viewer').ViewerConfigFile)
+      emit('exported', {
+        fileName: exportName,
+        splatCount: visibleCount,
+        clippedCount: writer.clippedCount,
+        sphericalHarmonicsDegree: 0,
+      })
+      return
+    }
+
     if (props.filePath) {
       const exportPath = await pickDesktopExportPath(exportName)
       if (!exportPath) {
@@ -2379,10 +2427,24 @@ onMounted(() => {
     updateQueuedViewRotation(deltaSeconds)
     updatePointAnnotationScreenPositions()
     updateCubeMarkerScreenPositions()
+    emitCameraStatus()
 
     renderer.render(scene, camera)
   })
 })
+
+function emitCameraStatus() {
+  if (!camera) {
+    return
+  }
+
+  emit('camera-change', {
+    longitude: camera.position.x.toFixed(4),
+    latitude: camera.position.y.toFixed(4),
+    elevation: camera.position.z.toFixed(4),
+    viewHeight: camera.position.length().toFixed(4),
+  })
+}
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
