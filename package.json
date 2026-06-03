@@ -5,7 +5,7 @@
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "deps:install": "cross-env npm_config_registry=https://registry.npmmirror.com ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ npm install",
+    "deps:install": "npm install",
     "dev": "vite",
     "build:wasm": "node rust/build_wasm.js",
     "build": "vue-tsc -b && vite build",
