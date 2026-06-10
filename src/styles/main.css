@@ -780,11 +780,61 @@ input:disabled {
   margin-top: 4px;
 }
 
+.model-picker-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.model-picker-subtitle {
+  margin: 6px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .model-choice-list {
   display: grid;
   gap: 10px;
-  max-height: 320px;
+  max-height: 360px;
   overflow: auto;
+}
+
+.model-choice-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  background: #111820;
+  color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-choice-card:hover,
+.model-choice-card.is-current {
+  border-color: #3b82f6;
+  background: #172033;
+}
+
+.model-choice-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.model-choice-meta,
+.model-choice-updated {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.model-choice-badge {
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(31, 111, 235, 0.22);
+  color: #93c5fd;
+  font-size: 11px;
 }
 
 @media (max-width: 720px) {

@@ -28,6 +28,8 @@ function mapModelSummary(model: ApiModelSummary): ModelSummary {
     fileName: model.fileName,
     format: model.format,
     sizeBytes: model.sizeBytes,
+    version: model.version,
+    updatedAt: model.updatedAt,
   }
 }
 

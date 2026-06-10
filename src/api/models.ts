@@ -40,6 +40,17 @@ export function saveViewerConfig(modelId: string, jsonPayload: string) {
   })
 }
 
+export interface DownloadTokenPayload {
+  url: string
+  expiresAt: string
+}
+
+export function createDownloadToken(modelId: string) {
+  return apiRequest<DownloadTokenPayload>(`/api/v1/models/${modelId}/download-token`, {
+    method: 'POST',
+  })
+}
+
 export function uploadExport(modelId: string, file: Blob, fileName: string) {
   const formData = new FormData()
   formData.append('file', file, fileName)

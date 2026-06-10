@@ -25,11 +25,13 @@
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| 前端 | `src/` | 主页、登录、工程项目、数据上传、模型查看（`/app/layer`） |
+| 前端壳层 | `src/` | 主页、登录、工程项目、数据上传、路由与云 API |
+| Spark 查看器 | `src/modules/viewer/` | 模型查看（`/app/layer`），Spark + WASM |
+| SuperSplat 编辑器 | `modules/supersplat/` | 高级编辑（iframe 子应用，`/app/supersplat`） |
 | 后端 | `backend/` | REST API、JWT、模型上传/下载、配置持久化 |
 | 部署样例 | `deploy/` | Nginx、生产 `application` 模板 |
 | 桌面端 | `electron/` | 可选，本地文件对话框 |
-| 渲染核心 | `src/lib/spark/`、`rust/` | Spark 2.0 + WASM |
+| 渲染核心 | `src/lib/spark/`、`rust/` | Spark 2.0 + WASM（查看器共享） |
 
 后端为 **跨平台 Java**，开发可在 Windows/macOS 进行；**生产与测试推荐 Linux**（路径、Nginx、systemd 均按 Linux 约定）。
 
@@ -39,9 +41,10 @@
 
 - 用户注册 / 登录（JWT）
 - **工程项目**：创建项目、上传 PLY/SPZ、列表选模
-- **图层查看**（`/app/layer`）：与桌面版相同的查看、标注、编辑、导出
+- **模型查看**（`/app/layer`）：Spark 查看、标注、编辑、导出 SPZ
+- **高级编辑**（`/app/supersplat`）：嵌入 [SuperSplat](https://github.com/playcanvas/supersplat)，裁剪/变换等原生编辑，保存 PLY 到云端
 - 查看器配置（`.viewer.json` v2 结构）存服务端，刷新可恢复
-- 导出 SPZ 在浏览器生成后上传服务器
+- 导出在浏览器生成后上传服务器（查看器 SPZ / 高级编辑 PLY）
 
 ### 模型能力（Spark 渲染）
 
@@ -59,7 +62,8 @@
 
 | 用途 | 依赖 |
 |------|------|
-| 前端 | Node.js ≥ 18，npm ≥ 9 |
+| 前端（Vite 壳层） | Node.js ≥ 18，npm ≥ 9 |
+| SuperSplat 子工程 | Node.js ≥ **20.19**（见 `modules/supersplat/package.json`） |
 | 后端 | Java 17+，Maven 3.9+ |
 | 生产数据库（可选） | PostgreSQL 14+（`prod` profile） |
 | 重编 WASM（可选） | Rust ≥ 1.82，`wasm32-unknown-unknown` |
@@ -82,7 +86,15 @@ mvn spring-boot:run
 
 默认 **dev** profile：H2 数据库 `./data/xjicloud-db`，模型目录 `./data/xjicloud`，端口 **8080**。
 
-### 3. 启动前端
+### 3. 构建 SuperSplat 子应用（高级编辑）
+
+```bash
+npm run build:supersplat
+```
+
+产物复制到 `public/supersplat/`，Vite dev 与 `npm run build` 会一并提供静态资源。
+
+### 4. 启动前端
 
 ```bash
 npm run dev
@@ -90,12 +102,23 @@ npm run dev
 
 浏览器访问 **http://127.0.0.1:5174/login**（Vite 已将 `/api` 代理到 `8080`）。
 
-### 4. 使用流程
+### 5. 使用流程
 
 1. 注册并登录 → 进入 **主页**（空屏）  
 2. **新建项目** 或 **打开项目**（对话框选工程）；也可点击 **最近项目**  
 3. **工程项目** 页查看/切换当前工程，上传 `.ply` / `.spz`  
-4. 左侧栏 **数据上传** 可继续上传模型；**模型查看** 中加载模型并进行标注 / 编辑 / 导出  
+4. 左侧栏 **数据上传** 可继续上传模型  
+5. **模型查看**：Spark 标注 / 编辑 / 导出 SPZ  
+6. **高级编辑**：SuperSplat 原生编辑，**保存到云端** 上传 PLY（覆盖云端模型文件）；保存后可在模型查看中重新加载  
+
+### 双编辑器说明
+
+| 入口 | 引擎 | 云端保存格式 |
+|------|------|--------------|
+| 模型查看 | Spark | SPZ |
+| 高级编辑 | SuperSplat | PLY |
+
+同一模型可先高级编辑保存 PLY，再在模型查看中打开（格式互通）。
 
 ## Linux 服务器部署
 
@@ -104,10 +127,10 @@ npm run dev
 ### 1. 构建
 
 ```bash
-# 前端
+# 前端（含 SuperSplat 子应用）
 npm ci
-npm run build
-# 产物：dist/
+npm run build:all
+# 产物：dist/（含 dist/supersplat/）
 
 # 后端
 cd backend
@@ -151,6 +174,7 @@ java -jar target/xjicloud-backend-1.0.0.jar \
 复制并按环境修改 [`deploy/nginx.conf.example`](deploy/nginx.conf.example)：
 
 - `/` → `dist/` 静态文件，`try_files` 回退 `index.html`（SPA）
+- `/supersplat/` → `dist/supersplat/`（SuperSplat 子应用静态资源）
 - `/api/` → `http://127.0.0.1:8080`
 - `client_max_body_size` 建议 ≥ 2G（大模型上传）
 
@@ -165,7 +189,8 @@ curl http://127.0.0.1:8080/actuator/health
 - [ ] 可注册 / 登录，进入主页（新建 / 打开 / 最近项目）  
 - [ ] 工程项目页可切换当前工程并上传 PLY/SPZ；左侧栏「模型查看」加载模型  
 - [ ] 标注、编辑、导出 SPZ，保存配置后刷新可恢复  
-- [ ] 左上角 logo、右上角用户菜单（退出登录）；左栏：航线规划 / 数据上传 / 模型查看  
+- [ ] 左侧栏「高级编辑」可加载 SuperSplat，保存 PLY 到云端后模型查看可重载  
+- [ ] 左上角 logo、右上角用户菜单（退出登录）；左栏：航线规划 / 数据上传 / 模型查看 / 高级编辑  
 
 ## REST API 摘要
 
@@ -177,9 +202,10 @@ curl http://127.0.0.1:8080/actuator/health
 | GET/POST | `/projects` | 项目列表 / 创建 |
 | GET | `/projects/{id}/models` | 模型列表 |
 | POST | `/projects/{id}/models/upload` | 上传模型（multipart） |
-| GET | `/models/{id}/download` | 下载模型（支持 `Range`） |
+| POST | `/models/{id}/download-token` | 签发 15 分钟短期下载 URL（供 SuperSplat iframe） |
+| GET | `/models/{id}/download` | 下载模型（`Bearer` 或 `?access_token=`，支持 `Range`） |
 | GET/PUT | `/models/{id}/viewer-config` | 读取 / 保存查看器 JSON |
-| POST | `/models/{id}/export` | 上传导出 SPZ |
+| POST | `/models/{id}/export` | 上传导出文件（SPZ 或 PLY） |
 
 ## 配置项
 

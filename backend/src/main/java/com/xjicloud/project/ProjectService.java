@@ -36,9 +36,13 @@ public class ProjectService {
     }
 
     public Project requireOwnedProject(UserAccount user, UUID projectId) {
+        return requireOwnedProjectByUserId(user.getId(), projectId);
+    }
+
+    public Project requireOwnedProjectByUserId(UUID userId, UUID projectId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new BusinessException("项目不存在", HttpStatus.NOT_FOUND));
-        if (!project.getOwnerId().equals(user.getId())) {
+        if (!project.getOwnerId().equals(userId)) {
             throw new BusinessException("无权访问该项目", HttpStatus.FORBIDDEN);
         }
         return project;

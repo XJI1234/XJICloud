@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { VIEWER_STORAGE_KEY } from '@/services/viewerStorage'
+import { VIEWER_STORAGE_KEY } from '@/modules/viewer/viewerStorage'
 import * as THREE from 'three'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'

@@ -53,10 +53,12 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['three'],
+    entries: [path.resolve(__dirname, 'index.html')],
   },
   server: {
     watch: {
       usePolling: true,
+      ignored: ['**/modules/supersplat/**', '**/public/supersplat/**'],
     },
     port: 5174,
     strictPort: true,

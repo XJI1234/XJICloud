@@ -32,6 +32,7 @@ const toolItems = [
   { label: '航线规划', route: null, icon: 'route' },
   { label: '数据上传', route: '/app/upload', icon: 'upload' },
   { label: '模型查看', route: '/app/layer', icon: 'view' },
+  { label: '高级编辑', route: '/app/supersplat', icon: 'edit' },
 ] as const
 
 function isActiveNav(path: string | null) {
@@ -91,6 +92,7 @@ onBeforeUnmount(() => {
 })
 
 const statusText = computed(() => cameraStatus.value)
+const hideStatusBar = computed(() => route.name === 'supersplat')
 </script>
 
 <template>
@@ -161,7 +163,7 @@ const statusText = computed(() => cameraStatus.value)
       </main>
     </div>
 
-    <footer class="cloud-status-bar">
+    <footer v-if="!hideStatusBar" class="cloud-status-bar">
       <div class="cloud-status-metrics">
         <span>经度 {{ statusText.longitude }}</span>
         <span>纬度 {{ statusText.latitude }}</span>

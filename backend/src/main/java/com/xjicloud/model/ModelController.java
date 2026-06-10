@@ -2,9 +2,11 @@ package com.xjicloud.model;
 
 import com.xjicloud.auth.UserAccount;
 import com.xjicloud.common.ApiResponse;
+import com.xjicloud.model.dto.DownloadTokenResponse;
 import com.xjicloud.model.dto.ModelResponse;
 import com.xjicloud.model.dto.SaveViewerConfigRequest;
 import com.xjicloud.model.dto.ViewerConfigResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.util.List;
@@ -51,13 +53,23 @@ public class ModelController {
         return ApiResponse.ok(modelService.uploadModel(user, projectId, file));
     }
 
+    @PostMapping("/models/{modelId}/download-token")
+    public ApiResponse<DownloadTokenResponse> createDownloadToken(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID modelId,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(modelService.createDownloadToken(user, modelId, request));
+    }
+
     @GetMapping("/models/{modelId}/download")
     public ResponseEntity<StreamingResponseBody> downloadModel(
             @AuthenticationPrincipal UserAccount user,
             @PathVariable UUID modelId,
+            @RequestParam(value = "access_token", required = false) String accessToken,
             @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader
     ) throws IOException {
-        return modelService.downloadModel(user, modelId, rangeHeader);
+        return modelService.downloadModel(user, modelId, accessToken, rangeHeader);
     }
 
     @GetMapping("/models/{modelId}/viewer-config")

@@ -38,4 +38,6 @@ export interface ModelSummary {
   fileName: string
   format: string
   sizeBytes: number
+  version: number
+  updatedAt: string
 }

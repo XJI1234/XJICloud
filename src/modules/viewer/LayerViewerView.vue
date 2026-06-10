@@ -2,17 +2,17 @@
 import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import { ApiError } from '@/api/client'
 import { uploadModel } from '@/api/models'
-import SparkViewport from '@/components/SparkViewport.vue'
+import SparkViewport from '@/modules/viewer/components/SparkViewport.vue'
 import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
 import {
   createCloudViewerStorage,
   rememberModelMeta,
   VIEWER_STORAGE_KEY,
   type ModelSummary,
-} from '@/services/viewerStorage'
+} from '@/modules/viewer/viewerStorage'
 import { useProjectStore } from '@/stores/project'
-import clockwiseRotateIcon from '../../顺时针旋转.svg'
-import counterclockwiseRotateIcon from '../../逆时针旋转.svg'
+import clockwiseRotateIcon from '../../../顺时针旋转.svg'
+import counterclockwiseRotateIcon from '../../../逆时针旋转.svg'
 
 type PainterMode = 'view' | 'paint' | 'erase' | 'undo'
 type SidePanelMenu = 'info' | 'view' | 'edit'
@@ -51,6 +51,10 @@ type FileSystemWindow = Window & typeof globalThis & {
 interface ModelCandidate {
   id?: string
   name: string
+  format?: string
+  version?: number
+  updatedAt?: string
+  sizeBytes?: number
   handle: FileSystemFileHandle | null
   path: string | null
 }
@@ -277,6 +281,50 @@ async function selectModelCandidate(candidate: ModelCandidate) {
   await loadCloudModel(candidate)
 }
 
+function formatModelSize(sizeBytes: number) {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`
+  }
+  if (sizeBytes < 1024 * 1024 * 1024) {
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+  return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+function formatModelUpdatedAt(updatedAt: string) {
+  const date = new Date(updatedAt)
+  if (Number.isNaN(date.getTime())) {
+    return updatedAt
+  }
+  return date.toLocaleString()
+}
+
+function toModelCandidates(models: ModelSummary[]) {
+  return [...models]
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+    .map((model) => ({
+      id: model.id,
+      name: model.fileName,
+      format: model.format,
+      version: model.version,
+      updatedAt: model.updatedAt,
+      sizeBytes: model.sizeBytes,
+      handle: null,
+      path: null,
+    }))
+}
+
+function presentModelSelection(models: ModelSummary[]) {
+  modelCandidates.value = toModelCandidates(models)
+  modelSelectionVisible.value = true
+  statusMessage.value = models.length > 1
+    ? `当前工程共有 ${models.length} 个模型，请选择要加载的文件`
+    : '请选择要加载的模型文件'
+}
+
 async function openFilePicker() {
   actionError.value = ''
 
@@ -294,21 +342,7 @@ async function openFilePicker() {
       return
     }
 
-    const nextCandidates: ModelCandidate[] = models.map((model: ModelSummary) => ({
-      id: model.id,
-      name: model.fileName,
-      handle: null,
-      path: null,
-    }))
-
-    if (nextCandidates.length === 1) {
-      await loadCloudModel(nextCandidates[0])
-      return
-    }
-
-    modelCandidates.value = nextCandidates
-    modelSelectionVisible.value = true
-    statusMessage.value = '请选择要加载的模型文件'
+    presentModelSelection(models)
   } catch (error) {
     actionError.value = error instanceof ApiError ? error.message : '加载模型列表失败'
     statusMessage.value = actionError.value
@@ -1026,13 +1060,32 @@ onBeforeUnmount(() => {
     />
 
     <div v-if="modelSelectionVisible" class="app-modal-backdrop" @click.self="closeModelSelectionDialog">
-      <div class="app-modal">
+      <div class="app-modal model-picker-modal">
         <div class="app-modal-header">
           <h2 class="app-modal-title">选择模型</h2>
+          <p class="model-picker-subtitle">
+            共 {{ modelCandidates.length }} 个模型；高级编辑保存后会更新版本，请重新选择以加载最新文件。
+          </p>
         </div>
         <div class="app-modal-body model-choice-list">
-          <button v-for="candidate in modelCandidates" :key="candidate.id ?? candidate.name" class="side-button" type="button" @click="selectModelCandidate(candidate)">
-            {{ candidate.name }}
+          <button
+            v-for="candidate in modelCandidates"
+            :key="candidate.id ?? candidate.name"
+            class="model-choice-card"
+            :class="{ 'is-current': candidate.id && candidate.id === currentModelId }"
+            type="button"
+            @click="selectModelCandidate(candidate)"
+          >
+            <span class="model-choice-name">{{ candidate.name }}</span>
+            <span class="model-choice-meta">
+              {{ candidate.format || '未知格式' }}
+              <template v-if="candidate.version"> · v{{ candidate.version }}</template>
+              <template v-if="candidate.sizeBytes"> · {{ formatModelSize(candidate.sizeBytes) }}</template>
+            </span>
+            <span v-if="candidate.updatedAt" class="model-choice-updated">
+              更新于 {{ formatModelUpdatedAt(candidate.updatedAt) }}
+            </span>
+            <span v-if="candidate.id && candidate.id === currentModelId" class="model-choice-badge">当前加载</span>
           </button>
         </div>
         <div class="app-modal-footer">

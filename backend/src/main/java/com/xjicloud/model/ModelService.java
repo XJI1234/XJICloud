@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.auth.UserAccount;
 import com.xjicloud.common.BusinessException;
+import com.xjicloud.model.dto.DownloadTokenResponse;
 import com.xjicloud.model.dto.ModelResponse;
 import com.xjicloud.model.dto.SaveViewerConfigRequest;
 import com.xjicloud.model.dto.ViewerConfigResponse;
@@ -22,10 +23,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @Service
 public class ModelService {
@@ -36,6 +39,7 @@ public class ModelService {
     private final ViewerConfigRepository viewerConfigRepository;
     private final ProjectService projectService;
     private final LocalFileStoreService localFileStoreService;
+    private final ModelDownloadTokenService modelDownloadTokenService;
     private final ObjectMapper objectMapper;
 
     public ModelService(
@@ -43,12 +47,14 @@ public class ModelService {
             ViewerConfigRepository viewerConfigRepository,
             ProjectService projectService,
             LocalFileStoreService localFileStoreService,
+            ModelDownloadTokenService modelDownloadTokenService,
             ObjectMapper objectMapper
     ) {
         this.modelAssetRepository = modelAssetRepository;
         this.viewerConfigRepository = viewerConfigRepository;
         this.projectService = projectService;
         this.localFileStoreService = localFileStoreService;
+        this.modelDownloadTokenService = modelDownloadTokenService;
         this.objectMapper = objectMapper;
     }
 
@@ -95,12 +101,24 @@ public class ModelService {
         return asset;
     }
 
+    public DownloadTokenResponse createDownloadToken(UserAccount user, UUID modelId, HttpServletRequest request) {
+        requireOwnedModel(user, modelId);
+        ModelDownloadTokenService.DownloadTokenDetails details = modelDownloadTokenService.createToken(user, modelId);
+        String url = ServletUriComponentsBuilder.fromRequestUri(request)
+                .replacePath("/api/v1/models/{modelId}/download")
+                .replaceQueryParam("access_token", details.token())
+                .buildAndExpand(modelId)
+                .toUriString();
+        return new DownloadTokenResponse(url, details.expiresAt());
+    }
+
     public ResponseEntity<StreamingResponseBody> downloadModel(
             UserAccount user,
             UUID modelId,
+            String accessToken,
             String rangeHeader
     ) throws IOException {
-        ModelAsset asset = requireOwnedModel(user, modelId);
+        ModelAsset asset = resolveDownloadAsset(user, modelId, accessToken);
         Path filePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
         long fileSize = Files.size(filePath);
         MediaType mediaType = asset.getFormat() == ModelFormat.SPZ
@@ -169,20 +187,17 @@ public class ModelService {
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
 
         String exportName = sanitizeFileName(file.getOriginalFilename());
-        if (!exportName.toLowerCase(Locale.ROOT).endsWith(".spz")) {
-            exportName = exportName.replaceAll("\\.[^.]+$", "") + ".spz";
-        }
+        ExportTarget exportTarget = resolveExportTarget(exportName);
 
         try {
             byte[] bytes = file.getBytes();
-            localFileStoreService.storeExport(user, project, modelId, exportName, bytes);
+            localFileStoreService.storeExport(user, project, modelId, exportTarget.fileName(), bytes);
 
-            String storedFileName = "original.spz";
-            localFileStoreService.replaceModelFile(user, project, modelId, storedFileName, bytes);
-            Path storedPath = localFileStoreService.modelFilePath(user, project, modelId, storedFileName);
+            localFileStoreService.replaceModelFile(user, project, modelId, exportTarget.storedFileName(), bytes);
+            Path storedPath = localFileStoreService.modelFilePath(user, project, modelId, exportTarget.storedFileName());
 
-            asset.setFileName(exportName);
-            asset.setFormat(ModelFormat.SPZ);
+            asset.setFileName(exportTarget.fileName());
+            asset.setFormat(exportTarget.format());
             asset.setSizeBytes(bytes.length);
             asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
             asset.setVersion(asset.getVersion() + 1);
@@ -227,6 +242,37 @@ public class ModelService {
 
     private String contentDisposition(String fileName) {
         return "attachment; filename=\"" + fileName.replace("\"", "") + "\"";
+    }
+
+    private ModelAsset resolveDownloadAsset(UserAccount user, UUID modelId, String accessToken) {
+        if (user != null) {
+            return requireOwnedModel(user, modelId);
+        }
+
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new BusinessException("未授权", HttpStatus.UNAUTHORIZED);
+        }
+
+        UUID userId = modelDownloadTokenService.validateToken(accessToken, modelId);
+        ModelAsset asset = modelAssetRepository.findById(modelId)
+                .orElseThrow(() -> new BusinessException("模型不存在", HttpStatus.NOT_FOUND));
+        projectService.requireOwnedProjectByUserId(userId, asset.getProjectId());
+        return asset;
+    }
+
+    private ExportTarget resolveExportTarget(String exportName) {
+        String lower = exportName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".ply")) {
+            return new ExportTarget(exportName, "original.ply", ModelFormat.PLY);
+        }
+        if (lower.endsWith(".spz")) {
+            return new ExportTarget(exportName, "original.spz", ModelFormat.SPZ);
+        }
+
+        throw new BusinessException("导出文件必须是 PLY 或 SPZ");
+    }
+
+    private record ExportTarget(String fileName, String storedFileName, ModelFormat format) {
     }
 
     private ModelFormat detectFormat(String fileName) {

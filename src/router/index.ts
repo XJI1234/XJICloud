@@ -41,7 +41,13 @@ const router = createRouter({
         {
           path: 'layer',
           name: 'layer',
-          component: () => import('@/views/LayerViewerView.vue'),
+          component: () => import('@/modules/viewer/LayerViewerView.vue'),
+        },
+        {
+          path: 'supersplat',
+          name: 'supersplat',
+          component: () => import('@/views/SuperSplatEditorView.vue'),
+          meta: { immersive: true },
         },
       ],
     },

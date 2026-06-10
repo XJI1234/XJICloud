@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+modules/supersplat/node_modules
+modules/supersplat/dist
+public/supersplat
+supersplat/
 release
 *.local
 rust/target
