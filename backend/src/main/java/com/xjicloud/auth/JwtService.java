@@ -26,6 +26,7 @@ public class JwtService {
         Date expiry = new Date(now.getTime() + jwtProperties.expirationMs());
         return Jwts.builder()
                 .subject(user.getId().toString())
+                .claim("type", "user")
                 .claim("username", user.getUsername())
                 .issuedAt(now)
                 .expiration(expiry)
@@ -33,13 +34,62 @@ public class JwtService {
                 .compact();
     }
 
+    public String generateAdminToken(UUID adminId, String username) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + jwtProperties.expirationMs());
+        return Jwts.builder()
+                .subject(adminId.toString())
+                .claim("type", "admin")
+                .claim("username", username)
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(secretKey)
+                .compact();
+    }
+
+    public String generateWorkerToken(UUID workerId, String workerName) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + jwtProperties.expirationMs() * 7);
+        return Jwts.builder()
+                .subject(workerId.toString())
+                .claim("type", "worker")
+                .claim("name", workerName)
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(secretKey)
+                .compact();
+    }
+
     public UUID parseUserId(String token) {
-        Claims claims = Jwts.parser()
+        Claims claims = parseClaims(token);
+        if (!"user".equals(claims.get("type", String.class))) {
+            throw new IllegalArgumentException("Invalid user token");
+        }
+        return UUID.fromString(claims.getSubject());
+    }
+
+    public UUID parseAdminId(String token) {
+        Claims claims = parseClaims(token);
+        if (!"admin".equals(claims.get("type", String.class))) {
+            throw new IllegalArgumentException("Invalid admin token");
+        }
+        return UUID.fromString(claims.getSubject());
+    }
+
+    public UUID parseWorkerId(String token) {
+        Claims claims = parseClaims(token);
+        if (!"worker".equals(claims.get("type", String.class))) {
+            throw new IllegalArgumentException("Invalid worker token");
+        }
+        return UUID.fromString(claims.getSubject());
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
                 .verifyWith(secretKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-        return UUID.fromString(claims.getSubject());
     }
 
     public long getExpirationMs() {

@@ -14,9 +14,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
-server:
-  port: 8080
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
 xjicloud:
   jwt:
@@ -25,7 +27,27 @@ xjicloud:
   storage:
     root: ./data/xjicloud
   cors:
-    allowed-origins: http://127.0.0.1:5174,http://localhost:5174
+    allowed-origins: http://127.0.0.1:5174,http://localhost:5174,http://127.0.0.1:5175,http://localhost:5175
+  oss:
+    endpoint: ${OSS_ENDPOINT:http://127.0.0.1:9000}
+    region: ${OSS_REGION:us-east-1}
+    bucket: ${OSS_BUCKET:xjicloud}
+    access-key: ${OSS_ACCESS_KEY:minioadmin}
+    secret-key: ${OSS_SECRET_KEY:minioadmin}
+    path-style-access: true
+    presign-expiration-minutes: 120
+  redis:
+    queue-key: xjicloud:jobs
+  worker:
+    shared-secret: change-me-worker-secret-in-production
+    heartbeat-timeout-sec: 60
+    poll-timeout-sec: 25
+  admin:
+    default-username: admin
+    default-password: admin123
+
+server:
+  port: 8080
 
 management:
   endpoints:

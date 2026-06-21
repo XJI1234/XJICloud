@@ -1,0 +1,89 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${OSS_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${OSS_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 ${OSS_ACCESS_KEY:-minioadmin} ${OSS_SECRET_KEY:-minioadmin};
+      mc mb -p local/${OSS_BUCKET:-xjicloud} || true;
+      mc anonymous set download local/${OSS_BUCKET:-xjicloud} || true;
+      exit 0;
+      "
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - minio
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OSS_ENDPOINT: http://minio:9000
+      OSS_REGION: ${OSS_REGION:-us-east-1}
+      OSS_BUCKET: ${OSS_BUCKET:-xjicloud}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:-minioadmin}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY:-minioadmin}
+      XJICLOUD_JWT_SECRET: ${XJICLOUD_JWT_SECRET:-change-me-in-production-use-at-least-32-chars-long-secret-key}
+      XJICLOUD_WORKER_SECRET: ${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
+    command:
+      - java
+      - -jar
+      - app.jar
+      - --spring.profiles.active=dev
+      - --spring.data.redis.host=redis
+      - --xjicloud.oss.endpoint=http://minio:9000
+      - --xjicloud.oss.bucket=${OSS_BUCKET:-xjicloud}
+      - --xjicloud.oss.access-key=${OSS_ACCESS_KEY:-minioadmin}
+      - --xjicloud.oss.secret-key=${OSS_SECRET_KEY:-minioadmin}
+      - --xjicloud.worker.shared-secret=${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
+      - --xjicloud.cors.allowed-origins=${XJICLOUD_CORS_ORIGINS:-http://127.0.0.1:5174,http://localhost:5174,http://127.0.0.1:5175}
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend_data:/app/data
+
+  gpu-worker:
+    build:
+      context: ../gpu-worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      XJICLOUD_BACKEND_URL: http://backend:8080
+      WORKER_SECRET: ${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
+      WORKER_NAME: ${WORKER_NAME:-xjicloud-gpu-worker-1}
+      OSS_ENDPOINT: http://minio:9000
+      OSS_REGION: ${OSS_REGION:-us-east-1}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:-minioadmin}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY:-minioadmin}
+      OSS_PATH_STYLE: "true"
+
+volumes:
+  minio_data:
+  backend_data:

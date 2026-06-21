@@ -19,6 +19,10 @@ function getToken() {
   return localStorage.getItem('xjicloud_token')
 }
 
+export function getAuthToken() {
+  return getToken()
+}
+
 export function setToken(token: string | null) {
   if (token) {
     localStorage.setItem('xjicloud_token', token)

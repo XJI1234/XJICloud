@@ -1,0 +1,37 @@
+# 生产环境覆盖示例：外置 PostgreSQL + 阿里云 OSS
+# 用法：docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-xjicloud}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-xjicloud}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      OSS_ENDPOINT: ${OSS_ENDPOINT}
+      OSS_REGION: ${OSS_REGION}
+      OSS_BUCKET: ${OSS_BUCKET}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY}
+    depends_on:
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-xjicloud}
+      POSTGRES_USER: ${POSTGRES_USER:-xjicloud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  gpu-worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+volumes:
+  postgres_data:

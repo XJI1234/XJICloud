@@ -1,0 +1,15 @@
+[Unit]
+Description=XJICloud Spring Boot Backend
+After=network.target redis.service postgresql.service
+
+[Service]
+Type=simple
+User=xjicloud
+WorkingDirectory=/opt/xjicloud/backend
+EnvironmentFile=/etc/xjicloud/backend.env
+ExecStart=/usr/bin/java -jar /opt/xjicloud/backend/xjicloud-backend-1.0.0.jar --spring.profiles.active=prod
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

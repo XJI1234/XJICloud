@@ -5,6 +5,11 @@ spring:
     url: jdbc:postgresql://localhost:5432/xjicloud
     username: xjicloud
     password: change-me
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
   servlet:
     multipart:
       max-file-size: 2GB
@@ -21,3 +26,20 @@ xjicloud:
     root: /data/xjicloud
   cors:
     allowed-origins: https://your-domain.example
+  oss:
+    endpoint: https://oss-cn-hangzhou.aliyuncs.com
+    region: cn-hangzhou
+    bucket: your-bucket
+    access-key: your-access-key
+    secret-key: your-secret-key
+    path-style-access: false
+    presign-expiration-minutes: 120
+  redis:
+    queue-key: xjicloud:jobs
+  worker:
+    shared-secret: replace-with-worker-shared-secret
+    heartbeat-timeout-sec: 60
+    poll-timeout-sec: 25
+  admin:
+    default-username: admin
+    default-password: change-me-after-first-login
