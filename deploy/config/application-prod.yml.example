@@ -1,0 +1,65 @@
+# 复制为本目录下的 application-prod.yml 并按环境修改：
+#   cp application-prod.yml.example application-prod.yml
+#
+# 分布式部署说明：
+#   - 后端服务器 B：安装本文件，Redis/PostgreSQL 可与后端同机或独立 RDS
+#   - OSS 预生产：endpoint 填「存储服务器 C」MinIO 地址（如 http://10.0.1.30:9000）
+#   - OSS 生产：endpoint 改为阿里云 OSS（如 https://oss-cn-hangzhou.aliyuncs.com），path-style-access: false
+#   - cors.allowed-origins 填「前端服务器 A」的 HTTPS 域名（非后端地址）
+
+spring:
+  profiles:
+    active: prod
+  datasource:
+    # 数据库可与后端同机；生产推荐阿里云 RDS，填 RDS 内网地址
+    url: jdbc:postgresql://127.0.0.1:5432/xjicloud
+    username: xjicloud
+    password: change-me
+  data:
+    redis:
+      # 可与后端同机；生产可用阿里云 Redis，填内网地址
+      host: 127.0.0.1
+      port: 6379
+      password:
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+
+server:
+  port: 8080
+
+xjicloud:
+  jwt:
+    secret: replace-with-a-long-random-secret-at-least-32-characters
+    expiration-ms: 86400000
+  storage:
+    root: /data/xjicloud
+  cors:
+    # 前端站点域名（浏览器 Origin），逗号分隔
+    allowed-origins: https://your-domain.example
+  oss:
+    # --- 预生产：MinIO（存储服务器 C）---
+    endpoint: http://10.0.1.30:9000
+    region: us-east-1
+    bucket: xjicloud
+    access-key: minioadmin
+    secret-key: minioadmin
+    path-style-access: true
+    # --- 生产：阿里云 OSS（注释上面 MinIO，改用下面）---
+    # endpoint: https://oss-cn-hangzhou.aliyuncs.com
+    # region: cn-hangzhou
+    # bucket: your-bucket
+    # access-key: your-ram-access-key
+    # secret-key: your-ram-secret-key
+    # path-style-access: false
+    presign-expiration-minutes: 120
+  redis:
+    queue-key: xjicloud:jobs
+  worker:
+    shared-secret: replace-with-worker-shared-secret
+    heartbeat-timeout-sec: 60
+    poll-timeout-sec: 25
+  admin:
+    default-username: admin
+    default-password: change-me-after-first-login

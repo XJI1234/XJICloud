@@ -278,12 +278,24 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 ## 10. 部署与本地开发
 
+**推荐生产拓扑（分机）：**
+
+| 服务器 | 角色 | 预生产 | 生产 |
+|--------|------|--------|------|
+| A | 前端 Nginx + dist/admin | 同 | 同 |
+| B | Spring Boot + PG + Redis | 同 | RDS/云 Redis 可选 |
+| C | MinIO | MinIO | **阿里云 OSS**（不部署 C） |
+| D | GPU Worker Docker | 常驻容器 | **阿里云 CCI** 按需启动 |
+
+前端 A 的 Nginx 将 `/api/` 反代到后端 B；浏览器直传 OSS（C 或阿里云）；Worker/D/CCI 仅连 B + presigned URL。
+
 | 文档/文件 | 用途 |
 |-----------|------|
-| [Deploy.md](Deploy.md) | Ubuntu/CentOS 全栈部署、CORS、GPU、Compose |
-| [deploy/docker-compose.yml](deploy/docker-compose.yml) | Redis + MinIO + backend + gpu-worker |
-| [deploy/nginx.conf.example](deploy/nginx.conf.example) | `/`、`/admin/`、`/api/`（SSE 关闭缓冲） |
-| [deploy/env.example](deploy/env.example) | 环境变量模板 |
+| [Deploy.md](Deploy.md) | **分机部署**、安全组、MinIO/OSS、CCI 按需启停 |
+| [deploy/nginx-frontend.conf.example](deploy/nginx-frontend.conf.example) | 前端 A → 后端 B 反代 |
+| [deploy/deploy-backend.sh](deploy/deploy-backend.sh) | 后端 B 一键构建 + systemd |
+| [deploy/config/](deploy/config/) | 用户自备 `application-prod.yml` 等 |
+| [deploy/docker-compose.yml](deploy/docker-compose.yml) | 单机/开发 Compose |
 
 **本地最小依赖：** Redis + MinIO（`cd deploy && docker compose up redis minio minio-init -d`）
 

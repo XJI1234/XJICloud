@@ -20,6 +20,12 @@ rust/target
 backend/data/
 data/
 
+# 后端一键部署本地配置（含密钥）
+deploy/config/application-prod.yml
+deploy/config/backend.env
+deploy/config/deploy.conf
+deploy/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

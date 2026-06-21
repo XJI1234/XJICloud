@@ -1,0 +1,11 @@
+# 可选：复制为 deploy.conf 以自定义安装路径
+#   cp deploy.conf.example deploy.conf
+
+INSTALL_DIR=/opt/xjicloud/backend
+CONFIG_DIR=/etc/xjicloud
+DATA_DIR=/data/xjicloud
+SERVICE_USER=xjicloud
+SERVICE_NAME=xjicloud-backend
+JAR_NAME=xjicloud-backend-1.0.0.jar
+JAVA_BIN=/usr/bin/java
+SERVER_PORT=8080
