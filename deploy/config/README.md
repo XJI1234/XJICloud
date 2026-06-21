@@ -11,6 +11,16 @@ cp deploy.conf.example deploy.conf          # 可选，自定义安装路径
 
 编辑 `application-prod.yml`：数据库、Redis、OSS、JWT、Worker 密钥、CORS 等。
 
+**PostgreSQL 首次部署**（15+ 默认限制 public schema 建表）：
+
+```bash
+sudo -u postgres psql -d xjicloud <<'SQL'
+ALTER DATABASE xjicloud OWNER TO xjicloud;
+GRANT ALL ON SCHEMA public TO xjicloud;
+GRANT CREATE ON SCHEMA public TO xjicloud;
+SQL
+```
+
 然后在仓库根目录执行：
 
 ```bash

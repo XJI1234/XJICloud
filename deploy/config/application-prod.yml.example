@@ -25,6 +25,10 @@ spring:
     multipart:
       max-file-size: 2GB
       max-request-size: 2GB
+  jpa:
+    hibernate:
+      # 首次部署需 update 建表；表结构稳定后可改为 validate
+      ddl-auto: update
 
 server:
   port: 8080
