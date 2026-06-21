@@ -36,7 +36,7 @@ XJICloud/
 ├── modules/supersplat/       # SuperSplat 子工程（⚠ 仓库中可能未 checkout）
 ├── public/supersplat/        # SuperSplat 构建产物（gitignore）
 ├── Deploy.md                 # 全栈 Linux 部署指南
-├── README.md                 # 用户文档（部分内容未同步新架构，以本文为准）
+├── README.md                 # 用户面向文档（功能、本地开发、部署入口）
 └── AGENT_CONTEXT.md          # 本文件
 ```
 
@@ -323,13 +323,12 @@ docker run --rm -e XJICLOUD_BACKEND_URL=http://host.docker.internal:8080 \
 
 1. **SuperSplat 子模块：** `modules/supersplat/` 可能不在仓库中；需自行 clone playcanvas/supersplat 并 `npm run build:supersplat`。
 2. **浏览器文件夹上传：** 依赖 `webkitdirectory`；Safari 支持弱。
-3. **OSS CORS：** 浏览器直传前必须在 bucket 配置 CORS（Deploy.md §5.3）。
+3. **OSS CORS：** 社区版 MinIO 用全局 `MINIO_API_CORS_ALLOW_ORIGIN`；防火墙须放通用户 PC 网段（Deploy.md §5.1.5）。
 4. **SSE + Nginx：** 需 `proxy_buffering off`。
 5. **Worker 密钥：** 后端 `xjicloud.worker.shared-secret` 与容器 `WORKER_SECRET` 必须一致。
 6. **训练算法：** 仅为通讯骨架 + mock；真实 3DGS 训练需替换 `mock_trainer.py`。
-7. **README.md** 架构图仍描述「仅本地磁盘」，未完全反映 OSS/Redis/Worker；以 **本文 + Deploy.md** 为准。
-8. **backend/tests：** 暂无自动化测试。
-9. **Windows 开发：** 路径可用；生产部署按 Linux 约定。
+7. **backend/tests：** 暂无自动化测试。
+8. **Windows 开发：** 路径可用；生产部署按 Linux 约定。
 
 ---
 
