@@ -572,7 +572,45 @@ cd admin && npm run dev   # 管理面板 :5175
 ## 8. 管理控制面板
 
 - 地址：`https://cloud.example.com/admin/`（部署在服务器 A）
-- 默认账号：`admin` / `admin123`（**生产务必修改**）
+- 登录接口：`POST /api/v1/admin/auth/login`（与用户前台 `/api/v1/auth/login` **不是同一套账号**）
+- 账号存储在数据库表 **`admin_users`**，与 `users` 表（普通用户）分离
+
+### 8.1 管理员账号与 yml 的关系
+
+`application-prod.yml` 中的配置：
+
+```yaml
+xjicloud:
+  admin:
+    default-username: admin
+    default-password: 你的密码
+    sync-password-on-startup: false
+```
+
+| 行为 | 说明 |
+|------|------|
+| **首次启动** | 若 `admin_users` 中不存在 `default-username`，用 yml 密码创建管理员 |
+| **再次修改 yml 密码** | 默认**不会**更新数据库；仍使用首次创建时的 BCrypt 哈希 → 登录 401 |
+| **`sync-password-on-startup: true`** | 每次启动将 yml 中的 `default-password` 同步到**同名**管理员，改密后需重启后端 |
+
+**改密后仍 401 的处理（任选其一）：**
+
+```bash
+# 方式 A：开启同步并重启（推荐）
+# 在 application-prod.yml 设 sync-password-on-startup: true，然后：
+sudo systemctl restart xjicloud-backend
+# 登录成功后建议改回 false
+
+# 方式 B：删除旧记录后重启（会按 yml 重新创建）
+# PostgreSQL:
+psql -U xjicloud -d xjicloud -c "DELETE FROM admin_users WHERE username = 'admin';"
+sudo systemctl restart xjicloud-backend
+
+# 方式 C：若未改过默认账号，直接试 admin / admin123
+```
+
+> **注意：** `spring.datasource.username/password` 是**数据库连接**凭证，不是管理面板登录账号。
+
 - 可在面板中修改 OSS 配置（生产切到阿里云 OSS 时尤其方便），支持连接测试、Worker 与任务监控
 
 ---
@@ -602,6 +640,7 @@ cd admin && npm run dev   # 管理面板 :5175
 | CCI 无法注册        | VPC 不通或 URL 错误            | CCI 与 B 同 VPC；健康检查 `/actuator/health`  |
 | SSE 无进度         | Nginx 缓冲                  | A 上 `proxy_buffering off`              |
 | 生产 OSS 失败       | RAM 权限 / endpoint 地域      | 管理面板测试连接；核对 `path-style-access: false` |
+| 管理面板 401        | yml 改密未同步到 `admin_users` | 见 [§8.1](#81-管理员账号与-yml-的关系) |
 
 
 ---

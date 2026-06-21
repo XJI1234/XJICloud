@@ -67,3 +67,5 @@ xjicloud:
   admin:
     default-username: admin
     default-password: change-me-after-first-login
+    # 首次部署后若修改了密码但登录仍失败，设为 true 并重启后端，同步 yml 密码到数据库
+    sync-password-on-startup: false

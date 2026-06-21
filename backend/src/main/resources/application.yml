@@ -45,6 +45,8 @@ xjicloud:
   admin:
     default-username: admin
     default-password: admin123
+    # 为 true 时，每次启动将 yml 中的 default-password 同步到已存在的同名管理员（改密后需重启）
+    sync-password-on-startup: false
 
 server:
   port: 8080
