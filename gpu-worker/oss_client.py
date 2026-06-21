@@ -1,36 +1,15 @@
 #!/usr/bin/env python3
-"""S3-compatible OSS client for GPU worker."""
+"""OSS 传输：通过后端签发的 presigned URL 下载/上传（无需 boto3）."""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Iterable
 
-import boto3
-from botocore.client import Config
-
-
-def create_s3_client():
-    endpoint = os.environ.get("OSS_ENDPOINT", "http://127.0.0.1:9000")
-    region = os.environ.get("OSS_REGION", "us-east-1")
-    access_key = os.environ.get("OSS_ACCESS_KEY", "minioadmin")
-    secret_key = os.environ.get("OSS_SECRET_KEY", "minioadmin")
-    path_style = os.environ.get("OSS_PATH_STYLE", "true").lower() == "true"
-
-    return boto3.client(
-        "s3",
-        endpoint_url=endpoint,
-        region_name=region,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path" if path_style else "auto"}),
-    )
+import requests
 
 
 def download_file(url: str, destination: Path) -> None:
-    import requests
-
     destination.parent.mkdir(parents=True, exist_ok=True)
     response = requests.get(url, stream=True, timeout=300)
     response.raise_for_status()
@@ -41,8 +20,6 @@ def download_file(url: str, destination: Path) -> None:
 
 
 def upload_file(local_path: Path, upload_url: str, content_type: str = "application/octet-stream") -> None:
-    import requests
-
     with local_path.open("rb") as handle:
         response = requests.put(
             upload_url,
