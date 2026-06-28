@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: xjicloud
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        xjicloud.io/role-storage: "true"
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          env:
+            - name: OSS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: OSS_ACCESS_KEY
+            - name: OSS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: OSS_SECRET_KEY
+            - name: OSS_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: OSS_BUCKET
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for MinIO..."
+              until mc alias set local http://minio:9000 "$OSS_ACCESS_KEY" "$OSS_SECRET_KEY"; do
+                sleep 3
+              done
+              mc mb -p "local/${OSS_BUCKET}" || true
+              echo "Bucket ready: ${OSS_BUCKET}"

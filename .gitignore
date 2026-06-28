@@ -25,6 +25,8 @@ deploy/config/application-prod.yml
 deploy/config/backend.env
 deploy/config/deploy.conf
 deploy/.env
+deploy/k8s/secrets.yaml
+deploy/k8s/overlays/aliyun/secrets.yaml
 
 # Editor directories and files
 .vscode/*

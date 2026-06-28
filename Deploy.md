@@ -716,5 +716,23 @@ sudo systemctl restart xjicloud-backend
 | `[deploy/env.example](env.example)`                                                 | Compose 环境变量              |
 | `[gpu-worker/Dockerfile](../gpu-worker/Dockerfile)`                                 | Worker 镜像（预生产 D / 生产 CCI） |
 | `[AGENT_CONTEXT.md](../AGENT_CONTEXT.md)`                                           | Agent 项目上下文               |
+| `[deploy/k8s/README.md](k8s/README.md)`                                           | **K3s/K8s** 本地三节点与 ACK 上云 |
+
+---
+
+## 12. Kubernetes 部署（K3s / ACK）
+
+本地 3 VM（192.168.203.133/134/135）可用 K3s 验证完整流水线，清单与脚本见 **[deploy/k8s/README.md](k8s/README.md)**。
+
+```bash
+# 133 本机：安装 K3s（推荐 --docker）、构建镜像、部署
+sudo ./deploy/k8s/scripts/install-k3s-server.sh
+sudo ./deploy/k8s/scripts/build-and-import-images.sh
+cp deploy/k8s/secrets.example.yaml deploy/k8s/secrets.yaml
+sudo ./deploy/k8s/scripts/deploy-local.sh
+sudo ./deploy/k8s/scripts/validate-local.sh
+```
+
+134/135 加入 Agent 后执行 `label-nodes.sh`；生产 ACK 使用 `deploy/k8s/overlays/aliyun/`，GPU 算力见 `overlays/aliyun/CCI.md`。
 
 

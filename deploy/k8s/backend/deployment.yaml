@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: xjicloud
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      nodeSelector:
+        xjicloud.io/role-backend: "true"
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done
+        - name: wait-for-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z redis 6379; do echo waiting for redis; sleep 2; done
+      containers:
+        - name: backend
+          image: xjicloud/backend:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/xjicloud
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: update
+            - name: OSS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: OSS_ACCESS_KEY
+            - name: OSS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: OSS_SECRET_KEY
+            - name: XJICLOUD_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: XJICLOUD_JWT_SECRET
+            - name: XJICLOUD_WORKER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: XJICLOUD_WORKER_SECRET
+            - name: XJICLOUD_CORS_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: XJICLOUD_CORS_ORIGINS
+            - name: XJICLOUD_STORAGE_ROOT
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: XJICLOUD_STORAGE_ROOT
+            - name: XJICLOUD_ADMIN_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: XJICLOUD_ADMIN_PASSWORD
+            - name: XJICLOUD_ADMIN_DEFAULT_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: XJICLOUD_ADMIN_USERNAME
+          volumeMounts:
+            - name: backend-data
+              mountPath: /data/xjicloud
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 500m
+            limits:
+              memory: 2Gi
+              cpu: 2000m
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: backend-data
+          persistentVolumeClaim:
+            claimName: backend-data

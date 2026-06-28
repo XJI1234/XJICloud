@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-worker
+  namespace: xjicloud
+  labels:
+    app: gpu-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-worker
+  template:
+    metadata:
+      labels:
+        app: gpu-worker
+    spec:
+      nodeSelector:
+        xjicloud.io/role-storage: "true"
+      containers:
+        - name: gpu-worker
+          image: xjicloud/gpu-worker:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: XJICLOUD_BACKEND_URL
+              value: http://backend:8080
+            - name: WORKER_NAME
+              value: xjicloud-gpu-worker-1
+            - name: WORKER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: XJICLOUD_WORKER_SECRET
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 200m
+            limits:
+              memory: 1Gi
+              cpu: 1000m

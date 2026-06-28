@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Mock training pipeline with staged progress reporting."""
 
-from __future__ import annotations
-
 import time
 from pathlib import Path
 from typing import Callable

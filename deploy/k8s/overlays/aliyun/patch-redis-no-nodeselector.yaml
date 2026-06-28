@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: xjicloud
+spec:
+  template:
+    spec:
+      nodeSelector: null

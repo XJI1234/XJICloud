@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """XJICloud GPU worker agent."""
 
-from __future__ import annotations
-
 import os
 import socket
 import threading

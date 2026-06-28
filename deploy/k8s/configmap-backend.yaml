@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: xjicloud
+data:
+  SPRING_PROFILES_ACTIVE: prod
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  OSS_REGION: us-east-1
+  OSS_BUCKET: xjicloud
+  # 浏览器 presigned 直传须用 NodePort 外网地址；三节点集群用 135，单节点 bootstrap 用 133
+  OSS_ENDPOINT: http://192.168.203.133:30900
+  XJICLOUD_CORS_ORIGINS: http://192.168.203.133
+  XJICLOUD_STORAGE_ROOT: /data/xjicloud
+  XJICLOUD_ADMIN_USERNAME: admin

@@ -1,0 +1,37 @@
+# 阿里云 ACK 部署覆盖层
+# 用法: kubectl apply -k deploy/k8s/overlays/aliyun/
+#
+# 前置条件:
+#   1. ACK 集群 + kubectl 已配置
+#   2. 复制 secrets.example.yaml 为 secrets.yaml 并填入 RDS/OSS/ACR 凭证
+#   3. 修改 kustomization.yaml 中的 ACR 镜像地址
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: xjicloud
+
+resources:
+  - ../../namespace.yaml
+  - secrets.yaml
+  - configmap-aliyun.yaml
+  - ../../redis/deployment.yaml
+  - ../../redis/service.yaml
+  - ../../backend/pvc.yaml
+  - backend-deployment.yaml
+  - ../../backend/service.yaml
+  - ../../frontend/deployment.yaml
+  - ../../frontend/service.yaml
+  - ingress-aliyun.yaml
+
+patches:
+  - path: patch-redis-no-nodeselector.yaml
+  - path: patch-frontend-no-nodeselector.yaml
+
+images:
+  - name: xjicloud/backend
+    newName: registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-backend
+    newTag: latest
+  - name: xjicloud/frontend
+    newName: registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-frontend
+    newTag: latest

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """OSS 传输：通过后端签发的 presigned URL 下载/上传（无需 boto3）."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Iterable
 
