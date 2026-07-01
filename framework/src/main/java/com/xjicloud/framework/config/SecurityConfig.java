@@ -43,7 +43,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
-                    auth.requestMatchers("/actuator/health", "/actuator/info").permitAll();
+                    auth.requestMatchers("/actuator/health", "/actuator/info", "/favicon.ico").permitAll();
                     auth.requestMatchers("/api/v1/auth/**").permitAll();
                     auth.requestMatchers("/api/v1/integration/**").permitAll();
                     auth.requestMatchers("/api/v1/agent/**").permitAll();

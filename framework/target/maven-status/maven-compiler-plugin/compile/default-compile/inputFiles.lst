@@ -11,6 +11,7 @@
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/common/ApiResponse.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/common/BusinessException.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/common/GlobalExceptionHandler.java
+/home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/FaviconController.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/FrameworkConfig.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/FrameworkProperties.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/JacksonConfig.java
@@ -35,6 +36,7 @@
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/eci/EciInstanceService.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/eci/EciInstanceView.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/eci/EciStatus.java
+/home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/integration/BackendConnectivityService.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/integration/IntegrationController.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/integration/IntegrationSecretFilter.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/integration/SyncStatusRegistry.java

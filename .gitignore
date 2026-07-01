@@ -39,3 +39,4 @@ deploy/k8s/overlays/aliyun/secrets.yaml
 *.sln
 *.sw?
 Cookies
+*.jar

@@ -7,6 +7,7 @@ import com.xjicloud.framework.configregistry.RuntimeConfigService;
 import com.xjicloud.framework.eci.EciInstanceService;
 import com.xjicloud.framework.eci.EciStatus;
 import com.xjicloud.framework.eci.EciInstanceRepository;
+import com.xjicloud.framework.integration.BackendConnectivityService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -32,24 +33,30 @@ public class EciAutoScaler {
     private final EciInstanceRepository eciRepository;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper;
+    private final BackendConnectivityService backendConnectivity;
 
     public EciAutoScaler(
             FrameworkProperties properties,
             RuntimeConfigService configService,
             EciInstanceService eciService,
             EciInstanceRepository eciRepository,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            BackendConnectivityService backendConnectivity
     ) {
         this.properties = properties;
         this.configService = configService;
         this.eciService = eciService;
         this.eciRepository = eciRepository;
         this.objectMapper = objectMapper;
+        this.backendConnectivity = backendConnectivity;
     }
 
     @Scheduled(fixedDelay = 30000)
     public void scale() {
         if (properties.aliyun() == null || !properties.aliyun().autoScaleEnabled()) {
+            return;
+        }
+        if (!backendConnectivity.isReachable()) {
             return;
         }
         try {

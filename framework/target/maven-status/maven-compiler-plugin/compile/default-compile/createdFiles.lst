@@ -59,6 +59,7 @@ com/xjicloud/framework/configregistry/RuntimeConfigDocument$CorsConfig.class
 com/xjicloud/framework/auth/FrameworkJwtFilter.class
 com/xjicloud/framework/configregistry/RuntimeConfigDocument$JwtConfig.class
 com/xjicloud/framework/config/FrameworkConfig.class
+com/xjicloud/framework/config/FaviconController.class
 com/xjicloud/framework/auth/AuthService$AuthResponse.class
 com/xjicloud/framework/configregistry/RuntimeConfigController$ConfigView.class
 com/xjicloud/framework/configregistry/RuntimeConfigDocument$RedisConfig.class
@@ -86,6 +87,7 @@ com/xjicloud/framework/scheduler/EciAutoScaler$QueueStats.class
 com/xjicloud/framework/integration/IntegrationController.class
 com/xjicloud/framework/configregistry/RuntimeConfigDocument$StorageConfig.class
 com/xjicloud/framework/auth/FrameworkUser.class
+com/xjicloud/framework/integration/BackendConnectivityService.class
 com/xjicloud/framework/auth/AuthController.class
 com/xjicloud/framework/config/FrameworkProperties$Admin.class
 com/xjicloud/framework/configregistry/RuntimeConfigDocument.class

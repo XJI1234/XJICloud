@@ -3,6 +3,7 @@ package com.xjicloud.framework.dashboard;
 import com.xjicloud.framework.common.ApiResponse;
 import com.xjicloud.framework.eci.EciInstanceRepository;
 import com.xjicloud.framework.eci.EciStatus;
+import com.xjicloud.framework.integration.BackendConnectivityService;
 import com.xjicloud.framework.integration.SyncStatusRegistry;
 import com.xjicloud.framework.monitor.SystemMetricsService;
 import com.xjicloud.framework.node.AgentStatus;
@@ -23,19 +24,22 @@ public class DashboardController {
     private final EciInstanceRepository eciRepository;
     private final RuntimeConfigService configService;
     private final SyncStatusRegistry syncStatusRegistry;
+    private final BackendConnectivityService backendConnectivityService;
 
     public DashboardController(
             SystemMetricsService metricsService,
             ManagedNodeRepository nodeRepository,
             EciInstanceRepository eciRepository,
             RuntimeConfigService configService,
-            SyncStatusRegistry syncStatusRegistry
+            SyncStatusRegistry syncStatusRegistry,
+            BackendConnectivityService backendConnectivityService
     ) {
         this.metricsService = metricsService;
         this.nodeRepository = nodeRepository;
         this.eciRepository = eciRepository;
         this.configService = configService;
         this.syncStatusRegistry = syncStatusRegistry;
+        this.backendConnectivityService = backendConnectivityService;
     }
 
     @GetMapping
@@ -49,7 +53,8 @@ public class DashboardController {
                 nodeRepository.count(),
                 eciRunning,
                 configService.getSnapshot().revision(),
-                syncStatusRegistry.all()
+                syncStatusRegistry.all(),
+                backendConnectivityService.status()
         ));
     }
 
@@ -59,6 +64,7 @@ public class DashboardController {
             long totalNodes,
             long eciActive,
             int configRevision,
-            Map<String, ?> syncStatus
+            Map<String, ?> syncStatus,
+            Map<String, Object> backendStatus
     ) {}
 }

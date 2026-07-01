@@ -6,10 +6,30 @@
 
 ```bash
 sudo chmod +x framework/install.sh
+
+# 全新安装（可先于后端部署，Framework 独立可用）
+sudo ./framework/install.sh install
+
+# 保留配置，仅升级 JAR
+sudo ./framework/install.sh upgrade
+
+# 交互选择 install / upgrade
 sudo ./framework/install.sh
 ```
 
 访问 Master 节点 `http://<ip>:9090`，默认 `admin` / `admin`（首次登录强制改密）。
+
+### 独立于后端运行
+
+Framework **无需后端** 即可使用：
+
+- 配置中心（DB/Redis/OSS 等运行参数）
+- 节点注册与监控
+- SSH 远程终端
+- 三种部署（Basic / Docker / K8s）
+- ECI 手动创建
+
+后端部署后，在配置中心「业务/后端」Tab 填写 `Backend Public URL`；ECI 自动扩缩与队列联动需后端在线。
 
 ## CLI
 
