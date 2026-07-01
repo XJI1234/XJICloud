@@ -19,6 +19,7 @@ com/xjicloud/framework/eci/EciInstanceRepository.class
 com/xjicloud/framework/node/NodeRole.class
 com/xjicloud/framework/common/GlobalExceptionHandler.class
 com/xjicloud/framework/agent/SlaveAgentRunner.class
+com/xjicloud/framework/config/MasterOnly.class
 com/xjicloud/framework/deploy/DeployService.class
 com/xjicloud/framework/cli/FrameworkCli$StatusCommand.class
 com/xjicloud/framework/configregistry/RuntimeConfigService$RuntimeConfigSnapshot.class

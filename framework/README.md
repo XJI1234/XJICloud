@@ -65,6 +65,20 @@ xjicloud:
 cd framework && mvn spring-boot:run
 ```
 
+## 主从模式
+
+| 模式 | 说明 |
+|------|------|
+| master | 管理面板、配置中心、Agent 注册端点 |
+| slave | 仅 Agent：向 Master 注册并上报心跳，无 Web 面板 |
+
+Slave 安装时需填写 **Master 地址** 与 **Master 的 agent-token**（`/etc/xjicloud/framework.yml` 中 `agent-token` 字段，主从必须一致）。
+
+```bash
+# 主端查看 agent-token
+grep agent-token /etc/xjicloud/framework.yml
+```
+
 ## 部署模式
 
 | 模式 | 说明 |

@@ -1,5 +1,6 @@
 package com.xjicloud.framework.terminal;
 
+import com.xjicloud.framework.config.MasterOnly;
 import java.util.Map;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -8,6 +9,7 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 import org.springframework.web.socket.server.support.HttpSessionHandshakeInterceptor;
 
 @Configuration
+@MasterOnly
 @EnableWebSocket
 public class TerminalWebSocketConfig implements WebSocketConfigurer {
 

@@ -96,17 +96,26 @@ do_install() {
   if [[ "$MODE" == "slave" ]]; then
     read -rp "Master 地址 (如 http://10.0.1.10:9090): " MASTER_URL
     [[ -n "$MASTER_URL" ]] || { echo "Slave 必须填写 Master 地址"; exit 1; }
+    read -rp "Master agent-token（与主端 framework.yml 中 agent-token 一致）: " AGENT_TOKEN_INPUT
+    [[ -n "$AGENT_TOKEN_INPUT" ]] || { echo "Slave 必须填写与 Master 相同的 agent-token"; exit 1; }
   fi
 
-  read -rp "admin 密码 (默认 admin): " ADMIN_PASS
+  read -rp "admin 密码 (默认 admin，slave 可忽略): " ADMIN_PASS
   ADMIN_PASS="${ADMIN_PASS:-admin}"
 
-  read -rp "Backend URL（可留空，后端未部署时直接回车）: " BACKEND_URL
+  BACKEND_URL=""
+  if [[ "$MODE" != "slave" ]]; then
+    read -rp "Backend URL（可留空，后端未部署时直接回车）: " BACKEND_URL
+  fi
 
   if [[ -f "$CONFIG_FILE" ]]; then
     read -rp "已存在配置文件，是否覆盖 secrets? [y/N]: " OVERWRITE
     if [[ "${OVERWRITE,,}" == "y" ]]; then
-      AGENT_TOKEN="$(openssl rand -hex 16)"
+      if [[ "$MODE" == "slave" && -n "${AGENT_TOKEN_INPUT:-}" ]]; then
+        AGENT_TOKEN="$AGENT_TOKEN_INPUT"
+      else
+        AGENT_TOKEN="$(openssl rand -hex 16)"
+      fi
       API_SECRET="$(openssl rand -hex 24)"
       BACKEND_SECRET="$(openssl rand -hex 24)"
       JWT_SECRET="$(openssl rand -hex 32)"
@@ -120,11 +129,19 @@ do_install() {
       ENC_KEY="$(grep 'encryption-key:' "$CONFIG_FILE" | awk '{print $2}' || openssl rand -hex 16)"
     fi
   else
-    AGENT_TOKEN="$(openssl rand -hex 16)"
+    if [[ "$MODE" == "slave" && -n "${AGENT_TOKEN_INPUT:-}" ]]; then
+      AGENT_TOKEN="$AGENT_TOKEN_INPUT"
+    else
+      AGENT_TOKEN="$(openssl rand -hex 16)"
+    fi
     API_SECRET="$(openssl rand -hex 24)"
     BACKEND_SECRET="$(openssl rand -hex 24)"
     JWT_SECRET="$(openssl rand -hex 32)"
     ENC_KEY="$(openssl rand -hex 16)"
+  fi
+
+  if [[ "$MODE" == "slave" && -n "${AGENT_TOKEN_INPUT:-}" ]]; then
+    AGENT_TOKEN="$AGENT_TOKEN_INPUT"
   fi
 
   local built

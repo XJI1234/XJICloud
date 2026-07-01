@@ -2,6 +2,7 @@ package com.xjicloud.framework.deploy;
 
 import com.xjicloud.framework.auth.FrameworkUser;
 import com.xjicloud.framework.common.ApiResponse;
+import com.xjicloud.framework.config.MasterOnly;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@MasterOnly
 @RequestMapping("/api/v1/deploy")
 public class DeployController {
 

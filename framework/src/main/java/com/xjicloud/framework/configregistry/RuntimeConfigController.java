@@ -2,6 +2,7 @@ package com.xjicloud.framework.configregistry;
 
 import com.xjicloud.framework.common.ApiResponse;
 import com.xjicloud.framework.common.BusinessException;
+import com.xjicloud.framework.config.MasterOnly;
 import com.xjicloud.framework.configregistry.RuntimeConfigDocument.DatabaseConfig;
 import com.xjicloud.framework.configregistry.RuntimeConfigDocument.OssConfig;
 import com.xjicloud.framework.configregistry.RuntimeConfigDocument.RedisConfig;
@@ -30,6 +31,7 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 
 @RestController
+@MasterOnly
 @RequestMapping("/api/v1/config")
 public class RuntimeConfigController {
 

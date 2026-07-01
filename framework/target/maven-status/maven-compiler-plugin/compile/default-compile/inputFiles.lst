@@ -15,6 +15,7 @@
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/FrameworkConfig.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/FrameworkProperties.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/JacksonConfig.java
+/home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/MasterOnly.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/MasterWebConfig.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/config/SecurityConfig.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/configregistry/RuntimeConfigController.java

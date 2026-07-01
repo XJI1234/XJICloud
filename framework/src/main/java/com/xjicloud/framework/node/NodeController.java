@@ -1,6 +1,7 @@
 package com.xjicloud.framework.node;
 
 import com.xjicloud.framework.common.ApiResponse;
+import com.xjicloud.framework.config.MasterOnly;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@MasterOnly
 @RequestMapping("/api/v1/nodes")
 public class NodeController {
 

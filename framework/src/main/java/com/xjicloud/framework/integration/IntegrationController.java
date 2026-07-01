@@ -1,6 +1,7 @@
 package com.xjicloud.framework.integration;
 
 import com.xjicloud.framework.common.ApiResponse;
+import com.xjicloud.framework.config.MasterOnly;
 import com.xjicloud.framework.configregistry.RuntimeConfigDocument;
 import com.xjicloud.framework.configregistry.RuntimeConfigService;
 import com.xjicloud.framework.configregistry.SecretCrypto;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@MasterOnly
 @RequestMapping("/api/v1/integration")
 public class IntegrationController {
 

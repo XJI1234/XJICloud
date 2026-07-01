@@ -1,6 +1,7 @@
 package com.xjicloud.framework.auth;
 
 import com.xjicloud.framework.common.ApiResponse;
+import com.xjicloud.framework.config.MasterOnly;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@MasterOnly
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 

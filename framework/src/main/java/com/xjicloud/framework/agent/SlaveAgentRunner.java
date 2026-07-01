@@ -37,6 +37,17 @@ public class SlaveAgentRunner {
 
     @PostConstruct
     public void register() {
+        tryRegister();
+    }
+
+    @Scheduled(fixedDelay = 30000, initialDelay = 10000)
+    public void retryRegisterIfNeeded() {
+        if (nodeId.get() == null) {
+            tryRegister();
+        }
+    }
+
+    private void tryRegister() {
         if (!properties.isSlave()) {
             return;
         }

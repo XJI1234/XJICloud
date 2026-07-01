@@ -8,6 +8,7 @@ import com.xjicloud.framework.integration.SyncStatusRegistry;
 import com.xjicloud.framework.monitor.SystemMetricsService;
 import com.xjicloud.framework.node.AgentStatus;
 import com.xjicloud.framework.node.ManagedNodeRepository;
+import com.xjicloud.framework.config.MasterOnly;
 import com.xjicloud.framework.configregistry.RuntimeConfigService;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@MasterOnly
 @RequestMapping("/api/v1/dashboard")
 public class DashboardController {
 
