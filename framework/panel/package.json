@@ -1,0 +1,6 @@
+{
+  "name": "xjicloud-framework-panel",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Panel sources are embedded in src/main/resources/static/ (index.html, app.js, styles.css). Build: copy static files after edits."
+}

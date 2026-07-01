@@ -1,0 +1,16 @@
+[Unit]
+Description=XJICloud Framework Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=-/etc/default/xjicloud-framework
+ExecStart=/usr/bin/java -jar /opt/xjicloud-framework/xjicloud-framework.jar --spring.config.additional-location=file:/etc/xjicloud/framework.yml
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -76,8 +76,10 @@ public class AdminService {
     }
 
     public OssConfigResponse updateOssConfig(UpdateOssConfigRequest request, String updatedBy) {
-        ossStorageService.updateConfig(request.config(), updatedBy);
-        return getOssConfig();
+        throw new com.xjicloud.common.BusinessException(
+                "OSS 配置已迁移至 Framework 配置中心（:9090/config），请在 Framework 面板修改",
+                org.springframework.http.HttpStatus.FORBIDDEN
+        );
     }
 
     public void testOssConnection() {

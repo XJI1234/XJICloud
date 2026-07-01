@@ -3,7 +3,9 @@ package com.xjicloud.config;
 import com.xjicloud.admin.AdminJwtAuthenticationFilter;
 import com.xjicloud.auth.JwtAuthenticationFilter;
 import com.xjicloud.worker.WorkerJwtAuthenticationFilter;
+import com.xjicloud.frameworkintegration.FrameworkBackendSecretFilter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import com.xjicloud.frameworkintegration.FrameworkIntegrationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -23,23 +25,26 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(CorsProperties.class)
+@EnableConfigurationProperties({CorsProperties.class, FrameworkIntegrationProperties.class})
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final AdminJwtAuthenticationFilter adminJwtAuthenticationFilter;
     private final WorkerJwtAuthenticationFilter workerJwtAuthenticationFilter;
+    private final FrameworkBackendSecretFilter frameworkBackendSecretFilter;
     private final CorsProperties corsProperties;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             AdminJwtAuthenticationFilter adminJwtAuthenticationFilter,
             WorkerJwtAuthenticationFilter workerJwtAuthenticationFilter,
+            FrameworkBackendSecretFilter frameworkBackendSecretFilter,
             CorsProperties corsProperties
     ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.adminJwtAuthenticationFilter = adminJwtAuthenticationFilter;
         this.workerJwtAuthenticationFilter = workerJwtAuthenticationFilter;
+        this.frameworkBackendSecretFilter = frameworkBackendSecretFilter;
         this.corsProperties = corsProperties;
     }
 
@@ -56,12 +61,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/worker/**").hasRole("WORKER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/models/*/download").permitAll()
+                        .requestMatchers("/api/v1/framework/queue-stats").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+                .addFilterBefore(frameworkBackendSecretFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(adminJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(workerJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

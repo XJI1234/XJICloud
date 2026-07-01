@@ -1,0 +1,46 @@
+server:
+  port: ${xjicloud.framework.listen-port:9090}
+
+spring:
+  application:
+    name: xjicloud-framework
+  datasource:
+    url: jdbc:h2:file:${xjicloud.framework.data-dir:./data}/framework;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  h2:
+    console:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+xjicloud:
+  framework:
+    mode: master
+    listen-port: 9090
+    master-url: http://127.0.0.1:9090
+    agent-token: change-me-agent-token
+    data-dir: ./data
+    backend-url: http://127.0.0.1:8080
+    backend-api-secret: change-me-backend-api-secret
+    api-secret: change-me-framework-api-secret
+    jwt-secret: change-me-framework-jwt-secret-at-least-32-chars
+    encryption-key: change-me-aes-key-32bytes-long!!
+    admin:
+      default-username: admin
+      default-password: admin
+      force-password-change: true
+    aliyun:
+      region-id: cn-hangzhou
+      container-image: registry.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2
+      auto-scale-enabled: true
+      scale-down-delay-minutes: 5

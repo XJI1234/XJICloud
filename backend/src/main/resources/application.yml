@@ -47,6 +47,12 @@ xjicloud:
     default-password: admin123
     # 为 true 时，每次启动将 yml 中的 default-password 同步到已存在的同名管理员（改密后需重启）
     sync-password-on-startup: false
+  framework:
+    enabled: false
+    master-url: http://127.0.0.1:9090
+    api-secret: change-me-framework-api-secret
+    backend-api-secret: change-me-backend-api-secret
+    config-poll-interval-sec: 60
 
 server:
   port: 8080
