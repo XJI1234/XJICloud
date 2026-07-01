@@ -29,6 +29,7 @@ xjicloud:
     listen-port: 9090
     master-url: http://127.0.0.1:9090
     agent-token: change-me-agent-token
+    advertise-host: ""
     data-dir: ./data
     backend-url: ""
     backend-api-secret: change-me-backend-api-secret

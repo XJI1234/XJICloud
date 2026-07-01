@@ -77,7 +77,16 @@ Slave 安装时需填写 **Master 地址** 与 **Master 的 agent-token**（`/et
 ```bash
 # 主端查看 agent-token
 grep agent-token /etc/xjicloud/framework.yml
+
+# 从端诊断（会探测 Master 注册与 token）
+sudo ./framework/cli.sh status
 ```
+
+**节点离线常见原因：**
+
+1. **agent-token 不一致** — 从端 `cli.sh status` 若显示 `master-probe=FAIL 401`，需把主端 token 复制到从端配置并重启
+2. **IP 不匹配** — 从端上报 IP 须与面板中节点一致；在从端 `framework.yml` 设置 `advertise-host: 192.168.203.134`
+3. **重复节点** — 若曾手动添加节点又自动注册，面板可能有多条记录，删除错误 IP 的那条
 
 ## 部署模式
 

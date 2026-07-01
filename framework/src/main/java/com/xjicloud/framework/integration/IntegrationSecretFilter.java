@@ -31,7 +31,7 @@ public class IntegrationSecretFilter extends OncePerRequestFilter {
                 return;
             }
         }
-        if (path.startsWith("/api/v1/agent/") && !path.equals("/api/v1/agent/register")) {
+        if (path.startsWith("/api/v1/agent/")) {
             String token = request.getHeader("X-Agent-Token");
             if (token == null || !token.equals(properties.agentToken())) {
                 response.setStatus(HttpStatus.UNAUTHORIZED.value());

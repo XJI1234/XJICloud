@@ -1,4 +1,5 @@
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/FrameworkApplication.java
+/home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/agent/AdvertiseHostResolver.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/agent/AgentController.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/agent/SlaveAgentRunner.java
 /home/qbm/Workspace/XJICloud/framework/src/main/java/com/xjicloud/framework/auth/AuthController.java

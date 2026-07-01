@@ -2,12 +2,17 @@ package com.xjicloud.framework.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.xjicloud.framework.config.FrameworkProperties;
+import com.xjicloud.framework.agent.AdvertiseHostResolver;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "xjicloud-framework", subcommands = {
@@ -58,9 +63,68 @@ public class FrameworkCli {
         @Override
         public void run() {
             Map<String, Object> y = readYaml();
-            System.out.println("mode=" + y.getOrDefault("mode", "master"));
+            String mode = String.valueOf(y.getOrDefault("mode", "master"));
+            System.out.println("mode=" + mode);
             System.out.println("master-url=" + y.getOrDefault("master-url", ""));
             System.out.println("listen-port=" + y.getOrDefault("listen-port", 9090));
+            Object advertise = y.get("advertise-host");
+            String resolved = AdvertiseHostResolver.resolve(advertise == null ? "" : String.valueOf(advertise));
+            System.out.println("advertise-host=" + (advertise == null || String.valueOf(advertise).isBlank() ? "(auto)" : advertise));
+            System.out.println("resolved-advertise-host=" + resolved);
+            Object token = y.get("agent-token");
+            if (token != null && !String.valueOf(token).isBlank()) {
+                System.out.println("agent-token=" + mask(String.valueOf(token)));
+            }
+            if ("slave".equalsIgnoreCase(mode)) {
+                probeMaster(y, resolved, token == null ? "" : String.valueOf(token));
+            }
+        }
+
+        private static String mask(String token) {
+            if (token.length() <= 8) {
+                return "****";
+            }
+            return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
+        }
+
+        @SuppressWarnings("unchecked")
+        private static void probeMaster(Map<String, Object> y, String host, String token) {
+            String masterUrl = String.valueOf(y.getOrDefault("master-url", ""));
+            if (masterUrl.isBlank()) {
+                System.out.println("master-probe=SKIP (master-url empty)");
+                return;
+            }
+            if (token.isBlank()) {
+                System.out.println("master-probe=SKIP (agent-token empty)");
+                return;
+            }
+            try {
+                RestTemplate rt = new RestTemplate();
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.set("X-Agent-Token", token);
+                Map<String, Object> body = Map.of(
+                        "name", host,
+                        "host", host,
+                        "role", "CUSTOM",
+                        "systemInfoJson", "{}"
+                );
+                String url = masterUrl.replaceAll("/$", "") + "/api/v1/agent/register";
+                Map<String, Object> resp = rt.postForObject(url, new HttpEntity<>(body, headers), Map.class);
+                if (resp != null && Boolean.TRUE.equals(resp.get("success"))) {
+                    System.out.println("master-probe=OK (agent-token accepted, host=" + host + ")");
+                } else {
+                    System.out.println("master-probe=FAIL " + resp);
+                }
+            } catch (HttpStatusCodeException e) {
+                System.out.println("master-probe=FAIL " + e.getStatusCode().value() + " " + e.getResponseBodyAsString());
+                if (e.getStatusCode().value() == 401) {
+                    System.out.println("hint=从端 agent-token 必须与主端 /etc/xjicloud/framework.yml 中 agent-token 完全一致");
+                }
+            } catch (Exception e) {
+                System.out.println("master-probe=FAIL " + e.getMessage());
+                System.out.println("hint=检查从端能否访问 " + masterUrl + "（防火墙/路由）");
+            }
         }
     }
 

@@ -8,6 +8,7 @@ public record FrameworkProperties(
         int listenPort,
         String masterUrl,
         String agentToken,
+        String advertiseHost,
         String dataDir,
         String backendUrl,
         String backendApiSecret,

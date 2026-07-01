@@ -93,11 +93,13 @@ do_install() {
   read -rp "模式 [master/slave] (默认 master): " MODE
   MODE="${MODE:-master}"
   MASTER_URL=""
+  ADVERTISE_HOST=""
   if [[ "$MODE" == "slave" ]]; then
-    read -rp "Master 地址 (如 http://10.0.1.10:9090): " MASTER_URL
+    read -rp "Master 地址 (如 http://192.168.203.135:9090): " MASTER_URL
     [[ -n "$MASTER_URL" ]] || { echo "Slave 必须填写 Master 地址"; exit 1; }
     read -rp "Master agent-token（与主端 framework.yml 中 agent-token 一致）: " AGENT_TOKEN_INPUT
     [[ -n "$AGENT_TOKEN_INPUT" ]] || { echo "Slave 必须填写与 Master 相同的 agent-token"; exit 1; }
+    read -rp "本机 IP（供 Master 识别，建议填实际 IP 如 192.168.203.134，留空则自动检测）: " ADVERTISE_HOST
   fi
 
   read -rp "admin 密码 (默认 admin，slave 可忽略): " ADMIN_PASS
@@ -157,6 +159,7 @@ xjicloud:
     listen-port: 9090
     master-url: ${MASTER_URL:-http://127.0.0.1:9090}
     agent-token: $AGENT_TOKEN
+    advertise-host: ${ADVERTISE_HOST:-}
     data-dir: /var/lib/xjicloud-framework
     backend-url: ${BACKEND_URL:-}
     backend-api-secret: $BACKEND_SECRET

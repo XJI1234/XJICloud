@@ -5,7 +5,6 @@ import com.xjicloud.framework.monitor.SystemMetricsService;
 import com.xjicloud.framework.node.NodeRole;
 import com.xjicloud.framework.node.NodeService;
 import jakarta.annotation.PostConstruct;
-import java.net.InetAddress;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 @Component
@@ -29,6 +29,7 @@ public class SlaveAgentRunner {
     private final SystemMetricsService metricsService;
     private final RestTemplate restTemplate = new RestTemplate();
     private final AtomicReference<UUID> nodeId = new AtomicReference<>();
+    private volatile String lastRegisterError = "";
 
     public SlaveAgentRunner(FrameworkProperties properties, SystemMetricsService metricsService) {
         this.properties = properties;
@@ -51,8 +52,8 @@ public class SlaveAgentRunner {
         if (!properties.isSlave()) {
             return;
         }
+        String host = AdvertiseHostResolver.resolve(properties.advertiseHost());
         try {
-            String host = InetAddress.getLocalHost().getHostAddress();
             String metrics = metricsService.collectMetricsJson();
             var request = new NodeService.AgentRegisterRequest(host, host, NodeRole.CUSTOM, metrics);
             HttpHeaders headers = new HttpHeaders();
@@ -66,11 +67,19 @@ public class SlaveAgentRunner {
                 Map<String, Object> data = (Map<String, Object>) body.get("data");
                 if (data != null && data.get("nodeId") != null) {
                     nodeId.set(UUID.fromString(data.get("nodeId").toString()));
-                    log.info("Registered with master as {}", nodeId.get());
+                    lastRegisterError = "";
+                    log.info("Registered with master as {} (advertise-host={})", nodeId.get(), host);
+                    return;
                 }
             }
+            lastRegisterError = body != null ? String.valueOf(body.get("message")) : "empty response";
+            log.warn("Master rejected registration for host {}: {}", host, lastRegisterError);
+        } catch (HttpStatusCodeException e) {
+            lastRegisterError = e.getStatusCode() + " " + e.getResponseBodyAsString();
+            log.warn("Failed to register with master (host={}): {}", host, lastRegisterError);
         } catch (Exception e) {
-            log.warn("Failed to register with master: {}", e.getMessage());
+            lastRegisterError = e.getMessage();
+            log.warn("Failed to register with master (host={}): {}", host, lastRegisterError);
         }
     }
 
@@ -87,8 +96,22 @@ public class SlaveAgentRunner {
             headers.set("X-Agent-Token", properties.agentToken());
             String url = properties.masterUrl().replaceAll("/$", "") + "/api/v1/agent/" + id + "/heartbeat";
             restTemplate.postForObject(url, new HttpEntity<>(request, headers), Map.class);
+        } catch (HttpStatusCodeException e) {
+            log.warn("Heartbeat rejected for {}: {} {}", id, e.getStatusCode(), e.getResponseBodyAsString());
         } catch (Exception e) {
-            log.debug("Heartbeat failed: {}", e.getMessage());
+            log.warn("Heartbeat failed for {}: {}", id, e.getMessage());
         }
+    }
+
+    public String lastRegisterError() {
+        return lastRegisterError;
+    }
+
+    public UUID registeredNodeId() {
+        return nodeId.get();
+    }
+
+    public String resolvedAdvertiseHost() {
+        return AdvertiseHostResolver.resolve(properties.advertiseHost());
     }
 }

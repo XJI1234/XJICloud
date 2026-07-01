@@ -78,6 +78,7 @@ com/xjicloud/framework/eci/CreateContainerRequest.class
 com/xjicloud/framework/monitor/SystemMetricsService.class
 com/xjicloud/framework/config/JacksonConfig.class
 com/xjicloud/framework/config/FrameworkProperties$Aliyun.class
+com/xjicloud/framework/agent/AdvertiseHostResolver.class
 com/xjicloud/framework/ssh/SshCommandService$2.class
 com/xjicloud/framework/node/NodeController.class
 com/xjicloud/framework/deploy/DeployType.class
