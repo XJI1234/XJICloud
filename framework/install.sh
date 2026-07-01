@@ -34,14 +34,26 @@ require_build_tools() {
   command -v mvn >/dev/null || { echo "请先安装 Maven 3.9+"; exit 1; }
 }
 
+# target/ 不纳入 git；安装/升级均在本地执行 mvn package
+find_built_jar() {
+  find "$ROOT/target" -maxdepth 1 -name 'xjicloud-framework-*.jar' ! -name '*.original' -type f 2>/dev/null | head -1
+}
+
 build_jar() {
-  echo ">>> 构建 Framework..."
+  echo ">>> 本地构建 Framework（target/ 不在仓库中，需 Maven 编译）..." >&2
   cd "$ROOT"
-  mvn -q -DskipTests package
+  if ! mvn -q -DskipTests package; then
+    echo "Maven 构建失败" >&2
+    exit 1
+  fi
   local built
-  built="$(ls -1 "$ROOT"/target/xjicloud-framework-*.jar | head -1)"
-  [[ -f "$built" ]] || { echo "构建失败：未找到 JAR"; exit 1; }
-  echo "$built"
+  built="$(find_built_jar)"
+  if [[ -z "$built" || ! -f "$built" ]]; then
+    echo "构建失败：未找到 target/xjicloud-framework-*.jar" >&2
+    exit 1
+  fi
+  echo ">>> 构建完成: $built" >&2
+  printf '%s\n' "$built"
 }
 
 install_service_unit() {

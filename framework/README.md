@@ -4,18 +4,22 @@
 
 ## 快速安装
 
+`target/` 与 `*.jar` 已加入 `.gitignore`，**不会**随 git 同步。安装脚本会在本机执行 `mvn package` 后再部署到 `/opt/xjicloud-framework/`。
+
 ```bash
 sudo chmod +x framework/install.sh
 
 # 全新安装（可先于后端部署，Framework 独立可用）
 sudo ./framework/install.sh install
 
-# 保留配置，仅升级 JAR
+# 保留配置，本地重新编译并升级 JAR
 sudo ./framework/install.sh upgrade
 
 # 交互选择 install / upgrade
 sudo ./framework/install.sh
 ```
+
+需已安装 Java 17+ 与 Maven 3.9+（安装脚本会检查）。
 
 访问 Master 节点 `http://<ip>:9090`，默认 `admin` / `admin`（首次登录强制改密）。
 

@@ -17,6 +17,7 @@ supersplat/
 release
 *.local
 rust/target
+**/target/
 backend/data/
 data/
 
