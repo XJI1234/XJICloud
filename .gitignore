@@ -17,17 +17,10 @@ supersplat/
 release
 *.local
 rust/target
-**/target/
 backend/data/
 data/
-
-# 后端一键部署本地配置（含密钥）
 deploy/config/application-prod.yml
-deploy/config/backend.env
-deploy/config/deploy.conf
-deploy/.env
-deploy/k8s/secrets.yaml
-deploy/k8s/overlays/aliyun/secrets.yaml
+deploy/config/install-summary.txt
 
 # Editor directories and files
 .vscode/*
@@ -40,4 +33,3 @@ deploy/k8s/overlays/aliyun/secrets.yaml
 *.sln
 *.sw?
 Cookies
-*.jar

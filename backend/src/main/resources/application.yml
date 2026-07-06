@@ -14,11 +14,9 @@ spring:
     properties:
       hibernate:
         format_sql: true
-  data:
-    redis:
-      host: ${REDIS_HOST:127.0.0.1}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+
+server:
+  port: 8080
 
 xjicloud:
   jwt:
@@ -27,35 +25,7 @@ xjicloud:
   storage:
     root: ./data/xjicloud
   cors:
-    allowed-origins: http://127.0.0.1:5174,http://localhost:5174,http://127.0.0.1:5175,http://localhost:5175
-  oss:
-    endpoint: ${OSS_ENDPOINT:http://127.0.0.1:9000}
-    region: ${OSS_REGION:us-east-1}
-    bucket: ${OSS_BUCKET:xjicloud}
-    access-key: ${OSS_ACCESS_KEY:minioadmin}
-    secret-key: ${OSS_SECRET_KEY:minioadmin}
-    path-style-access: true
-    presign-expiration-minutes: 120
-  redis:
-    queue-key: xjicloud:jobs
-  worker:
-    shared-secret: change-me-worker-secret-in-production
-    heartbeat-timeout-sec: 60
-    poll-timeout-sec: 25
-  admin:
-    default-username: admin
-    default-password: admin123
-    # 为 true 时，每次启动将 yml 中的 default-password 同步到已存在的同名管理员（改密后需重启）
-    sync-password-on-startup: false
-  framework:
-    enabled: false
-    master-url: http://127.0.0.1:9090
-    api-secret: change-me-framework-api-secret
-    backend-api-secret: change-me-backend-api-secret
-    config-poll-interval-sec: 60
-
-server:
-  port: 8080
+    allowed-origins: http://127.0.0.1:5174,http://localhost:5174
 
 management:
   endpoints:

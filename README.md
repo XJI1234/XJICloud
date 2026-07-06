@@ -1,159 +1,80 @@
-# XJICloud
+# XJI Cloud
 
-3D Gaussian Splatting（3DGS）建模云平台：用户上传图片数据集触发 GPU 训练、管理 PLY/SPZ 模型，并在浏览器中用 Spark 2.0 查看、SuperSplat 高级编辑。
+建模解决方案云平台 — 基于 [Spark 2.0](https://github.com/sparkjs-dev/spark) 的 3D Gaussian Splatting（3DGS）模型查看与编辑。支持 **Linux 云部署**（前后端分离）与 **Electron 桌面版**。
 
----
+**仓库地址：** [github.com/XJI1234/XJICloud](https://github.com/XJI1234/XJICloud)
 
-## 功能概览
+![Vue 3](https://img.shields.io/badge/Vue-3.5-42b883)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F)
+![Java](https://img.shields.io/badge/Java-17-ED8B00)
+![Three.js](https://img.shields.io/badge/Three.js-r180-black)
 
-### 用户端（`src/`，端口 5174）
+## 架构概览
 
-| 能力 | 说明 |
+```
+浏览器 / Electron
+       │
+       ▼
+  Vue 3 前端 (Vite)          ──►  SparkViewport + WASM
+       │  /api/v1
+       ▼
+  Spring Boot 后端 (JWT)
+       ├── H2 / PostgreSQL（元数据）
+       └── 本地磁盘 /data/xjicloud（模型与 viewer.json）
+```
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| 前端壳层 | `src/` | 主页、登录、工程项目、数据上传、路由与云 API |
+| Spark 查看器 | `src/modules/viewer/` | 模型查看（`/app/layer`），Spark + WASM |
+| SuperSplat 编辑器 | `modules/supersplat/` | 高级编辑（iframe 子应用，`/app/supersplat`） |
+| 后端 | `backend/` | REST API、JWT、模型上传/下载、配置持久化 |
+| 部署样例 | `deploy/` | Nginx、生产 `application` 模板 |
+| 桌面端 | `electron/` | 可选，本地文件对话框 |
+| 渲染核心 | `src/lib/spark/`、`rust/` | Spark 2.0 + WASM（查看器共享） |
+
+后端为 **跨平台 Java**，开发可在 Windows/macOS 进行；**生产与测试推荐 Linux**（路径、Nginx、systemd 均按 Linux 约定）。
+
+## 功能特性
+
+### 云平台（Web）
+
+- 用户注册 / 登录（JWT）
+- **工程项目**：创建项目、上传 PLY/SPZ、列表选模
+- **模型查看**（`/app/layer`）：Spark 查看、标注、编辑、导出 SPZ
+- **高级编辑**（`/app/supersplat`）：嵌入 [SuperSplat](https://github.com/playcanvas/supersplat)，裁剪/变换等原生编辑，保存 PLY 到云端
+- 查看器配置（`.viewer.json` v2 结构）存服务端，刷新可恢复
+- 导出在浏览器生成后上传服务器（查看器 SPZ / 高级编辑 PLY）
+
+### 模型能力（Spark 渲染）
+
+- PLY / SPZ 加载，WebGL 高性能渲染
+- 气泡标注、立方体标记、颜色标记 / 擦除 / 橡皮擦
+- 撤销重做、默认视角、屏幕平面旋转
+- 项目信息字段（经纬度、建筑名称等，可自定义）
+
+### 桌面版（Electron）
+
+- 本地目录打开模型，不依赖云后端
+- 构建：`npm run electron:build` → `release/`
+
+## 环境要求
+
+| 用途 | 依赖 |
 |------|------|
-| 账户与工程 | 注册/登录，创建与管理工程项目 |
-| 图片数据集训练 | 选择本地文件夹（`webkitdirectory`），浏览器 **presigned URL 直传 OSS**，SSE 实时进度，完成后下载产出 PLY |
-| 模型上传 | PLY/SPZ 上传至后端本地磁盘，支持 Range 下载 |
-| Spark 查看器 | 基于 Spark 2.0 + Rust/WASM 的 Web 标注查看（`/app/layer`） |
-| SuperSplat 编辑 | iframe 嵌入高级编辑（需单独构建 SuperSplat） |
+| 前端（Vite 壳层） | Node.js ≥ 18，npm ≥ 9 |
+| SuperSplat 子工程 | Node.js ≥ **20.19**（见 `modules/supersplat/package.json`） |
+| 后端 | Java 17+，Maven 3.9+ |
+| 生产数据库（可选） | PostgreSQL 14+（`prod` profile） |
+| 重编 WASM（可选） | Rust ≥ 1.82，`wasm32-unknown-unknown` |
 
-### 管理端（`admin/`，端口 5175，路径 `/admin/`）
+## 快速开始（本地开发）
 
-| 能力 | 说明 |
-|------|------|
-| 仪表盘 | 任务与 Worker 概览 |
-| OSS 配置 | 在线修改 S3 兼容存储 endpoint/凭证，连接测试 |
-| Worker 监控 | 节点在线状态、强制下线 |
-| 任务管理 | 训练任务列表、重试、取消 |
-
-默认管理员：`admin` / `admin123`（首次启动创建，**生产环境务必修改**）。
-
-### GPU Worker（`gpu-worker/`）
-
-Python 容器 Agent：向后端注册、心跳、从 Redis 队列领取任务，通过 presigned URL 下载数据集、上传产出。当前训练逻辑为 **mock 占位**（`mock_trainer.py`），可替换为真实 3DGS 算法。
-
-### 桌面版（可选）
-
-Electron 壳（`electron/`）可本地打开模型，不依赖云后端。构建：`npm run electron:build`。
-
----
-
-## 系统架构
-
-```mermaid
-flowchart TB
-  subgraph clients [客户端]
-    UserFE[用户前端 Vue]
-    AdminFE[管理面板 Vue]
-  end
-
-  subgraph edge [服务器 A]
-    Nginx[Nginx]
-  end
-
-  subgraph backend [服务器 B]
-    API[Spring Boot 8080]
-    PG[(PostgreSQL / H2)]
-    Redis[(Redis 任务队列)]
-    Disk[本地磁盘 PLY/SPZ]
-  end
-
-  subgraph storage [服务器 C / 阿里云 OSS]
-    OSS[(S3 兼容对象存储)]
-  end
-
-  subgraph compute [服务器 D / 阿里云 CCI]
-    Worker[GPU Worker 容器]
-  end
-
-  UserFE --> Nginx
-  AdminFE --> Nginx
-  Nginx -->|"/api/"| API
-  UserFE -->|"presigned PUT/GET"| OSS
-  API --> PG
-  API --> Redis
-  API --> Disk
-  API --> OSS
-  Worker -->|注册 / 领任务| API
-  Worker --> OSS
-```
-
-### 双存储策略
-
-| 数据 | 存储位置 | 访问方式 |
-|------|----------|----------|
-| 图片数据集、训练产出 `model.ply` | **OSS**（MinIO / 阿里云 OSS） | 浏览器与 Worker **presigned URL 直传** |
-| 用户上传的 PLY/SPZ、viewer 配置 | **后端本地磁盘** `xjicloud.storage.root` | REST API + Range 下载 |
-| 用户、项目、任务、Worker 元数据 | **H2（开发）/ PostgreSQL（生产）** | JPA |
-
-### 训练流水线
-
-```
-1. 用户选择图片文件夹 → 前端归档为 0001.jpg… + manifest.json
-2. POST /api/v1/projects/{id}/datasets → 返回 presigned PUT URL
-3. 浏览器直传 OSS
-4. POST .../datasets/{jobId}/complete → 任务入 Redis 队列
-5. GPU Worker 领取任务 → 下载图片 → 训练（mock）→ 上传产出
-6. 用户通过 SSE /api/v1/jobs/{id}/events 查看进度 → 下载 PLY
-```
-
-任务状态：`PENDING` → `UPLOADING` → `QUEUED` → `RUNNING` → `COMPLETED` / `FAILED` / `CANCELLED`
-
----
-
-## 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| 用户 / 管理前端 | Vue 3.5、Vite 8、Pinia、Vue Router、Three.js |
-| 后端 | Spring Boot 3.3、Java 17、Spring Security + JWT |
-| 队列 | Redis（列表 `xjicloud:jobs`） |
-| 对象存储 | S3 兼容（MinIO / 阿里云 OSS） |
-| 算力 | Docker GPU Worker（Alibaba Cloud Linux 3 基础镜像） |
-| 渲染 | Spark 2.0（`src/lib/spark/`）、Rust/WASM（`rust/`） |
-
----
-
-## 仓库结构
-
-```
-XJICloud/
-├── src/                 # 用户 Vue 前端
-├── admin/               # 管理 Vue 前端（base /admin/）
-├── backend/             # Spring Boot 后端
-├── gpu-worker/          # GPU Worker 容器
-├── deploy/              # Compose、Nginx、systemd、配置模板
-├── electron/            # Electron 桌面壳
-├── rust/                # spark-rs、spark-worker-rs WASM
-├── src/lib/spark/       # Spark 2.0 渲染库
-├── modules/supersplat/  # SuperSplat 子工程（需自行 checkout）
-├── Deploy.md            # 分机部署指南（生产必读）
-└── AGENT_CONTEXT.md     # AI / 开发者架构速查
-```
-
----
-
-## 本地开发
-
-### 环境要求
-
-- **Node.js** ≥ 18（SuperSplat 建议 ≥ 20.19）
-- **Java** 17+、**Maven** 3.9+
-- **Docker**（用于 Redis、MinIO、Worker）
-- **Redis** 7+、**MinIO**（或 `deploy/docker-compose.yml` 一键启动）
-
-### 1. 启动基础设施
+### 1. 安装前端依赖
 
 ```bash
-cd deploy
-docker compose up redis minio minio-init -d
-```
-
-社区版 MinIO 浏览器直传需配置 **全局 CORS**（开发环境 Origin 示例）：
-
-```bash
-# 在 MinIO 容器或本机 MinIO 上
-export MINIO_API_CORS_ALLOW_ORIGIN="http://127.0.0.1:5174,http://localhost:5174"
-# 修改 compose 中 minio 的 environment 后 restart，或使用 mc admin config set
+npm install
+# 或 npm run deps:install  # 使用 npmmirror 加速
 ```
 
 ### 2. 启动后端
@@ -161,179 +82,202 @@ export MINIO_API_CORS_ALLOW_ORIGIN="http://127.0.0.1:5174,http://localhost:5174"
 ```bash
 cd backend
 mvn spring-boot:run
-# 默认 dev profile：H2 数据库、Redis localhost:6379、MinIO localhost:9000
 ```
 
-### 3. 启动前端
+默认 **dev** profile：H2 数据库 `./data/xjicloud-db`，模型目录 `./data/xjicloud`，端口 **8080**。
+
+### 3. 构建 SuperSplat 子应用（高级编辑）
 
 ```bash
-# 用户前端（:5174，/api 代理到 8080）
-npm install
-npm run dev
-
-# 管理面板（另开终端，:5175）
-cd admin && npm install && npm run dev
-```
-
-### 4. 启动 GPU Worker（可选）
-
-```bash
-docker build -t xjicloud/gpu-worker gpu-worker/
-docker run --rm \
-  -e XJICLOUD_BACKEND_URL=http://host.docker.internal:8080 \
-  -e WORKER_SECRET=change-me-worker-secret-in-production \
-  xjicloud/gpu-worker
-```
-
-`WORKER_SECRET` 须与后端 `xjicloud.worker.shared-secret` 一致。
-
-### 5. 一键 Compose（后端 + Worker + Redis + MinIO）
-
-```bash
-cd deploy
-cp env.example .env   # 按需修改
-docker compose up -d
-```
-
----
-
-## 构建
-
-```bash
-# 用户前端
-npm run build
-
-# 管理面板
-npm run build:admin
-
-# 云平台完整构建（含 SuperSplat + 用户前端 + 管理面板）
-npm run build:all:cloud
-
-# Rust/WASM（Spark 渲染依赖）
-npm run build:wasm
-
-# SuperSplat（需先 clone modules/supersplat）
 npm run build:supersplat
-
-# 后端 JAR
-cd backend && mvn -DskipTests package
 ```
 
-构建产物：
+产物复制到 `public/supersplat/`，Vite dev 与 `npm run build` 会一并提供静态资源。
 
-- 用户前端 → `dist/`
-- 管理面板 → `admin/dist/`（部署到 Nginx `/admin/`）
-- 后端 → `backend/target/xjicloud-backend-*.jar`
-
----
-
-## 生产部署
-
-推荐 **四机分机**拓扑（详见 [Deploy.md](Deploy.md)）：
-
-| 服务器 | 角色 | 预生产 | 生产 |
-|--------|------|--------|------|
-| **A** | Nginx + 静态资源 | 同左 | 同左 + HTTPS |
-| **B** | Spring Boot + PostgreSQL + Redis | 同左 | 可选 RDS / 云 Redis |
-| **C** | MinIO（S3 API） | MinIO 原生安装 | **阿里云 OSS** |
-| **D** | GPU Worker Docker | 常驻容器 | **阿里云 CCI** 按需启动 |
-
-快速入口：
-
-| 文档 / 脚本 | 用途 |
-|-------------|------|
-| [Deploy.md](Deploy.md) | 分机部署、安全组、MinIO 全局 CORS、OSS 切换 |
-| [deploy/deploy-backend.sh](deploy/deploy-backend.sh) | 后端一键构建 + systemd |
-| [deploy/nginx-frontend.conf.example](deploy/nginx-frontend.conf.example) | 前端 Nginx（`/api/` 反代、`/admin/` 静态） |
-| [deploy/config/](deploy/config/) | `application-prod.yml` 配置说明 |
-
-后端生产配置示例：
+### 4. 启动前端
 
 ```bash
-cp deploy/config/application-prod.yml.example deploy/config/application-prod.yml
-# 编辑数据库、Redis、OSS、CORS、Worker 密钥等
-sudo ./deploy/deploy-backend.sh
+npm run dev
 ```
 
----
+浏览器访问 **http://127.0.0.1:5174/login**（Vite 已将 `/api` 代理到 `8080`）。
 
-## 配置说明
+### 5. 使用流程
 
-关键配置位于 `backend/src/main/resources/application.yml`，生产环境使用 `deploy/config/application-prod.yml`。
+1. 注册并登录 → 进入 **主页**（空屏）  
+2. **新建项目** 或 **打开项目**（对话框选工程）；也可点击 **最近项目**  
+3. **工程项目** 页查看/切换当前工程，上传 `.ply` / `.spz`  
+4. 左侧栏 **数据上传** 可继续上传模型  
+5. **模型查看**：Spark 标注 / 编辑 / 导出 SPZ  
+6. **高级编辑**：SuperSplat 原生编辑，**保存到云端** 上传 PLY（覆盖云端模型文件）；保存后可在模型查看中重新加载  
 
-| 配置项 | 说明 |
-|--------|------|
-| `xjicloud.jwt.secret` | 用户 JWT 密钥（≥32 字符） |
-| `xjicloud.storage.root` | PLY/SPZ 本地存储目录 |
-| `xjicloud.cors.allowed-origins` | 前端 Origin（逗号分隔），解决 `/api/` 跨域 |
-| `xjicloud.oss.*` | S3 endpoint、bucket、凭证；Admin 面板可热更新 |
-| `xjicloud.worker.shared-secret` | Worker 注册密钥，与容器 `WORKER_SECRET` 一致 |
-| `xjicloud.admin.default-*` | 首次启动创建的管理员账号 |
-| `xjicloud.admin.sync-password-on-startup` | 改 yml 密码后同步到数据库（需重启） |
+### 双编辑器说明
 
-**浏览器直传 OSS 注意：**
+| 入口 | 引擎 | 云端保存格式 |
+|------|------|--------------|
+| 模型查看 | Spark | SPZ |
+| 高级编辑 | SuperSplat | PLY |
 
-- 后端 `cors.allowed-origins` 只管 API，**不能替代** MinIO/OSS 的 CORS。
-- 社区版 MinIO 仅支持 **全局 CORS**（`MINIO_API_CORS_ALLOW_ORIGIN`），且防火墙须放通 **用户 PC 所在网段**（不仅是前端/后端服务器 IP）。详见 [Deploy.md §5.1.5](Deploy.md#515-cors社区版-minio仅全局-cors)。
+同一模型可先高级编辑保存 PLY，再在模型查看中打开（格式互通）。
 
----
+## Linux 服务器部署
 
-## API 概览
+以下命令在 **Ubuntu / Debian 等 Linux** 上验证；JAR 与路径均按 Linux 约定。
 
-统一前缀 `/api/v1`，响应格式 `{ success, message, data }`。
+### 1. 构建
 
-### 用户（Bearer 用户 JWT）
+```bash
+# 前端（含 SuperSplat 子应用）
+npm ci
+npm run build:all
+# 产物：dist/（含 dist/supersplat/）
+
+# 后端
+cd backend
+mvn -DskipTests package
+# 产物：backend/target/xjicloud-backend-1.0.0.jar
+```
+
+### 2. 数据目录与数据库
+
+```bash
+sudo mkdir -p /data/xjicloud
+sudo chown "$USER:$USER" /data/xjicloud
+```
+
+**方式 A — 快速试跑（H2，无需 PostgreSQL）**
+
+```bash
+cd backend
+java -jar target/xjicloud-backend-1.0.0.jar \
+  --spring.profiles.active=dev \
+  --xjicloud.storage.root=/data/xjicloud \
+  --xjicloud.cors.allowed-origins=http://你的服务器IP,https://你的域名
+```
+
+**方式 B — 生产（PostgreSQL，推荐交互向导）**
+
+```bash
+# 在 Linux 服务器上，交互生成配置并安装 systemd 服务
+chmod +x deploy/deploy-backend.sh
+sudo ./deploy/deploy-backend.sh
+# 或仅生成配置: sudo ./deploy/deploy-backend.sh configure
+# 详见 deploy/config/README.md 与 Deploy.md
+```
+
+手动配置时参考 [`deploy/config/application-prod.yml.example`](deploy/config/application-prod.yml.example)，然后：
+
+```bash
+sudo ./deploy/deploy-backend.sh install --non-interactive
+```
+
+### 3. Nginx
+
+复制并按环境修改 [`deploy/nginx.conf.example`](deploy/nginx.conf.example)：
+
+- `/` → `dist/` 静态文件，`try_files` 回退 `index.html`（SPA）
+- `/supersplat/` → `dist/supersplat/`（SuperSplat 子应用静态资源）
+- `/api/` → `http://127.0.0.1:8080`
+- `client_max_body_size` 建议 ≥ 2G（大模型上传）
+
+### 4. 健康检查
+
+```bash
+curl http://127.0.0.1:8080/actuator/health
+```
+
+### 验收清单
+
+- [ ] 可注册 / 登录，进入主页（新建 / 打开 / 最近项目）  
+- [ ] 工程项目页可切换当前工程并上传 PLY/SPZ；左侧栏「模型查看」加载模型  
+- [ ] 标注、编辑、导出 SPZ，保存配置后刷新可恢复  
+- [ ] 左侧栏「高级编辑」可加载 SuperSplat，保存 PLY 到云端后模型查看可重载  
+- [ ] 左上角 logo、右上角用户菜单（退出登录）；左栏：航线规划 / 数据上传 / 模型查看 / 高级编辑  
+
+## REST API 摘要
+
+前缀：`/api/v1`（除登录外需 `Authorization: Bearer <token>`）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/auth/register`, `/auth/login` | 注册 / 登录 |
-| GET/POST | `/projects` | 工程项目 |
-| POST | `/projects/{id}/models/upload` | 上传 PLY/SPZ |
-| POST | `/projects/{id}/datasets` | 创建训练任务 + presigned URLs |
-| POST | `/projects/{id}/datasets/{jobId}/complete` | 确认上传并入队 |
-| GET | `/jobs/{id}/events` | SSE 训练进度 |
+| POST | `/auth/register`、`/auth/login` | 注册 / 登录 |
+| GET/POST | `/projects` | 项目列表 / 创建 |
+| GET | `/projects/{id}/models` | 模型列表 |
+| POST | `/projects/{id}/models/upload` | 上传模型（multipart） |
+| POST | `/models/{id}/download-token` | 签发 15 分钟短期下载 URL（供 SuperSplat iframe） |
+| GET | `/models/{id}/download` | 下载模型（`Bearer` 或 `?access_token=`，支持 `Range`） |
+| GET/PUT | `/models/{id}/viewer-config` | 读取 / 保存查看器 JSON |
+| POST | `/models/{id}/export` | 上传导出文件（SPZ 或 PLY） |
 
-### Worker（Bearer worker JWT）
+## 配置项
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/worker/register` | 注册（需 `X-Worker-Secret`） |
-| GET | `/worker/jobs/next` | 长轮询领取任务 |
+| 配置键 | 默认值（dev） | 说明 |
+|--------|----------------|------|
+| `xjicloud.storage.root` | `./data/xjicloud` | 模型与 `viewer.json` 根目录；Linux 生产建议 `/data/xjicloud` |
+| `xjicloud.jwt.secret` | 见 `application.yml` | **生产必须修改** |
+| `xjicloud.cors.allowed-origins` | `http://127.0.0.1:5174,...` | 前端访问源，逗号分隔 |
+| `server.port` | `8080` | 后端端口 |
 
-### 管理（Bearer admin JWT）
+前端可选环境变量：`VITE_API_BASE_URL`（留空则使用同源 `/api`，由 Nginx 或 Vite 代理）。
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/admin/auth/login` | 管理员登录 |
-| GET/PUT | `/admin/oss` | OSS 配置 |
-| GET | `/admin/workers`, `/admin/jobs` | 监控 |
+## 查看器配置格式
 
-完整 API 列表见 [AGENT_CONTEXT.md §6](AGENT_CONTEXT.md#6-rest-api-速查)。
+云端与本地均使用 **version 2** JSON（原 `{模型名}.viewer.json`）：
 
----
+```json
+{
+  "version": 2,
+  "defaultView": {
+    "position": [0, 0, 5],
+    "quaternion": [0, 0, 0, 1]
+  },
+  "pointAnnotations": [],
+  "cubeMarkers": [],
+  "projectInfo": {
+    "projectName": "示例项目",
+    "fields": [
+      { "key": "coordinates", "label": "经纬度", "value": "" },
+      { "key": "buildingName", "label": "建筑名称", "value": "" },
+      { "key": "floorCount", "label": "楼层数", "value": "" },
+      { "key": "height", "label": "高度", "value": "" }
+    ]
+  }
+}
+```
 
-## 常见问题
+## 快捷键（图层查看页）
 
-| 现象 | 可能原因 | 处理 |
-|------|----------|------|
-| 管理端 OSS 测试正常，前端上传报 CORS / 网络错误 | MinIO 全局 CORS 未配；或防火墙只放了服务器 IP、未放用户 PC 网段 | [Deploy.md §5.1.5](Deploy.md#515-cors社区版-minio仅全局-cors) |
-| 管理端登录 401 | 数据库中已有旧密码；yml 修改不生效 | 设 `sync-password-on-startup: true` 并重启，或在 Admin 改密 |
-| Worker 不领任务 | `WORKER_SECRET` 不一致；Redis 未连；无在线 Worker | 检查日志与 `/admin/workers` |
-| SSE 进度不更新 | Nginx 未关闭 `proxy_buffering` | 见 [Deploy.md](Deploy.md) Nginx 示例 |
-| SuperSplat 404 | 未构建 `public/supersplat/` | `npm run build:supersplat` |
+| 按键 | 功能 |
+|------|------|
+| `O` | 打开 / 选择模型 |
+| `1` / `2` / `3` | 颜色标记 / 擦除 / 橡皮擦 |
+| `Esc` | 查看模式 |
+| `Ctrl+Z` / `Cmd+Z` | 撤回 |
+| `Ctrl+Y` / `Cmd+Shift+Z` | 重做 |
+| `Delete` | 删除选中标注 |
 
----
+## 项目结构
 
-## 许可与第三方
+```
+XJICloud/
+├── backend/                 # Spring Boot 3
+│   └── src/main/java/com/xjicloud/
+├── src/
+│   ├── views/               # Home、Login、Projects、Upload、LayerViewer
+│   ├── layouts/CloudLayout.vue
+│   ├── components/SparkViewport.vue
+│   ├── api/                 # REST 客户端
+│   └── services/viewerStorage.ts
+├── deploy/                  # nginx、交互式 deploy-backend.sh、application-prod 模板
+├── electron/
+└── rust/                    # WASM（spark-rs、spark-worker-rs）
+```
 
-- **Spark 2.0**（`src/lib/spark/`）：专有许可，请勿擅自再分发。
-- **SuperSplat**：PlayCanvas 项目，需遵循其许可证。
-- 其余应用代码以仓库内声明为准。
+## 致谢
 
----
+- [Spark](https://github.com/sparkjs-dev/spark)（World Labs Technologies）
+- [Three.js](https://threejs.org/)
 
-## 相关文档
+## License
 
-- [Deploy.md](Deploy.md) — 生产 / 预生产分机部署
-- [AGENT_CONTEXT.md](AGENT_CONTEXT.md) — 架构细节、包结构、Agent 修改指南
-- [deploy/config/README.md](deploy/config/README.md) — 后端生产配置
+应用层代码可自由使用。`src/lib/spark/` 与 `rust/` 下 Spark 相关代码遵循 Spark 原始许可（Proprietary），详见 [sparkjs-dev/spark](https://github.com/sparkjs-dev/spark)。

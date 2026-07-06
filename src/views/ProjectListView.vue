@@ -3,14 +3,15 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { ApiError } from '@/api/client'
-import FileUploadButton from '@/components/FileUploadButton.vue'
+import { uploadModel } from '@/api/models'
 
 const router = useRouter()
 const projectStore = useProjectStore()
 const newProjectName = ref('')
 const newProjectDescription = ref('')
 const errorMessage = ref('')
-const uploadMessage = ref('')
+const uploadInputRef = ref<HTMLInputElement | null>(null)
+const pending = ref(false)
 
 onMounted(async () => {
   try {
@@ -39,6 +40,35 @@ async function createProject() {
 function selectProject(projectId: string) {
   projectStore.openProject(projectId)
   errorMessage.value = ''
+}
+
+function triggerUpload() {
+  if (!projectStore.activeProject) {
+    errorMessage.value = '请先在下方列表选择一个工程'
+    return
+  }
+
+  uploadInputRef.value?.click()
+}
+
+async function handleUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+
+  if (!file || !projectStore.activeProjectId) {
+    return
+  }
+
+  pending.value = true
+  try {
+    await uploadModel(projectStore.activeProjectId, file)
+    errorMessage.value = ''
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : '上传模型失败'
+  } finally {
+    pending.value = false
+  }
 }
 
 function formatDate(value: string) {
@@ -70,17 +100,13 @@ function goHome() {
             </p>
           </template>
         </div>
-        <button class="cloud-btn cloud-btn--ghost" type="button" @click="goHome">返回主页</button>
+        <button class="side-button" type="button" @click="goHome">返回主页</button>
       </div>
 
       <div v-if="projectStore.activeProject" class="projects-current-actions">
-        <FileUploadButton
-          :project-id="projectStore.activeProjectId"
-          label="上传模型"
-          @success="(name) => { uploadMessage = `已上传 ${name}`; errorMessage = '' }"
-          @error="(message) => { errorMessage = message; uploadMessage = '' }"
-        />
-        <p v-if="uploadMessage" class="projects-current-description">{{ uploadMessage }}</p>
+        <button class="side-button primary" type="button" :disabled="pending" @click="triggerUpload">
+          {{ pending ? '上传中...' : '上传模型' }}
+        </button>
       </div>
     </section>
 
@@ -89,7 +115,7 @@ function goHome() {
       <div class="projects-create-grid">
         <input v-model="newProjectName" class="text-control" type="text" placeholder="工程名称" />
         <input v-model="newProjectDescription" class="text-control" type="text" placeholder="工程描述（可选）" />
-        <button class="cloud-btn cloud-btn--primary" type="button" @click="createProject">创建工程</button>
+        <button class="side-button primary" type="button" @click="createProject">创建工程</button>
       </div>
     </section>
 
@@ -116,5 +142,13 @@ function goHome() {
         <span v-if="projectStore.activeProjectId === project.id" class="project-list-badge">当前工程</span>
       </button>
     </section>
+
+    <input
+      ref="uploadInputRef"
+      class="visually-hidden"
+      type="file"
+      accept=".ply,.spz"
+      @change="handleUpload"
+    />
   </div>
 </template>

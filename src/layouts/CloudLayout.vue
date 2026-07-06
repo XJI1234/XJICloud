@@ -3,7 +3,6 @@ import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
 import { useAuthStore } from '@/stores/auth'
-import ToolIcon from '@/components/ToolIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -154,7 +153,7 @@ const hideStatusBar = computed(() => route.name === 'supersplat')
           :title="item.label"
           @click="item.route ? navigate(item.route) : showComingSoon(item.label)"
         >
-          <span class="cloud-tool-glyph"><ToolIcon :name="item.icon" /></span>
+          <span class="cloud-tool-glyph">{{ item.icon.slice(0, 1).toUpperCase() }}</span>
           <span class="cloud-tool-label">{{ item.label }}</span>
         </button>
       </aside>

@@ -54,6 +54,7 @@ async function testConnection() {
 
 <template>
   <div>
+    <p class="admin-hint">首次连接参数来自安装向导写入的配置；保存后将热更新到数据库，无需重启后端。</p>
     <h2 class="admin-page-title">OSS 对象存储</h2>
     <form class="admin-form" @submit.prevent="save">
       <label class="admin-field">

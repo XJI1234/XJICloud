@@ -92,6 +92,19 @@ flowchart TB
 | 前端           | 服务器 A + 域名 + HTTPS                                | 同左，建议 WAF/CDN                                              |
 
 
+### 1.4 运维能力说明
+
+运维能力（OSS/DB 配置、Worker 监控）统一在 **Spring Boot 后端（8080）** 与 **Vue 管理面板**，无需单独部署额外运维服务。
+
+| 能力 | 实现方式 |
+|------|----------|
+| OSS / 数据库初始配置 | `sudo ./deploy/deploy-backend.sh configure` 写入 `/etc/xjicloud/application-prod.yml` |
+| OSS 运行时热更新 | 管理后台 **OSS 对象存储**（写入 `system_config` 表） |
+| GPU 算力 / Worker | 手动启动 Docker Worker 或阿里云 CCI，向 `/api/v1/worker/*` 注册；队列深度见管理面板 |
+| SSH 终端 / 节点 Agent | 运维直连 SSH；Worker 心跳在管理面板「算力容器」查看 |
+| K8s / Docker 部署 | [`deploy/k8s/scripts/`](k8s/scripts/) 与 `docker-compose`（K8s 用 secrets + configmap，不用 shell 向导） |
+| ECI 自动扩缩 | 不内置；可按队列深度用阿里云 API / 运维脚本手动启停 CCI（见 [§5.6.3](#563-按需启停)） |
+
 ---
 
 ## 2. 环境要求
@@ -419,6 +432,15 @@ sudo systemctl enable --now redis
 
 #### 配置
 
+推荐交互向导（自动生成 JWT、Worker secret 与完整 `application-prod.yml`）：
+
+```bash
+chmod +x deploy/deploy-backend.sh
+sudo ./deploy/deploy-backend.sh configure
+```
+
+高级用户可手动复制模板：
+
 ```bash
 cp deploy/config/application-prod.yml.example deploy/config/application-prod.yml
 vim deploy/config/application-prod.yml
@@ -668,7 +690,7 @@ sudo systemctl restart xjicloud-backend
 
 > **注意：** `spring.datasource.username/password` 是**数据库连接**凭证，不是管理面板登录账号。
 
-- 可在面板中修改 OSS 配置（生产切到阿里云 OSS 时尤其方便），支持连接测试、Worker 与任务监控
+- 可在面板中修改 OSS 配置（生产切到阿里云 OSS 时尤其方便），支持连接测试、Worker 与任务监控；首次参数来自安装向导，此后可在本页热更新
 
 ---
 
@@ -681,6 +703,8 @@ sudo systemctl restart xjicloud-backend
 - [ ] 完成后可下载 `model.ply`
 - [ ] PLY/SPZ 模型上传与 Spark 查看器正常（文件在 **服务器 B** 本地盘）
 - [ ] 生产：OSS 为阿里云、CCI 可按需启动并完成一次完整训练
+- [ ] 管理后台 **OSS 对象存储** 可保存配置并测试连接成功
+- [ ] `sudo ./deploy/deploy-backend.sh configure` 可交互生成完整 `application-prod.yml`
 
 ---
 

@@ -1,45 +1,4 @@
-spring:
-  profiles:
-    active: prod
-  datasource:
-    url: jdbc:postgresql://localhost:5432/xjicloud
-    username: xjicloud
-    password: change-me
-  data:
-    redis:
-      host: 127.0.0.1
-      port: 6379
-      password:
-  servlet:
-    multipart:
-      max-file-size: 2GB
-      max-request-size: 2GB
-
-server:
-  port: 8080
-
-xjicloud:
-  jwt:
-    secret: replace-with-a-long-random-secret-at-least-32-characters
-    expiration-ms: 86400000
-  storage:
-    root: /data/xjicloud
-  cors:
-    allowed-origins: https://your-domain.example
-  oss:
-    endpoint: https://oss-cn-hangzhou.aliyuncs.com
-    region: cn-hangzhou
-    bucket: your-bucket
-    access-key: your-access-key
-    secret-key: your-secret-key
-    path-style-access: false
-    presign-expiration-minutes: 120
-  redis:
-    queue-key: xjicloud:jobs
-  worker:
-    shared-secret: replace-with-worker-shared-secret
-    heartbeat-timeout-sec: 60
-    poll-timeout-sec: 25
-  admin:
-    default-username: admin
-    default-password: change-me-after-first-login
+# 已废弃 — 请使用 deploy/config/application-prod.yml.example
+# 推荐: sudo ./deploy/deploy-backend.sh configure
+#
+# 本文件仅保留最小字段供快速参考；完整模板见 deploy/config/

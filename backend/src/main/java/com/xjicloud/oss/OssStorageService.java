@@ -50,30 +50,6 @@ public class OssStorageService {
         reloadClients();
     }
 
-    public synchronized void applyFrameworkConfig(OssRuntimeConfig config) {
-        this.runtimeConfig = config;
-        closeClients();
-        AwsBasicCredentials credentials = AwsBasicCredentials.create(
-                runtimeConfig.accessKey(),
-                runtimeConfig.secretKey()
-        );
-        S3Configuration s3Configuration = S3Configuration.builder()
-                .pathStyleAccessEnabled(runtimeConfig.pathStyleAccess())
-                .build();
-        this.s3Client = S3Client.builder()
-                .endpointOverride(URI.create(runtimeConfig.endpoint()))
-                .region(Region.of(runtimeConfig.region()))
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .serviceConfiguration(s3Configuration)
-                .build();
-        this.s3Presigner = S3Presigner.builder()
-                .endpointOverride(URI.create(runtimeConfig.endpoint()))
-                .region(Region.of(runtimeConfig.region()))
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .serviceConfiguration(s3Configuration)
-                .build();
-    }
-
     public synchronized void reloadClients() {
         this.runtimeConfig = loadRuntimeConfig();
         closeClients();
