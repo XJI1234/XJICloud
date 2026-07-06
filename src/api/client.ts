@@ -15,7 +15,7 @@ export class ApiError extends Error {
   }
 }
 
-function getToken() {
+export function getAuthToken() {
   return localStorage.getItem('xjicloud_token')
 }
 
@@ -33,7 +33,7 @@ export async function apiRequest<T>(
   responseType: 'json' | 'blob' = 'json',
 ): Promise<T> {
   const headers = new Headers(options.headers ?? {})
-  const token = getToken()
+  const token = getAuthToken()
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
@@ -64,7 +64,7 @@ export async function apiRequest<T>(
 }
 
 export async function downloadModelBytes(modelId: string, onProgress?: (loaded: number, total: number) => void) {
-  const token = getToken()
+  const token = getAuthToken()
   const headers: HeadersInit = {}
   if (token) {
     headers.Authorization = `Bearer ${token}`

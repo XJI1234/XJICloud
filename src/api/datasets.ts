@@ -1,4 +1,4 @@
-import { apiRequest, getAuthToken, type ApiResponse } from '@/api/client'
+import { apiRequest, getAuthToken } from '@/api/client'
 
 export type JobStatus =
   | 'PENDING'
