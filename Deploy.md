@@ -415,9 +415,33 @@ xjicloud:
 
 ### 5.2 服务器 B — 后端
 
-#### 依赖：PostgreSQL + Redis
+#### 依赖：Java 17+、PostgreSQL、Redis
 
-可与 JAR 同机安装；生产推荐 **RDS + 云 Redis**，在 `application-prod.yml` 中填**内网地址**。
+**Java 17 为硬性要求**（Spring Boot 3.3 不支持 Java 8/11）。构建前请确认：
+
+```bash
+java -version
+# 应显示 openjdk version "17.x" 或 "21.x"
+```
+
+若版本过低，在 **Alibaba Cloud Linux / CentOS** 上：
+
+```bash
+sudo yum install -y java-17-openjdk java-17-openjdk-devel
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
+```
+
+**Ubuntu / Debian：**
+
+```bash
+sudo apt update && sudo apt install -y openjdk-17-jdk
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
+可与 JAR 同机安装 PostgreSQL、Redis；生产推荐 **RDS + 云 Redis**，在 `application-prod.yml` 中填**内网地址**。
 
 ```bash
 # PostgreSQL（同机示例）
