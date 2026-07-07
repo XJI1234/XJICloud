@@ -64,7 +64,14 @@ public class SecurityConfig {
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
                 .toList();
-        configuration.setAllowedOrigins(origins);
+
+        // allowCredentials=true 时不能用 allowedOrigins("*")，需用 allowedOriginPatterns
+        if (origins.isEmpty() || origins.stream().anyMatch(origin -> "*".equals(origin))) {
+            configuration.setAllowedOriginPatterns(List.of("*"));
+        } else {
+            configuration.setAllowedOriginPatterns(origins);
+        }
+
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Content-Disposition", "Content-Length", "Content-Range", "Accept-Ranges"));
