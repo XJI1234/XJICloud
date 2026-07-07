@@ -151,6 +151,7 @@ xjicloud:
 EOF
   chmod 600 "$out" 2>/dev/null || true
   log "已写入 $out"
+}
 
 write_install_summary() {
   local out="$CONFIG_SRC/install-summary.txt"
