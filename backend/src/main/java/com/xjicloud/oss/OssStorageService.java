@@ -53,22 +53,26 @@ public class OssStorageService {
     public synchronized void reloadClients() {
         this.runtimeConfig = loadRuntimeConfig();
         closeClients();
+        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
+        Region sdkRegion = resolveSdkRegion(runtimeConfig.endpoint(), runtimeConfig.region());
         AwsBasicCredentials credentials = AwsBasicCredentials.create(
                 runtimeConfig.accessKey(),
                 runtimeConfig.secretKey()
         );
+        // 阿里云 OSS + AWS SDK：须关闭 chunked encoding，见官方兼容文档
         S3Configuration s3Configuration = S3Configuration.builder()
                 .pathStyleAccessEnabled(runtimeConfig.pathStyleAccess())
+                .chunkedEncodingEnabled(false)
                 .build();
         this.s3Client = S3Client.builder()
-                .endpointOverride(URI.create(runtimeConfig.endpoint()))
-                .region(Region.of(runtimeConfig.region()))
+                .endpointOverride(URI.create(sdkEndpoint))
+                .region(sdkRegion)
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(s3Configuration)
                 .build();
         this.s3Presigner = S3Presigner.builder()
-                .endpointOverride(URI.create(runtimeConfig.endpoint()))
-                .region(Region.of(runtimeConfig.region()))
+                .endpointOverride(URI.create(sdkEndpoint))
+                .region(sdkRegion)
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(s3Configuration)
                 .build();
@@ -186,5 +190,33 @@ public class OssStorageService {
             return "****";
         }
         return value.substring(0, 2) + "****" + value.substring(value.length() - 2);
+    }
+
+    /**
+     * 阿里云 OSS 通过 AWS SDK 访问时需使用 S3 兼容 endpoint（s3.oss-{region}.aliyuncs.com），
+     * 见 https://www.alibabacloud.com/help/en/oss/developer-reference/use-aws-sdks-to-access-oss
+     */
+    static String normalizeEndpointForSdk(String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) {
+            return endpoint;
+        }
+        String trimmed = endpoint.trim();
+        if (!trimmed.contains("aliyuncs.com")) {
+            return trimmed;
+        }
+        String scheme = trimmed.contains("://") ? trimmed.substring(0, trimmed.indexOf("://")) : "https";
+        String host = trimmed.contains("://") ? trimmed.substring(trimmed.indexOf("://") + 2) : trimmed;
+        host = host.replaceAll("/+$", "");
+        if (!host.startsWith("s3.")) {
+            host = "s3." + host;
+        }
+        return scheme + "://" + host;
+    }
+
+    private static Region resolveSdkRegion(String endpoint, String configuredRegion) {
+        if (endpoint != null && endpoint.contains("aliyuncs.com")) {
+            return Region.AWS_GLOBAL;
+        }
+        return Region.of(configuredRegion);
     }
 }
