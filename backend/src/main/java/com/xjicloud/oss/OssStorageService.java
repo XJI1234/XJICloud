@@ -9,8 +9,11 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -26,6 +29,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 @Service
 public class OssStorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(OssStorageService.class);
 
     public static final String KEY_ENDPOINT = "oss.endpoint";
     public static final String KEY_REGION = "oss.region";
@@ -54,7 +59,9 @@ public class OssStorageService {
         this.runtimeConfig = loadRuntimeConfig();
         closeClients();
         String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint(), runtimeConfig.pathStyleAccess());
-        Region sdkRegion = resolveSdkRegion(runtimeConfig.region());
+        Region sdkRegion = resolveSdkRegion(sdkEndpoint, runtimeConfig.region());
+        log.info("OSS S3 client: endpoint={}, region={}, bucket={}, pathStyle={}",
+                sdkEndpoint, sdkRegion, runtimeConfig.bucket(), runtimeConfig.pathStyleAccess());
         AwsBasicCredentials credentials = AwsBasicCredentials.create(
                 runtimeConfig.accessKey(),
                 runtimeConfig.secretKey()
@@ -108,10 +115,22 @@ public class OssStorageService {
     }
 
     public void testConnection() {
-        s3Client.listObjectsV2(ListObjectsV2Request.builder()
-                .bucket(runtimeConfig.bucket())
-                .maxKeys(1)
-                .build());
+        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint(), runtimeConfig.pathStyleAccess());
+        try {
+            s3Client.listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(runtimeConfig.bucket())
+                    .maxKeys(1)
+                    .build());
+        } catch (SdkClientException ex) {
+            String hostHint = runtimeConfig.pathStyleAccess()
+                    ? URI.create(sdkEndpoint).getHost()
+                    : runtimeConfig.bucket() + "." + URI.create(sdkEndpoint).getHost();
+            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+            throw new IllegalStateException(
+                    "OSS 连接失败，请检查 endpoint/密钥及服务器 DNS。请求主机: " + hostHint + "，原因: " + cause.getMessage(),
+                    ex
+            );
+        }
     }
 
     public String presignPutUrl(String ossKey, String contentType) {
@@ -196,9 +215,9 @@ public class OssStorageService {
     }
 
     /**
-     * 阿里云 OSS + AWS SDK（virtual-hosted）须使用 s3.oss-{region}.aliyuncs.com，
-     * 且 region 用 cn-shanghai 等实际地域（勿用 AWS_GLOBAL，否则 host 解析为 null）。
-     * 见 https://www.alibabacloud.com/help/en/oss/developer-reference/use-aws-sdks-to-access-oss
+     * 阿里云 OSS + AWS SDK（virtual-hosted）须使用 s3.oss-{region}.aliyuncs.com。
+     * 管理后台 region 仍填 cn-shanghai；SDK 侧对 aliyuncs 域名使用 AWS_GLOBAL（官方 Java 2.x 示例）。
+     * 见 https://help.aliyun.com/zh/oss/developer-reference/use-aws-sdks-to-access-oss
      */
     static String normalizeEndpointForSdk(String endpoint, boolean pathStyleAccess) {
         if (endpoint == null || endpoint.isBlank()) {
@@ -220,7 +239,10 @@ public class OssStorageService {
         return scheme + "://" + host;
     }
 
-    private static Region resolveSdkRegion(String configuredRegion) {
+    private static Region resolveSdkRegion(String sdkEndpoint, String configuredRegion) {
+        if (sdkEndpoint != null && sdkEndpoint.contains("aliyuncs.com")) {
+            return Region.AWS_GLOBAL;
+        }
         if (configuredRegion != null && !configuredRegion.isBlank()) {
             return Region.of(configuredRegion.trim());
         }
