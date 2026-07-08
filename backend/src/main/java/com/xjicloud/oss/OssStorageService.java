@@ -58,17 +58,18 @@ public class OssStorageService {
     public synchronized void reloadClients() {
         this.runtimeConfig = loadRuntimeConfig();
         closeClients();
-        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint(), runtimeConfig.pathStyleAccess());
+        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
         Region sdkRegion = resolveSdkRegion(sdkEndpoint, runtimeConfig.region());
+        boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, runtimeConfig.pathStyleAccess());
         log.info("OSS S3 client: endpoint={}, region={}, bucket={}, pathStyle={}",
-                sdkEndpoint, sdkRegion, runtimeConfig.bucket(), runtimeConfig.pathStyleAccess());
+                sdkEndpoint, sdkRegion, runtimeConfig.bucket(), pathStyleForSdk);
         AwsBasicCredentials credentials = AwsBasicCredentials.create(
                 runtimeConfig.accessKey(),
                 runtimeConfig.secretKey()
         );
         // 阿里云 OSS + AWS SDK：须关闭 chunked encoding，见官方兼容文档
         S3Configuration s3Configuration = S3Configuration.builder()
-                .pathStyleAccessEnabled(runtimeConfig.pathStyleAccess())
+                .pathStyleAccessEnabled(pathStyleForSdk)
                 .chunkedEncodingEnabled(false)
                 .build();
         this.s3Client = S3Client.builder()
@@ -115,16 +116,15 @@ public class OssStorageService {
     }
 
     public void testConnection() {
-        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint(), runtimeConfig.pathStyleAccess());
+        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
+        boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, runtimeConfig.pathStyleAccess());
         try {
             s3Client.listObjectsV2(ListObjectsV2Request.builder()
                     .bucket(runtimeConfig.bucket())
                     .maxKeys(1)
                     .build());
         } catch (SdkClientException ex) {
-            String hostHint = runtimeConfig.pathStyleAccess()
-                    ? URI.create(sdkEndpoint).getHost()
-                    : runtimeConfig.bucket() + "." + URI.create(sdkEndpoint).getHost();
+            String hostHint = resolveRequestHost(runtimeConfig.bucket(), sdkEndpoint, pathStyleForSdk);
             Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
             throw new IllegalStateException(
                     "OSS 连接失败，请检查 endpoint/密钥及服务器 DNS。请求主机: " + hostHint + "，原因: " + cause.getMessage(),
@@ -215,11 +215,11 @@ public class OssStorageService {
     }
 
     /**
-     * 阿里云 OSS + AWS SDK（virtual-hosted）须使用 s3.oss-{region}.aliyuncs.com。
-     * 管理后台 region 仍填 cn-shanghai；SDK 侧对 aliyuncs 域名使用 AWS_GLOBAL（官方 Java 2.x 示例）。
-     * 见 https://help.aliyun.com/zh/oss/developer-reference/use-aws-sdks-to-access-oss
+     * 阿里云 OSS + AWS SDK：endpoint 用 oss-cn-{region}.aliyuncs.com（勿加 s3. 前缀）。
+     * virtual-hosted 下 SDK 会拼成 {bucket}.oss-cn-{region}.aliyuncs.com；
+     * 若 endpoint 为 s3.oss-...，SDK 会错误解析成 {bucket}.s3. 导致 DNS 失败。
      */
-    static String normalizeEndpointForSdk(String endpoint, boolean pathStyleAccess) {
+    static String normalizeEndpointForSdk(String endpoint) {
         if (endpoint == null || endpoint.isBlank()) {
             return endpoint;
         }
@@ -233,10 +233,25 @@ public class OssStorageService {
         if (host.startsWith("s3.")) {
             host = host.substring(3);
         }
-        if (!pathStyleAccess) {
-            host = "s3." + host;
-        }
         return scheme + "://" + host;
+    }
+
+    static boolean resolvePathStyleForSdk(String sdkEndpoint, boolean configuredPathStyle) {
+        if (sdkEndpoint != null && sdkEndpoint.contains("aliyuncs.com")) {
+            return false;
+        }
+        return configuredPathStyle;
+    }
+
+    static String resolveRequestHost(String bucket, String sdkEndpoint, boolean pathStyleAccess) {
+        String host = URI.create(sdkEndpoint).getHost();
+        if (host == null || host.isBlank()) {
+            return sdkEndpoint;
+        }
+        if (pathStyleAccess) {
+            return host;
+        }
+        return bucket + "." + host;
     }
 
     private static Region resolveSdkRegion(String sdkEndpoint, String configuredRegion) {
