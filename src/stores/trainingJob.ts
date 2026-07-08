@@ -86,6 +86,13 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     activeSubscriptions.clear()
   }
 
+  function resetOnLogout() {
+    clearSubscriptions()
+    jobs.value = []
+    loading.value = false
+    errorMessage.value = ''
+  }
+
   return {
     jobs,
     loading,
@@ -96,5 +103,6 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     stopWatching,
     refreshJob,
     clearSubscriptions,
+    resetOnLogout,
   }
 })

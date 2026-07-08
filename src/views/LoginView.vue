@@ -37,6 +37,10 @@ async function submit() {
 
 <template>
   <div class="login-page">
+    <div class="login-page__atmosphere" aria-hidden="true" />
+    <div class="cloud-grain" aria-hidden="true" />
+    <div class="login-page__orb login-page__orb--blue" aria-hidden="true" />
+    <div class="login-page__orb login-page__orb--amber" aria-hidden="true" />
     <div class="login-card">
       <p class="login-eyebrow">XJI Cloud</p>
       <h1 class="login-title">建模解决方案云平台</h1>

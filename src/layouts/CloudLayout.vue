@@ -2,7 +2,9 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
+import ToolIcon from '@/components/ToolIcon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { clearUserSession } from '@/utils/session'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +23,7 @@ const brandTitle = 'XJI Cloud'
 const brandSubtitle = '建模解决方案云平台'
 
 const navItems = [
+  { label: '首页', route: '/app/home' },
   { label: '工程项目', route: '/app/projects' },
   { label: '搜索索引', route: null },
   { label: '双屏显示', route: null },
@@ -29,10 +32,10 @@ const navItems = [
 ] as const
 
 const toolItems = [
-  { label: '航线规划', route: null, icon: 'route' },
-  { label: '数据上传', route: '/app/upload', icon: 'upload' },
-  { label: '模型查看', route: '/app/layer', icon: 'view' },
-  { label: '高级编辑', route: '/app/supersplat', icon: 'edit' },
+  { label: '航线规划', route: null, icon: 'route' as const },
+  { label: '数据上传', route: '/app/upload', icon: 'upload' as const },
+  { label: '模型查看', route: '/app/layer', icon: 'view' as const },
+  { label: '高级编辑', route: '/app/supersplat', icon: 'edit' as const },
 ] as const
 
 function isActiveNav(path: string | null) {
@@ -44,6 +47,12 @@ function navigate(path: string | null) {
     return
   }
   router.push(path)
+}
+
+function goHome() {
+  if (route.path !== '/app/home') {
+    router.push('/app/home')
+  }
 }
 
 function showComingSoon(label: string) {
@@ -58,10 +67,10 @@ function closeUserMenu() {
   userMenuOpen.value = false
 }
 
-function logout() {
+async function logout() {
   closeUserMenu()
-  authStore.logout()
-  router.push('/login')
+  clearUserSession()
+  await router.replace({ name: 'login' })
 }
 
 function onDocumentClick(event: MouseEvent) {
@@ -93,17 +102,22 @@ onBeforeUnmount(() => {
 
 const statusText = computed(() => cameraStatus.value)
 const hideStatusBar = computed(() => route.name === 'supersplat')
+const isImmersiveRoute = computed(() => route.name === 'home')
 </script>
 
 <template>
-  <div class="cloud-shell">
+  <div class="cloud-shell" :class="{ 'cloud-shell--immersive': isImmersiveRoute }">
+    <div class="cloud-shell__backdrop" aria-hidden="true" />
+    <div class="cloud-edge-accent" aria-hidden="true" />
     <header class="cloud-header">
       <div class="cloud-brand">
-        <img class="cloud-brand-logo" src="/logo.jpg" alt="XJI Cloud" />
-        <div>
-          <h1 class="cloud-brand-title">{{ brandTitle }}</h1>
-          <p class="cloud-brand-subtitle">{{ brandSubtitle }}</p>
-        </div>
+        <button class="cloud-brand-button" type="button" title="返回首页" @click="goHome">
+          <img class="cloud-brand-logo" src="/logo.jpg" alt="XJI Cloud" />
+          <div>
+            <h1 class="cloud-brand-title">{{ brandTitle }}</h1>
+            <p class="cloud-brand-subtitle">{{ brandSubtitle }}</p>
+          </div>
+        </button>
       </div>
 
       <nav class="cloud-top-nav" aria-label="主导航">
@@ -153,13 +167,19 @@ const hideStatusBar = computed(() => route.name === 'supersplat')
           :title="item.label"
           @click="item.route ? navigate(item.route) : showComingSoon(item.label)"
         >
-          <span class="cloud-tool-glyph">{{ item.icon.slice(0, 1).toUpperCase() }}</span>
+          <span class="cloud-tool-glyph">
+            <ToolIcon :name="item.icon" />
+          </span>
           <span class="cloud-tool-label">{{ item.label }}</span>
         </button>
       </aside>
 
       <main class="cloud-main">
-        <RouterView />
+        <RouterView v-slot="{ Component, route: childRoute }">
+          <Transition :name="(childRoute.meta.transition as string) ?? 'cloud-page'" mode="out-in">
+            <component :is="Component" :key="childRoute.path" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
 

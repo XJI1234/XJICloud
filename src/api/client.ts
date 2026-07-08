@@ -27,6 +27,18 @@ export function setToken(token: string | null) {
   }
 }
 
+let onUnauthorized: (() => void) | null = null
+
+export function setOnUnauthorized(handler: () => void) {
+  onUnauthorized = handler
+}
+
+function notifyUnauthorized() {
+  if (getAuthToken()) {
+    onUnauthorized?.()
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
@@ -48,6 +60,9 @@ export async function apiRequest<T>(
   })
 
   if (responseType === 'blob') {
+    if (response.status === 401) {
+      notifyUnauthorized()
+    }
     if (!response.ok) {
       const message = await response.text()
       throw new ApiError(message || response.statusText, response.status)
@@ -56,6 +71,9 @@ export async function apiRequest<T>(
   }
 
   const payload = (await response.json()) as ApiResponse<T>
+  if (response.status === 401) {
+    notifyUnauthorized()
+  }
   if (!response.ok || !payload.success) {
     throw new ApiError(payload.message ?? response.statusText, response.status)
   }
@@ -71,6 +89,9 @@ export async function downloadModelBytes(modelId: string, onProgress?: (loaded: 
   }
 
   const response = await fetch(`${API_BASE}/api/v1/models/${modelId}/download`, { headers })
+  if (response.status === 401) {
+    notifyUnauthorized()
+  }
   if (!response.ok) {
     const message = await response.text()
     throw new ApiError(message || response.statusText, response.status)

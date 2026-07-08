@@ -69,34 +69,58 @@ function openRecentProject(projectId: string) {
   projectStore.openProject(projectId)
   router.push('/app/projects')
 }
+
+function formatDate(timestamp: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp))
+}
 </script>
 
 <template>
   <div class="home-page">
-    <div class="home-hero">
-      <div class="home-actions">
-        <button class="home-primary-button" type="button" @click="openCreateDialog">
-          新建项目
-        </button>
-        <button class="home-secondary-button" type="button" @click="openProjectPicker">
-          打开项目
-        </button>
+    <div class="home-page__atmosphere" aria-hidden="true" />
+    <div class="cloud-grain" aria-hidden="true" />
+    <div class="home-page__orb home-page__orb--blue" aria-hidden="true" />
+    <div class="home-page__orb home-page__orb--blue-left" aria-hidden="true" />
+    <div class="home-page__orb home-page__orb--amber" aria-hidden="true" />
+    <div class="home-edge-label" aria-hidden="true">XJI CLOUD</div>
+
+    <div class="home-grid">
+      <div class="home-hero-main">
+        <p class="home-eyebrow">XJI Cloud</p>
+        <h1 class="home-display-title">建模解决方案云平台</h1>
+
+        <div class="home-actions">
+          <button class="home-primary-button" type="button" @click="openCreateDialog">
+            新建项目
+          </button>
+          <button class="home-secondary-button" type="button" @click="openProjectPicker">
+            打开项目
+          </button>
+        </div>
+
+        <p v-if="errorMessage && !createDialogVisible && !openDialogVisible" class="home-error">{{ errorMessage }}</p>
       </div>
 
-      <section class="home-recent-section">
-        <h2 class="home-recent-title">最近项目：</h2>
+      <aside class="home-recent-section">
+        <h2 class="home-recent-title">最近项目 ({{ projectStore.recentProjects.length }})</h2>
         <p v-if="projectStore.loading" class="home-recent-empty">加载中...</p>
         <p v-else-if="projectStore.recentProjects.length === 0" class="home-recent-empty">暂无最近打开的项目</p>
         <ul v-else class="home-recent-list">
           <li v-for="project in projectStore.recentProjects" :key="project.id">
-            <button class="home-recent-link" type="button" @click="openRecentProject(project.id)">
-              {{ project.name }}
+            <button class="home-recent-card" type="button" @click="openRecentProject(project.id)">
+              <p class="home-recent-card__name">{{ project.name }}</p>
+              <p class="home-recent-card__desc">{{ project.description || '暂无描述' }}</p>
+              <p class="home-recent-card__meta">上次打开 {{ formatDate(project.openedAt) }}</p>
             </button>
           </li>
         </ul>
-      </section>
-
-      <p v-if="errorMessage && !createDialogVisible && !openDialogVisible" class="home-error">{{ errorMessage }}</p>
+      </aside>
     </div>
 
     <div v-if="createDialogVisible" class="app-modal-backdrop" @click.self="createDialogVisible = false">
