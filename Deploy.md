@@ -65,6 +65,8 @@ flowchart TB
 
 > **说明：** PLY/SPZ 模型文件仍存后端服务器 B 本地磁盘（`xjicloud.storage.root`）；图片数据集与训练产出走 OSS（C 或阿里云 OSS）。
 
+
+
 ### 1.2 流量与连接关系
 
 
@@ -77,6 +79,8 @@ flowchart TB
 | 服务器 B       | PostgreSQL / Redis | 5432 / 6379      | 元数据与任务队列                   |
 | 服务器 D / CCI | 服务器 B              | 8080 HTTP(S)     | Worker 注册、心跳、领任务           |
 | 服务器 D / CCI | OSS                | HTTPS            | 通过 presigned URL 下载图片、上传模型 |
+
+
 
 
 ### 1.3 预生产 vs 生产对照
@@ -92,20 +96,26 @@ flowchart TB
 | 前端           | 服务器 A + 域名 + HTTPS                                | 同左，建议 WAF/CDN                                              |
 
 
+
+
 ### 1.4 运维能力说明
 
 运维能力（OSS/DB 配置、Worker 监控）统一在 **Spring Boot 后端（8080）** 与 **Vue 管理面板**，无需单独部署额外运维服务。
 
-| 能力 | 实现方式 |
-|------|----------|
-| OSS / 数据库初始配置 | `sudo ./deploy/deploy-backend.sh configure` 写入 `/etc/xjicloud/application-prod.yml` |
-| OSS 运行时热更新 | 管理后台 **OSS 对象存储**（写入 `system_config` 表） |
-| GPU 算力 / Worker | 手动启动 Docker Worker 或阿里云 CCI，向 `/api/v1/worker/*` 注册；队列深度见管理面板 |
-| SSH 终端 / 节点 Agent | 运维直连 SSH；Worker 心跳在管理面板「算力容器」查看 |
-| K8s / Docker 部署 | [`deploy/k8s/scripts/`](k8s/scripts/) 与 `docker-compose`（K8s 用 secrets + configmap，不用 shell 向导） |
-| ECI 自动扩缩 | 不内置；可按队列深度用阿里云 API / 运维脚本手动启停 CCI（见 [§5.6.3](#563-按需启停)） |
+
+| 能力                | 实现方式                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| OSS / 数据库初始配置     | `sudo ./deploy/deploy-backend.sh configure` 写入 `/etc/xjicloud/application-prod.yml`             |
+| OSS 运行时热更新        | 管理后台 **OSS 对象存储**（写入 `system_config` 表）                                                         |
+| GPU 算力 / Worker   | 手动启动 Docker Worker 或阿里云 CCI，向 `/api/v1/worker/*` 注册；队列深度见管理面板                                   |
+| SSH 终端 / 节点 Agent | 运维直连 SSH；Worker 心跳在管理面板「算力容器」查看                                                                 |
+| K8s / Docker 部署   | `[deploy/k8s/scripts/](k8s/scripts/)` 与 `docker-compose`（K8s 用 secrets + configmap，不用 shell 向导） |
+| ECI 自动扩缩          | 不内置；可按队列深度用阿里云 API / 运维脚本手动启停 CCI（见 [§5.6.3](#563-按需启停)）                                        |
+
 
 ---
+
+
 
 ## 2. 环境要求
 
@@ -126,6 +136,8 @@ flowchart TB
 
 ---
 
+
+
 ## 3. 网络与安全组规划
 
 以下为 **最小放通** 建议（优先使用**内网/VPC 互通**，公网仅开放必要入口）。
@@ -138,6 +150,8 @@ flowchart TB
 | 入站  | 443  | 0.0.0.0/0   | HTTPS 用户访问       |
 | 入站  | 80   | 0.0.0.0/0   | 可选，跳转 HTTPS      |
 | 出站  | 8080 | 服务器 B 内网 IP | Nginx 反代 `/api/` |
+
+
 
 
 ### 3.2 服务器 B（后端）
@@ -164,6 +178,8 @@ flowchart TB
 | 入站  | 9001 | 运维 IP                              | MinIO 控制台（可选，勿公开）                  |
 
 
+
+
 ### 3.4 服务器 D（GPU Worker，预生产）
 
 
@@ -175,12 +191,16 @@ flowchart TB
 
 ---
 
+
+
 ## 4. 构建（在构建机或各服务器上执行）
 
 ```bash
 git clone https://github.com/XJI1234/XJICloud.git
 cd XJICloud
 ```
+
+
 
 ### 4.1 用户前端 + 管理面板
 
@@ -193,12 +213,16 @@ npm run build:admin
 # 或：npm run build:all:cloud
 ```
 
+
+
 ### 4.2 后端
 
 ```bash
 cd backend && mvn -DskipTests package
 # 产物：backend/target/xjicloud-backend-1.0.0.jar
 ```
+
+
 
 ### 4.3 GPU Worker 镜像
 
@@ -210,6 +234,8 @@ docker build -t xjicloud/gpu-worker:latest gpu-worker/
 ```
 
 ---
+
+
 
 ## 5. 分机部署步骤
 
@@ -225,6 +251,8 @@ docker build -t xjicloud/gpu-worker:latest gpu-worker/
 
 
 ---
+
+
 
 ### 5.1 服务器 C — MinIO（预生产专用，Linux 原生安装）
 
@@ -250,6 +278,8 @@ rm -f /tmp/minio /tmp/mc
 minio --version
 mc --version
 ```
+
+
 
 #### 5.1.2 环境变量与 systemd 服务
 
@@ -298,6 +328,8 @@ curl -I http://127.0.0.1:9000/minio/health/live
 # 控制台（仅运维内网访问）：http://10.0.1.30:9001
 ```
 
+
+
 #### 5.1.3 防火墙（若启用 firewalld）
 
 ```bash
@@ -320,6 +352,8 @@ mc alias set local http://127.0.0.1:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASS
 mc mb --ignore-existing local/xjicloud
 mc ls local
 ```
+
+
 
 #### 5.1.5 CORS（社区版 MinIO：仅全局 CORS）
 
@@ -366,7 +400,7 @@ sudo firewall-cmd --reload
 
 ---
 
-**步骤 3：在后端 B 配置 API CORS（与 MinIO 无关，但 `/api/` 也需要）**
+**步骤 3：在后端 B 配置 API CORS（与 MinIO 无关，但** `/api/` **也需要）**
 
 `deploy/config/application-prod.yml`：
 
@@ -413,7 +447,11 @@ xjicloud:
 
 ---
 
+
+
 ### 5.2 服务器 B — 后端
+
+
 
 #### 依赖：Java 17+、PostgreSQL、Redis
 
@@ -445,6 +483,9 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 ```bash
 # PostgreSQL（同机示例）
+sudo apt update && sudo apt install -y postgresql-client
+psql -h 127.0.0.1 -U postgres -d xjicloud
+
 sudo -u postgres psql <<'SQL'
 CREATE USER xjicloud WITH PASSWORD 'your-password';
 CREATE DATABASE xjicloud OWNER xjicloud;
@@ -453,6 +494,8 @@ SQL
 # Redis（同机示例）
 sudo systemctl enable --now redis
 ```
+
+
 
 #### 配置
 
@@ -486,6 +529,8 @@ xjicloud:
     shared-secret: 与 Worker/CCI 环境变量一致的密钥
 ```
 
+
+
 #### 一键部署
 
 ```bash
@@ -502,6 +547,8 @@ curl http://10.0.1.20:8080/actuator/health
 详见 `[deploy/config/README.md](config/README.md)`、`[deploy/deploy-backend.sh](deploy/deploy-backend.sh)`。
 
 ---
+
+
 
 ### 5.3 服务器 A — 前端
 
@@ -534,6 +581,8 @@ sudo certbot --nginx -d cloud.example.com
 
 ---
 
+
+
 ### 5.4 服务器 D — GPU Worker（预生产）
 
 ```bash
@@ -551,6 +600,8 @@ Worker 通过后端下发的 **presigned URL** 访问 OSS，通常**无需**在 
 启动流程：等待 B `/actuator/health` → 注册 → 心跳 → 长轮询领任务 → mock 训练 → 回传模型。
 
 ---
+
+
 
 ### 5.5 生产环境 — 阿里云 OSS
 
@@ -579,6 +630,8 @@ xjicloud:
 
 ---
 
+
+
 ### 5.6 生产环境 — 阿里云 CCI 弹性容器实例
 
 预生产服务器 D 的 Docker Worker，在生产替换为 **CCI**：有训练任务时启动实例，空闲时可停止以节省成本。
@@ -592,6 +645,8 @@ docker tag xjicloud/gpu-worker:latest \
   registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest
 docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest
 ```
+
+
 
 #### 5.6.2 创建 CCI 实例（控制台要点）
 
@@ -616,6 +671,8 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 > Worker 使用后端 API 返回的 presigned URL 读写 OSS，**生产一般无需**在 CCI 中配置 OSS AccessKey。
 
+
+
 #### 5.6.3 按需启停
 
 
@@ -639,6 +696,8 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 ---
 
+
+
 ## 6. 配置检查清单（分机 + 生产）
 
 
@@ -656,6 +715,8 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 ---
 
+
+
 ## 7. 单机 / 开发环境（可选）
 
 本地或单机演示仍可使用 Docker Compose（Redis + MinIO + Backend + Worker 同机）：
@@ -670,11 +731,15 @@ cd admin && npm run dev   # 管理面板 :5175
 
 ---
 
+
+
 ## 8. 管理控制面板
 
 - 地址：`https://cloud.example.com/admin/`（部署在服务器 A）
 - 登录接口：`POST /api/v1/admin/auth/login`（与用户前台 `/api/v1/auth/login` **不是同一套账号**）
 - 账号存储在数据库表 `**admin_users`**，与 `users` 表（普通用户）分离
+
+
 
 ### 8.1 管理员账号与 yml 的关系
 
@@ -718,6 +783,8 @@ sudo systemctl restart xjicloud-backend
 
 ---
 
+
+
 ## 9. 验收清单
 
 - [ ] 用户通过 **服务器 A 域名** 注册/登录
@@ -731,6 +798,8 @@ sudo systemctl restart xjicloud-backend
 - [ ] `sudo ./deploy/deploy-backend.sh configure` 可交互生成完整 `application-prod.yml`
 
 ---
+
+
 
 ## 10. 故障排查
 
@@ -750,6 +819,8 @@ sudo systemctl restart xjicloud-backend
 
 ---
 
+
+
 ## 11. 相关文件
 
 
@@ -764,9 +835,12 @@ sudo systemctl restart xjicloud-backend
 | `[deploy/env.example](env.example)`                                                 | Compose 环境变量              |
 | `[gpu-worker/Dockerfile](../gpu-worker/Dockerfile)`                                 | Worker 镜像（预生产 D / 生产 CCI） |
 | `[AGENT_CONTEXT.md](../AGENT_CONTEXT.md)`                                           | Agent 项目上下文               |
-| `[deploy/k8s/README.md](k8s/README.md)`                                           | **K3s/K8s** 本地三节点与 ACK 上云 |
+| `[deploy/k8s/README.md](k8s/README.md)`                                             | **K3s/K8s** 本地三节点与 ACK 上云 |
+
 
 ---
+
+
 
 ## 12. Kubernetes 部署（K3s / ACK）
 
@@ -782,5 +856,3 @@ sudo ./deploy/k8s/scripts/validate-local.sh
 ```
 
 134/135 加入 Agent 后执行 `label-nodes.sh`；生产 ACK 使用 `deploy/k8s/overlays/aliyun/`，GPU 算力见 `overlays/aliyun/CCI.md`。
-
-
