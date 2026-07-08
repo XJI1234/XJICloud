@@ -16,7 +16,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -53,8 +53,8 @@ public class OssStorageService {
     public synchronized void reloadClients() {
         this.runtimeConfig = loadRuntimeConfig();
         closeClients();
-        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
-        Region sdkRegion = resolveSdkRegion(runtimeConfig.endpoint(), runtimeConfig.region());
+        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint(), runtimeConfig.pathStyleAccess());
+        Region sdkRegion = resolveSdkRegion(runtimeConfig.region());
         AwsBasicCredentials credentials = AwsBasicCredentials.create(
                 runtimeConfig.accessKey(),
                 runtimeConfig.secretKey()
@@ -108,7 +108,10 @@ public class OssStorageService {
     }
 
     public void testConnection() {
-        s3Client.headBucket(HeadBucketRequest.builder().bucket(runtimeConfig.bucket()).build());
+        s3Client.listObjectsV2(ListObjectsV2Request.builder()
+                .bucket(runtimeConfig.bucket())
+                .maxKeys(1)
+                .build());
     }
 
     public String presignPutUrl(String ossKey, String contentType) {
@@ -193,11 +196,11 @@ public class OssStorageService {
     }
 
     /**
-     * 阿里云 OSS + AWS SDK（virtual-hosted）应使用经典 endpoint：oss-{region}.aliyuncs.com。
-     * s3.oss-{region}.aliyuncs.com 在 virtual-hosted 下会解析 bucket.s3.oss-...，部分环境 DNS 失败。
+     * 阿里云 OSS + AWS SDK（virtual-hosted）须使用 s3.oss-{region}.aliyuncs.com，
+     * 且 region 用 cn-shanghai 等实际地域（勿用 AWS_GLOBAL，否则 host 解析为 null）。
      * 见 https://www.alibabacloud.com/help/en/oss/developer-reference/use-aws-sdks-to-access-oss
      */
-    static String normalizeEndpointForSdk(String endpoint) {
+    static String normalizeEndpointForSdk(String endpoint, boolean pathStyleAccess) {
         if (endpoint == null || endpoint.isBlank()) {
             return endpoint;
         }
@@ -211,16 +214,16 @@ public class OssStorageService {
         if (host.startsWith("s3.")) {
             host = host.substring(3);
         }
-        if (!host.contains("-internal") && !"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
-            scheme = "https";
+        if (!pathStyleAccess) {
+            host = "s3." + host;
         }
         return scheme + "://" + host;
     }
 
-    private static Region resolveSdkRegion(String endpoint, String configuredRegion) {
-        if (endpoint != null && endpoint.contains("aliyuncs.com")) {
-            return Region.AWS_GLOBAL;
+    private static Region resolveSdkRegion(String configuredRegion) {
+        if (configuredRegion != null && !configuredRegion.isBlank()) {
+            return Region.of(configuredRegion.trim());
         }
-        return Region.of(configuredRegion);
+        return Region.US_EAST_1;
     }
 }
