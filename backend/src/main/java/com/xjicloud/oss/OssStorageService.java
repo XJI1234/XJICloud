@@ -59,6 +59,10 @@ public class OssStorageService {
         this.runtimeConfig = loadRuntimeConfig();
         closeClients();
         String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
+        String sdkHost = extractHostFromEndpoint(sdkEndpoint);
+        if (sdkHost == null || sdkHost.isBlank()) {
+            throw new IllegalStateException("OSS endpoint 无效: " + runtimeConfig.endpoint());
+        }
         Region sdkRegion = resolveSdkRegion(sdkEndpoint, runtimeConfig.region());
         boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, runtimeConfig.pathStyleAccess());
         log.info("OSS S3 client: endpoint={}, region={}, bucket={}, pathStyle={}",
@@ -102,6 +106,9 @@ public class OssStorageService {
 
     @Transactional
     public void updateConfig(Map<String, String> values, String updatedBy) {
+        if (values.get("endpoint") != null && !values.get("endpoint").isBlank()) {
+            values.put("endpoint", normalizeEndpointForSdk(values.get("endpoint")));
+        }
         saveConfig(KEY_ENDPOINT, values.get("endpoint"), updatedBy);
         saveConfig(KEY_REGION, values.get("region"), updatedBy);
         saveConfig(KEY_BUCKET, values.get("bucket"), updatedBy);
@@ -228,12 +235,30 @@ public class OssStorageService {
             return trimmed;
         }
         String scheme = trimmed.contains("://") ? trimmed.substring(0, trimmed.indexOf("://")) : "https";
-        String host = trimmed.contains("://") ? trimmed.substring(trimmed.indexOf("://") + 2) : trimmed;
+        String host = trimmed.contains("://") ? trimmed.substring(trimmed.indexOf("://") + 3) : trimmed;
+        while (host.startsWith("/")) {
+            host = host.substring(1);
+        }
         host = host.replaceAll("/+$", "");
         if (host.startsWith("s3.")) {
             host = host.substring(3);
         }
         return scheme + "://" + host;
+    }
+
+    static String extractHostFromEndpoint(String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) {
+            return null;
+        }
+        String host = endpoint.contains("://") ? endpoint.substring(endpoint.indexOf("://") + 3) : endpoint;
+        while (host.startsWith("/")) {
+            host = host.substring(1);
+        }
+        int slash = host.indexOf('/');
+        if (slash >= 0) {
+            host = host.substring(0, slash);
+        }
+        return host.isBlank() ? null : host;
     }
 
     static boolean resolvePathStyleForSdk(String sdkEndpoint, boolean configuredPathStyle) {
@@ -244,7 +269,7 @@ public class OssStorageService {
     }
 
     static String resolveRequestHost(String bucket, String sdkEndpoint, boolean pathStyleAccess) {
-        String host = URI.create(sdkEndpoint).getHost();
+        String host = extractHostFromEndpoint(sdkEndpoint);
         if (host == null || host.isBlank()) {
             return sdkEndpoint;
         }
