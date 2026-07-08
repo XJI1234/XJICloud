@@ -93,6 +93,7 @@ async function testConnection() {
     <p class="admin-hint">
       首次连接参数来自安装向导写入的配置；保存后将热更新到数据库，无需重启后端。
       测试连接使用已保存的密钥；修改 Access Key / Secret Key 后须先保存。
+      <strong>浏览器直传图片数据集</strong>还须在 OSS 控制台为 Bucket 单独配置 <strong>跨域 CORS</strong>（允许前端 Origin 的 PUT/GET/HEAD），与后端测试连接无关。
     </p>
     <h2 class="admin-page-title">OSS 对象存储</h2>
     <form class="admin-form" @submit.prevent="save">
