@@ -291,7 +291,7 @@ do_configure() {
     DEPLOY_SCENARIO_LABEL="分机生产（RDS + 阿里云 OSS）"
     DB_URL="$(prompt_with_default "PostgreSQL JDBC URL" "jdbc:postgresql://rm-xxxxx.pg.rds.aliyuncs.com:5432/xjicloud")"
     REDIS_HOST="$(prompt_with_default "Redis 主机" "r-xxxxx.redis.rds.aliyuncs.com")"
-    OSS_ENDPOINT="$(prompt_with_default "OSS Endpoint" "https://s3.oss-cn-hangzhou.aliyuncs.com")"
+    OSS_ENDPOINT="$(prompt_with_default "OSS Endpoint" "https://oss-cn-hangzhou.aliyuncs.com")"
     OSS_REGION="$(prompt_with_default "OSS Region" "cn-hangzhou")"
     OSS_PATH_STYLE="false"
   else

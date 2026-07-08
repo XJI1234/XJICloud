@@ -193,7 +193,8 @@ public class OssStorageService {
     }
 
     /**
-     * 阿里云 OSS 通过 AWS SDK 访问时需使用 S3 兼容 endpoint（s3.oss-{region}.aliyuncs.com），
+     * 阿里云 OSS + AWS SDK（virtual-hosted）应使用经典 endpoint：oss-{region}.aliyuncs.com。
+     * s3.oss-{region}.aliyuncs.com 在 virtual-hosted 下会解析 bucket.s3.oss-...，部分环境 DNS 失败。
      * 见 https://www.alibabacloud.com/help/en/oss/developer-reference/use-aws-sdks-to-access-oss
      */
     static String normalizeEndpointForSdk(String endpoint) {
@@ -207,8 +208,11 @@ public class OssStorageService {
         String scheme = trimmed.contains("://") ? trimmed.substring(0, trimmed.indexOf("://")) : "https";
         String host = trimmed.contains("://") ? trimmed.substring(trimmed.indexOf("://") + 2) : trimmed;
         host = host.replaceAll("/+$", "");
-        if (!host.startsWith("s3.")) {
-            host = "s3." + host;
+        if (host.startsWith("s3.")) {
+            host = host.substring(3);
+        }
+        if (!host.contains("-internal") && !"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
+            scheme = "https";
         }
         return scheme + "://" + host;
     }
