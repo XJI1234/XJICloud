@@ -8,5 +8,7 @@ services:
       - ../gpu-worker/testdata/input:/input:ro
       - ../gpu-worker/testdata/output:/output
     environment:
-      INPUT_DIR: /input
-      OUTPUT_PATH: /output/model.ply
+      INPUT_ZIP: /input/south-building.zip
+      COLMAP_SINGLE_CAMERA: "0"
+      COLMAP_USE_GPU: "1"
+      EXPORT_PLY: "0"
