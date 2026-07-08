@@ -12,5 +12,8 @@ public record AdminProperties(
         if (defaultUsername == null || defaultUsername.isBlank()) {
             defaultUsername = "admin";
         }
+        if (defaultPassword == null || defaultPassword.isBlank()) {
+            defaultPassword = "admin123";
+        }
     }
 }

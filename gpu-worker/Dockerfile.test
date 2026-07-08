@@ -1,0 +1,22 @@
+FROM colmap/colmap:latest
+
+ARG USE_CN_APT_MIRROR=1
+ARG UBUNTU_MIRROR=https://mirrors.aliyun.com/ubuntu
+
+COPY configure-apt-mirrors.sh /usr/local/bin/configure-apt-mirrors.sh
+RUN if [ "${USE_CN_APT_MIRROR}" = "1" ]; then \
+        UBUNTU_MIRROR="${UBUNTU_MIRROR}" bash /usr/local/bin/configure-apt-mirrors.sh; \
+    fi && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/xjicloud-worker
+
+COPY mock_trainer.py local_test_runner.py entrypoint.local.sh ./
+RUN chmod +x entrypoint.local.sh
+
+ENV INPUT_DIR=/input \
+    OUTPUT_PATH=/output/model.ply
+
+ENTRYPOINT ["./entrypoint.local.sh"]

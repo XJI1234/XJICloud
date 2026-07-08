@@ -22,6 +22,22 @@ xjicloud:
   jwt:
     secret: change-me-in-production-use-at-least-32-chars-long-secret-key
     expiration-ms: 86400000
+  oss:
+    endpoint: ${OSS_ENDPOINT:http://minio:9000}
+    region: ${OSS_REGION:us-east-1}
+    bucket: ${OSS_BUCKET:xjicloud}
+    access-key: ${OSS_ACCESS_KEY:minioadmin}
+    secret-key: ${OSS_SECRET_KEY:minioadmin}
+    path-style-access: true
+    presign-expiration-minutes: 30
+  admin:
+    default-username: admin
+    default-password: admin123
+    sync-password-on-startup: false
+  worker:
+    shared-secret: ${XJICLOUD_WORKER_SECRET:change-me-worker-secret-in-production}
+    heartbeat-timeout-sec: 60
+    poll-timeout-sec: 25
   storage:
     root: ./data/xjicloud
   cors:

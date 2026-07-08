@@ -1,0 +1,12 @@
+services:
+  gpu-worker-test:
+    build:
+      context: ../gpu-worker
+      dockerfile: Dockerfile.test
+      network: host
+    volumes:
+      - ../gpu-worker/testdata/input:/input:ro
+      - ../gpu-worker/testdata/output:/output
+    environment:
+      INPUT_DIR: /input
+      OUTPUT_PATH: /output/model.ply

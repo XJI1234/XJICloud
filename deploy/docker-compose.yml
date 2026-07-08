@@ -57,9 +57,12 @@ services:
       - --spring.profiles.active=dev
       - --spring.data.redis.host=redis
       - --xjicloud.oss.endpoint=http://minio:9000
+      - --xjicloud.oss.region=${OSS_REGION:-us-east-1}
       - --xjicloud.oss.bucket=${OSS_BUCKET:-xjicloud}
       - --xjicloud.oss.access-key=${OSS_ACCESS_KEY:-minioadmin}
       - --xjicloud.oss.secret-key=${OSS_SECRET_KEY:-minioadmin}
+      - --xjicloud.oss.path-style-access=true
+      - --xjicloud.oss.presign-expiration-minutes=30
       - --xjicloud.worker.shared-secret=${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
       - --xjicloud.cors.allowed-origins=${XJICLOUD_CORS_ORIGINS:-http://127.0.0.1:5174,http://localhost:5174,http://127.0.0.1:5175}
     ports:
@@ -67,22 +70,24 @@ services:
     volumes:
       - backend_data:/app/data
 
-  gpu-worker:
-    build:
-      context: ../gpu-worker
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      - backend
-    environment:
-      XJICLOUD_BACKEND_URL: http://backend:8080
-      WORKER_SECRET: ${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
-      WORKER_NAME: ${WORKER_NAME:-xjicloud-gpu-worker-1}
-      OSS_ENDPOINT: http://minio:9000
-      OSS_REGION: ${OSS_REGION:-us-east-1}
-      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:-minioadmin}
-      OSS_SECRET_KEY: ${OSS_SECRET_KEY:-minioadmin}
-      OSS_PATH_STYLE: "true"
+  # gpu-worker 依赖 backend/minio，全栈联调时取消注释。
+  # 独立测试 gpu-worker 请用: docker compose -f docker-compose.gpu-test.yml up --build
+  # gpu-worker:
+  #   build:
+  #     context: ../gpu-worker
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - backend
+  #   environment:
+  #     XJICLOUD_BACKEND_URL: http://backend:8080
+  #     WORKER_SECRET: ${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
+  #     WORKER_NAME: ${WORKER_NAME:-xjicloud-gpu-worker-1}
+  #     OSS_ENDPOINT: http://minio:9000
+  #     OSS_REGION: ${OSS_REGION:-us-east-1}
+  #     OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:-minioadmin}
+  #     OSS_SECRET_KEY: ${OSS_SECRET_KEY:-minioadmin}
+  #     OSS_PATH_STYLE: "true"
 
 volumes:
   minio_data:

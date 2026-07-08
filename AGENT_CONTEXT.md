@@ -266,13 +266,25 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 | 文件 | 说明 |
 |------|------|
-| `Dockerfile` | `FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest` |
+| `Dockerfile` | `FROM colmap/colmap:latest`（官方 COLMAP 镜像 + Python Worker 层） |
+| `configure-apt-mirrors.sh` | 构建时国内 apt 镜像与 DNS 修复（与 COLMAP docker 同源逻辑） |
 | `worker_agent.py` | 注册、心跳、poll、调度训练 |
 | `mock_trainer.py` | **可替换为真实算法**；当前生成占位 PLY |
 | `oss_client.py` | presigned URL 下载/上传 |
-| `entrypoint.sh` | 启动入口 |
+| `entrypoint.sh` | 全栈启动入口（连接 backend） |
+| `Dockerfile.test` | 独立测试镜像（不连 backend） |
+| `entrypoint.local.sh` | 测试入口：目录挂载发图、输出 PLY |
+| `local_test_runner.py` | 测试 runner，调用 `mock_trainer` |
 
-环境变量：`XJICLOUD_BACKEND_URL`、`WORKER_SECRET`、`WORKER_NAME`、可选 OSS 凭证。
+环境变量（全栈）：`XJICLOUD_BACKEND_URL`、`WORKER_SECRET`、`WORKER_NAME`、可选 OSS 凭证。
+
+**独立测试（无需 backend）：**
+
+```bash
+cp /path/to/images/* gpu-worker/testdata/input/
+cd deploy && docker compose -f docker-compose.gpu-test.yml up --build
+# 结果: gpu-worker/testdata/output/model.ply
+```
 
 ---
 
@@ -311,8 +323,8 @@ npm run dev          # :5174，/api 代理到 8080
 # 管理面板
 cd admin && npm run dev   # :5175
 
-# Worker
-docker build -t xjicloud/gpu-worker gpu-worker/
+# Worker（基础镜像 colmap/colmap:latest，国内构建建议加 --network=host）
+docker build --network=host -t xjicloud/gpu-worker gpu-worker/
 docker run --rm -e XJICLOUD_BACKEND_URL=http://host.docker.internal:8080 \
   -e WORKER_SECRET=change-me-worker-secret-in-production xjicloud/gpu-worker
 ```

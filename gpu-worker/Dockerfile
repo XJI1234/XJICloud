@@ -1,13 +1,22 @@
-FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest
+FROM colmap/colmap:latest
 
-RUN yum install -y python3 python3-pip curl && yum clean all
+ARG USE_CN_APT_MIRROR=1
+ARG UBUNTU_MIRROR=https://mirrors.aliyun.com/ubuntu
+
+# Ubuntu 24.04 需处理 PEP 668（externally-managed-environment）
+COPY configure-apt-mirrors.sh /usr/local/bin/configure-apt-mirrors.sh
+RUN if [ "${USE_CN_APT_MIRROR}" = "1" ]; then \
+        UBUNTU_MIRROR="${UBUNTU_MIRROR}" bash /usr/local/bin/configure-apt-mirrors.sh; \
+    fi && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/xjicloud-worker
 
 COPY requirements.txt .
-# Alinux3 默认 pip 源较旧；使用阿里云 PyPI 镜像并升级 pip
-RUN pip3 install --upgrade pip \
-    && pip3 install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages \
+    -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 
 COPY worker_agent.py mock_trainer.py oss_client.py entrypoint.sh ./
 RUN chmod +x entrypoint.sh
