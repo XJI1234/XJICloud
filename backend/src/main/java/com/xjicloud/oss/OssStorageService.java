@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
@@ -99,7 +100,9 @@ public class OssStorageService {
         map.put("endpoint", runtimeConfig.endpoint());
         map.put("region", runtimeConfig.region());
         map.put("bucket", runtimeConfig.bucket());
-        map.put("accessKey", mask(runtimeConfig.accessKey()));
+        map.put("accessKeyConfigured", String.valueOf(hasCredential(runtimeConfig.accessKey())));
+        map.put("accessKeyHint", mask(runtimeConfig.accessKey()));
+        map.put("secretKeyConfigured", String.valueOf(hasCredential(runtimeConfig.secretKey())));
         map.put("pathStyleAccess", String.valueOf(runtimeConfig.pathStyleAccess()));
         return map;
     }
@@ -112,8 +115,10 @@ public class OssStorageService {
         saveConfig(KEY_ENDPOINT, values.get("endpoint"), updatedBy);
         saveConfig(KEY_REGION, values.get("region"), updatedBy);
         saveConfig(KEY_BUCKET, values.get("bucket"), updatedBy);
-        saveConfig(KEY_ACCESS_KEY, values.get("accessKey"), updatedBy);
-        if (values.get("secretKey") != null && !values.get("secretKey").isBlank()) {
+        if (shouldPersistCredential(values.get("accessKey"))) {
+            saveConfig(KEY_ACCESS_KEY, values.get("accessKey"), updatedBy);
+        }
+        if (shouldPersistCredential(values.get("secretKey"))) {
             saveConfig(KEY_SECRET_KEY, values.get("secretKey"), updatedBy);
         }
         if (values.containsKey("pathStyleAccess")) {
@@ -123,6 +128,11 @@ public class OssStorageService {
     }
 
     public void testConnection() {
+        if (isMaskedCredential(runtimeConfig.accessKey())) {
+            throw new IllegalStateException(
+                    "OSS Access Key 无效（可能曾被脱敏值覆盖）。请重新输入完整的 Access Key 和 Secret Key 后点击保存。"
+            );
+        }
         String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
         boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, runtimeConfig.pathStyleAccess());
         try {
@@ -130,6 +140,15 @@ public class OssStorageService {
                     .bucket(runtimeConfig.bucket())
                     .maxKeys(1)
                     .build());
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 403) {
+                throw new IllegalStateException(
+                        "OSS 鉴权失败（403）。请确认 Access Key / Secret Key 为 RAM 用户的完整明文，并重新保存。"
+                        + " 若 Secret Key 留空则不会更新，需同时填写两项。详情: " + ex.awsErrorDetails().errorMessage(),
+                        ex
+                );
+            }
+            throw ex;
         } catch (SdkClientException ex) {
             String hostHint = resolveRequestHost(runtimeConfig.bucket(), sdkEndpoint, pathStyleForSdk);
             Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
@@ -219,6 +238,18 @@ public class OssStorageService {
             return "****";
         }
         return value.substring(0, 2) + "****" + value.substring(value.length() - 2);
+    }
+
+    private static boolean hasCredential(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static boolean isMaskedCredential(String value) {
+        return value != null && value.contains("****");
+    }
+
+    private static boolean shouldPersistCredential(String value) {
+        return hasCredential(value) && !isMaskedCredential(value);
     }
 
     /**
