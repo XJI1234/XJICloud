@@ -3,7 +3,7 @@
 > 供 Cursor / 其他 AI Agent 快速理解本仓库的结构、已实现功能、扩展点与约束。  
 > 用户面向文档见 [README.md](README.md)；部署见 [Deploy.md](Deploy.md)。
 
-**最后更新：** 2026-06-21（云平台扩展：OSS + Redis 队列 + GPU Worker + Admin 面板）
+**最后更新：** 2026-06-21（图片数据集归档上传 UI 对齐、AGENT_CONTEXT 修订）
 
 ---
 
@@ -112,26 +112,35 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 ## 4. 训练流水线（图片 → 模型）
 
+用户侧「数据上传」主流程：上传**含有建模素材的图片文件夹**，浏览器端归档后直传 OSS，再入队由 GPU 算力容器处理。
+
+**「归档打包」含义（重要）：**
+- **不是** zip/tar 压缩包
+- **是** 浏览器端逻辑归档：`datasetArchive.ts` 过滤 JPG/PNG/WebP → 按 `webkitRelativePath` 排序 → 4 位序列重命名（`0001.jpg`…）→ 生成 `manifest.json` → 逐文件 presigned PUT 到 OSS
+
 ```
-1. 用户选择文件夹（webkitdirectory）
+1. 用户选择文件夹（webkitdirectory，须先打开项目）
    → src/utils/datasetArchive.ts 过滤 jpg/png/webp，重命名为 0001.jpg…
-   → 生成 manifest.json
+   → 生成 manifest.json（version/imageCount/files[]：archivedName、originalName、contentType、sizeBytes）
 
 2. POST /api/v1/projects/{id}/datasets
    → 后端创建 TrainingJob(status=UPLOADING)，返回 presigned PUT URL 列表
 
 3. 浏览器直传 OSS（src/api/datasets.ts putToOss，XHR 进度）
+   → datasets/{jobId}/images/{archivedName} + datasets/{jobId}/manifest.json
 
 4. POST /api/v1/projects/{id}/datasets/{jobId}/complete
-   → status=QUEUED，写入 Redis 队列 xjicloud:jobs
+   → status=QUEUED，RPUSH 写入 Redis 队列 xjicloud:jobs
 
 5. gpu-worker poll GET /api/v1/worker/jobs/next
-   → 下载图片 → mock_trainer.py 分阶段上报进度
-   → PUT output.ply 至 OSS → POST .../complete
+   → presigned GET 下载图片 → mock_trainer.py 分阶段上报进度
+   → presigned PUT output.ply 至 OSS → POST .../complete
 
 6. 用户 GET /api/v1/jobs/{id}/events（SSE）实时看进度
    → COMPLETED 后 GET /api/v1/jobs/{id} 拿 presigned 下载 URL
 ```
+
+**与 PLY/SPZ 模型上传的区别：** 图片数据集走 OSS + 训练队列；PLY/SPZ 走 `/projects/{id}/models/upload` 存本地盘，供查看器加载，**不是**训练输入。
 
 **Job 状态枚举：** `PENDING | UPLOADING | QUEUED | RUNNING | COMPLETED | FAILED | CANCELLED`
 
@@ -221,7 +230,7 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 | `/login` | `LoginView.vue` | |
 | `/app/home` | `HomeView.vue` | 新建/打开项目 |
 | `/app/projects` | `ProjectListView.vue` | 工程列表 + 模型上传 |
-| `/app/upload` | `UploadView.vue` | Tab：图片数据集 / 模型文件 |
+| `/app/upload` | `UploadView.vue` | **双 Tab**：默认「图片数据集」（`DatasetUploadPanel` + `TrainingJobPanel`）；「模型文件」上传 PLY/SPZ 到本地盘 |
 | `/app/layer` | `LayerViewerView.vue` | Spark 查看器（`main.css` 绿色主题） |
 | `/app/supersplat` | `SuperSplatEditorView.vue` | iframe 高级编辑 |
 
@@ -231,11 +240,12 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 | 文件 | 作用 |
 |------|------|
-| `utils/datasetArchive.ts` | 文件夹归档、manifest |
+| `views/UploadView.vue` | 双 Tab 容器；挂载数据集上传与训练进度面板 |
+| `utils/datasetArchive.ts` | 文件夹逻辑归档（序列重命名 + manifest，非 zip） |
 | `api/datasets.ts` | 数据集/任务 API、OSS PUT、SSE 订阅 |
 | `stores/trainingJob.ts` | Pinia 任务列表 + SSE |
-| `components/DatasetUploadPanel.vue` | 文件夹选择与上传 UI |
-| `components/TrainingJobPanel.vue` | 任务进度与下载 |
+| `components/DatasetUploadPanel.vue` | 文件夹选择、归档预览、OSS 直传、`complete` 入队；需 `projectId` |
+| `components/TrainingJobPanel.vue` | 项目训练任务列表 + SSE 实时进度与下载 |
 | `components/FileUploadButton.vue` | 复用 PLY/SPZ 上传 |
 | `components/ToolIcon.vue` | 侧栏 SVG 图标 |
 
@@ -329,6 +339,7 @@ docker run --rm -e XJICLOUD_BACKEND_URL=http://host.docker.internal:8080 \
 6. **训练算法：** 仅为通讯骨架 + mock；真实 3DGS 训练需替换 `mock_trainer.py`。
 7. **backend/tests：** 暂无自动化测试。
 8. **Windows 开发：** 路径可用；生产部署按 Linux 约定。
+9. **数据集上传前置条件：** 须先在主页/工程页打开项目；OSS 须在 Admin 配置正确且浏览器可直传（CORS）；「测试连接」使用已保存密钥，修改密钥后须先保存。
 
 ---
 
@@ -369,7 +380,7 @@ deploy/application-prod.yml.example
 
 **JPA 表：** `users`, `projects`, `model_assets`, `viewer_configs`, `training_jobs`, `dataset_assets`, `worker_nodes`, `admin_users`, `system_config`
 
-**Redis：** 列表键 `xjicloud:jobs`（LPUSH 入队 / BLPOP 出队）
+**Redis：** 列表键 `xjicloud:jobs`（RPUSH 入队 / BLPOP 出队，FIFO）
 
 **OSS 路径约定：**
 

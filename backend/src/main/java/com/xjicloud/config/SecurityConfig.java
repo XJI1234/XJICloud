@@ -1,6 +1,8 @@
 package com.xjicloud.config;
 
+import com.xjicloud.admin.AdminJwtAuthenticationFilter;
 import com.xjicloud.auth.JwtAuthenticationFilter;
+import com.xjicloud.worker.WorkerJwtAuthenticationFilter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,10 +27,19 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final AdminJwtAuthenticationFilter adminJwtAuthenticationFilter;
+    private final WorkerJwtAuthenticationFilter workerJwtAuthenticationFilter;
     private final CorsProperties corsProperties;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, CorsProperties corsProperties) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            AdminJwtAuthenticationFilter adminJwtAuthenticationFilter,
+            WorkerJwtAuthenticationFilter workerJwtAuthenticationFilter,
+            CorsProperties corsProperties
+    ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.adminJwtAuthenticationFilter = adminJwtAuthenticationFilter;
+        this.workerJwtAuthenticationFilter = workerJwtAuthenticationFilter;
         this.corsProperties = corsProperties;
     }
 
@@ -40,6 +51,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers("/api/v1/admin/auth/**").permitAll()
+                        .requestMatchers("/api/v1/worker/register").permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/worker/**").hasRole("WORKER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/models/*/download").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
@@ -47,6 +62,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+                .addFilterBefore(adminJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(workerJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -64,10 +81,21 @@ public class SecurityConfig {
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
                 .toList();
-        configuration.setAllowedOrigins(origins);
+
+        if (origins.isEmpty() || origins.stream().anyMatch(origin -> "*".equals(origin))) {
+            configuration.setAllowedOriginPatterns(List.of("*"));
+        } else {
+            configuration.setAllowedOriginPatterns(origins);
+        }
+
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("Content-Disposition", "Content-Length", "Content-Range", "Accept-Ranges"));
+        configuration.setExposedHeaders(List.of(
+                "Content-Disposition",
+                "Content-Length",
+                "Content-Range",
+                "Accept-Ranges"
+        ));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

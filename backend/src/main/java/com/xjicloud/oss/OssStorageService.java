@@ -9,15 +9,19 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
@@ -26,6 +30,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 @Service
 public class OssStorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(OssStorageService.class);
 
     public static final String KEY_ENDPOINT = "oss.endpoint";
     public static final String KEY_REGION = "oss.region";
@@ -53,22 +59,33 @@ public class OssStorageService {
     public synchronized void reloadClients() {
         this.runtimeConfig = loadRuntimeConfig();
         closeClients();
+        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
+        String sdkHost = extractHostFromEndpoint(sdkEndpoint);
+        if (sdkHost == null || sdkHost.isBlank()) {
+            throw new IllegalStateException("OSS endpoint 无效: " + runtimeConfig.endpoint());
+        }
+        Region sdkRegion = resolveSdkRegion(sdkEndpoint, runtimeConfig.region());
+        boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, runtimeConfig.pathStyleAccess());
+        log.info("OSS S3 client: endpoint={}, region={}, bucket={}, pathStyle={}",
+                sdkEndpoint, sdkRegion, runtimeConfig.bucket(), pathStyleForSdk);
         AwsBasicCredentials credentials = AwsBasicCredentials.create(
                 runtimeConfig.accessKey(),
                 runtimeConfig.secretKey()
         );
+        // 阿里云 OSS + AWS SDK：须关闭 chunked encoding，见官方兼容文档
         S3Configuration s3Configuration = S3Configuration.builder()
-                .pathStyleAccessEnabled(runtimeConfig.pathStyleAccess())
+                .pathStyleAccessEnabled(pathStyleForSdk)
+                .chunkedEncodingEnabled(false)
                 .build();
         this.s3Client = S3Client.builder()
-                .endpointOverride(URI.create(runtimeConfig.endpoint()))
-                .region(Region.of(runtimeConfig.region()))
+                .endpointOverride(URI.create(sdkEndpoint))
+                .region(sdkRegion)
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(s3Configuration)
                 .build();
         this.s3Presigner = S3Presigner.builder()
-                .endpointOverride(URI.create(runtimeConfig.endpoint()))
-                .region(Region.of(runtimeConfig.region()))
+                .endpointOverride(URI.create(sdkEndpoint))
+                .region(sdkRegion)
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(s3Configuration)
                 .build();
@@ -83,18 +100,25 @@ public class OssStorageService {
         map.put("endpoint", runtimeConfig.endpoint());
         map.put("region", runtimeConfig.region());
         map.put("bucket", runtimeConfig.bucket());
-        map.put("accessKey", mask(runtimeConfig.accessKey()));
+        map.put("accessKeyConfigured", String.valueOf(hasCredential(runtimeConfig.accessKey())));
+        map.put("accessKeyHint", mask(runtimeConfig.accessKey()));
+        map.put("secretKeyConfigured", String.valueOf(hasCredential(runtimeConfig.secretKey())));
         map.put("pathStyleAccess", String.valueOf(runtimeConfig.pathStyleAccess()));
         return map;
     }
 
     @Transactional
     public void updateConfig(Map<String, String> values, String updatedBy) {
+        if (values.get("endpoint") != null && !values.get("endpoint").isBlank()) {
+            values.put("endpoint", normalizeEndpointForSdk(values.get("endpoint")));
+        }
         saveConfig(KEY_ENDPOINT, values.get("endpoint"), updatedBy);
         saveConfig(KEY_REGION, values.get("region"), updatedBy);
         saveConfig(KEY_BUCKET, values.get("bucket"), updatedBy);
-        saveConfig(KEY_ACCESS_KEY, values.get("accessKey"), updatedBy);
-        if (values.get("secretKey") != null && !values.get("secretKey").isBlank()) {
+        if (shouldPersistCredential(values.get("accessKey"))) {
+            saveConfig(KEY_ACCESS_KEY, values.get("accessKey"), updatedBy);
+        }
+        if (shouldPersistCredential(values.get("secretKey"))) {
             saveConfig(KEY_SECRET_KEY, values.get("secretKey"), updatedBy);
         }
         if (values.containsKey("pathStyleAccess")) {
@@ -104,7 +128,35 @@ public class OssStorageService {
     }
 
     public void testConnection() {
-        s3Client.headBucket(HeadBucketRequest.builder().bucket(runtimeConfig.bucket()).build());
+        if (isMaskedCredential(runtimeConfig.accessKey())) {
+            throw new IllegalStateException(
+                    "OSS Access Key 无效（可能曾被脱敏值覆盖）。请重新输入完整的 Access Key 和 Secret Key 后点击保存。"
+            );
+        }
+        String sdkEndpoint = normalizeEndpointForSdk(runtimeConfig.endpoint());
+        boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, runtimeConfig.pathStyleAccess());
+        try {
+            s3Client.listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(runtimeConfig.bucket())
+                    .maxKeys(1)
+                    .build());
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 403) {
+                throw new IllegalStateException(
+                        "OSS 鉴权失败（403）。请确认 Access Key / Secret Key 为 RAM 用户的完整明文，并重新保存。"
+                        + " 若 Secret Key 留空则不会更新，需同时填写两项。详情: " + ex.awsErrorDetails().errorMessage(),
+                        ex
+                );
+            }
+            throw ex;
+        } catch (SdkClientException ex) {
+            String hostHint = resolveRequestHost(runtimeConfig.bucket(), sdkEndpoint, pathStyleForSdk);
+            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+            throw new IllegalStateException(
+                    "OSS 连接失败，请检查 endpoint/密钥及服务器 DNS。请求主机: " + hostHint + "，原因: " + cause.getMessage(),
+                    ex
+            );
+        }
     }
 
     public String presignPutUrl(String ossKey, String contentType) {
@@ -186,5 +238,85 @@ public class OssStorageService {
             return "****";
         }
         return value.substring(0, 2) + "****" + value.substring(value.length() - 2);
+    }
+
+    private static boolean hasCredential(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static boolean isMaskedCredential(String value) {
+        return value != null && value.contains("****");
+    }
+
+    private static boolean shouldPersistCredential(String value) {
+        return hasCredential(value) && !isMaskedCredential(value);
+    }
+
+    /**
+     * 阿里云 OSS + AWS SDK：endpoint 用 oss-cn-{region}.aliyuncs.com（勿加 s3. 前缀）。
+     * virtual-hosted 下 SDK 会拼成 {bucket}.oss-cn-{region}.aliyuncs.com；
+     * 若 endpoint 为 s3.oss-...，SDK 会错误解析成 {bucket}.s3. 导致 DNS 失败。
+     */
+    static String normalizeEndpointForSdk(String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) {
+            return endpoint;
+        }
+        String trimmed = endpoint.trim();
+        if (!trimmed.contains("aliyuncs.com")) {
+            return trimmed;
+        }
+        String scheme = trimmed.contains("://") ? trimmed.substring(0, trimmed.indexOf("://")) : "https";
+        String host = trimmed.contains("://") ? trimmed.substring(trimmed.indexOf("://") + 3) : trimmed;
+        while (host.startsWith("/")) {
+            host = host.substring(1);
+        }
+        host = host.replaceAll("/+$", "");
+        if (host.startsWith("s3.")) {
+            host = host.substring(3);
+        }
+        return scheme + "://" + host;
+    }
+
+    static String extractHostFromEndpoint(String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) {
+            return null;
+        }
+        String host = endpoint.contains("://") ? endpoint.substring(endpoint.indexOf("://") + 3) : endpoint;
+        while (host.startsWith("/")) {
+            host = host.substring(1);
+        }
+        int slash = host.indexOf('/');
+        if (slash >= 0) {
+            host = host.substring(0, slash);
+        }
+        return host.isBlank() ? null : host;
+    }
+
+    static boolean resolvePathStyleForSdk(String sdkEndpoint, boolean configuredPathStyle) {
+        if (sdkEndpoint != null && sdkEndpoint.contains("aliyuncs.com")) {
+            return false;
+        }
+        return configuredPathStyle;
+    }
+
+    static String resolveRequestHost(String bucket, String sdkEndpoint, boolean pathStyleAccess) {
+        String host = extractHostFromEndpoint(sdkEndpoint);
+        if (host == null || host.isBlank()) {
+            return sdkEndpoint;
+        }
+        if (pathStyleAccess) {
+            return host;
+        }
+        return bucket + "." + host;
+    }
+
+    private static Region resolveSdkRegion(String sdkEndpoint, String configuredRegion) {
+        if (sdkEndpoint != null && sdkEndpoint.contains("aliyuncs.com")) {
+            return Region.AWS_GLOBAL;
+        }
+        if (configuredRegion != null && !configuredRegion.isBlank()) {
+            return Region.of(configuredRegion.trim());
+        }
+        return Region.US_EAST_1;
     }
 }
