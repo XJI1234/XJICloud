@@ -484,12 +484,20 @@ export PATH="$JAVA_HOME/bin:$PATH"
 ```bash
 # PostgreSQL（同机示例）
 sudo apt update && sudo apt install -y postgresql-client
-psql -h 127.0.0.1 -U postgres -d xjicloud
+
 
 sudo -u postgres psql <<'SQL'
 CREATE USER xjicloud WITH PASSWORD 'your-password';
 CREATE DATABASE xjicloud OWNER xjicloud;
 SQL
+
+#配置权限
+psql -h 127.0.0.1 -U postgres -d xjicloud
+GRANT ALL ON SCHEMA public TO xjicloud;
+GRANT CREATE ON SCHEMA public TO xjicloud;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO xjicloud;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO xjicloud;
+
 
 # Redis（同机示例）
 sudo systemctl enable --now redis
