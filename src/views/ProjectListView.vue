@@ -82,6 +82,7 @@ function goHome() {
 
 <template>
   <div class="projects-page">
+    <div class="cloud-page-inner">
     <section class="projects-current-card section-card">
       <div class="projects-current-header">
         <div>
@@ -150,5 +151,6 @@ function goHome() {
       accept=".ply,.spz"
       @change="handleUpload"
     />
+    </div>
   </div>
 </template>

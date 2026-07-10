@@ -17,12 +17,11 @@
   --cloud-accent-muted: rgba(107, 140, 174, 0.24);
   --cloud-accent-gradient: linear-gradient(135deg, #8aa4be 0%, #6b8cae 45%, #4a6278 100%);
   --cloud-gradient-hero:
-    radial-gradient(ellipse 55% 80% at 4% 50%, rgba(107, 140, 174, 0.52), transparent 62%),
-    radial-gradient(ellipse 90% 70% at 16% 40%, rgba(107, 140, 174, 0.38), transparent 60%),
+    radial-gradient(ellipse 55% 80% at 12% 50%, rgba(107, 140, 174, 0.52), transparent 62%),
+    radial-gradient(ellipse 90% 70% at 22% 40%, rgba(107, 140, 174, 0.38), transparent 60%),
     radial-gradient(ellipse 50% 45% at 92% 8%, rgba(196, 165, 116, 0.22), transparent 55%),
     radial-gradient(ellipse 80% 50% at 50% 100%, rgba(20, 24, 32, 0.92), transparent 70%),
     linear-gradient(160deg, #141820 0%, #0a0b0d 50%, #0d1117 100%);
-  --cloud-tool-rail-width: 96px;
   --cloud-cta-bg: #ffffff;
   --cloud-cta-text: #0a0b0d;
   --cloud-glass: rgba(14, 16, 22, 0.68);
@@ -34,6 +33,7 @@
   --cloud-font-body: clamp(0.8125rem, 0.35vw + 0.75rem, 0.9375rem);
   --cloud-font-family: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
   --cloud-font-title: clamp(2rem, 3.5vw + 1rem, 3.5rem);
+  --cloud-tool-rail-width: 96px;
 }
 
 /* Grain texture overlay */
@@ -50,8 +50,10 @@
   position: relative;
   display: grid;
   grid-template-rows: 56px minmax(0, 1fr) 36px;
-  width: 100vw;
+  width: 100%;
+  max-width: 100%;
   height: 100vh;
+  height: 100dvh;
   min-width: 320px;
   background: var(--cloud-bg-charcoal);
   color: var(--cloud-text);
@@ -84,7 +86,8 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 10;
+  z-index: 30;
+  overflow: visible;
   background: rgba(10, 11, 13, 0.42);
   border-bottom-color: rgba(255, 255, 255, 0.08);
   backdrop-filter: var(--cloud-glass-blur);
@@ -102,7 +105,7 @@
 
 .cloud-shell--immersive .cloud-shell__backdrop {
   background:
-    radial-gradient(ellipse 60% 90% at 2% 50%, rgba(107, 140, 174, 0.55), transparent 58%),
+    radial-gradient(ellipse 60% 90% at 8% 50%, rgba(107, 140, 174, 0.55), transparent 58%),
     var(--cloud-gradient-hero);
 }
 
@@ -112,11 +115,20 @@
   bottom: 36px;
 }
 
-.cloud-shell > .cloud-header,
-.cloud-shell > .cloud-body,
+.cloud-shell > .cloud-header {
+  position: relative;
+  z-index: 30;
+  overflow: visible;
+}
+
+.cloud-shell > .cloud-body {
+  position: relative;
+  z-index: 1;
+}
+
 .cloud-shell > .cloud-status-bar {
   position: relative;
-  z-index: 2;
+  z-index: 10;
 }
 
 .cloud-header {
@@ -245,6 +257,7 @@
 
 .cloud-user-menu-root {
   position: relative;
+  z-index: 1;
 }
 
 .cloud-user-chip {
@@ -260,7 +273,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 40;
+  z-index: 50;
   min-width: 220px;
   padding: 8px;
   border: 1px solid var(--cloud-border-strong);
@@ -312,7 +325,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 6px;
+  width: var(--cloud-tool-rail-width);
+  min-width: var(--cloud-tool-rail-width);
+  padding: 12px 8px;
   border-right: 1px solid var(--cloud-border);
   background: rgba(10, 11, 13, 0.75);
   backdrop-filter: var(--cloud-glass-blur);
@@ -370,13 +385,37 @@
   font-size: 12px;
   letter-spacing: 0.06em;
   white-space: nowrap;
+  text-align: center;
+  max-width: 100%;
 }
 
 .cloud-main {
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   position: relative;
+}
+
+.cloud-main::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cloud-main::-webkit-scrollbar-track {
+  background: var(--cloud-bg-charcoal);
+}
+
+.cloud-main::-webkit-scrollbar-thumb {
+  border-radius: var(--cloud-radius);
+  background: rgba(107, 140, 174, 0.35);
+}
+
+.cloud-page-inner {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 48px) clamp(20px, 5vw, 80px);
+  box-sizing: border-box;
 }
 
 .cloud-shell:has(.supersplat-page) .cloud-body {
@@ -849,7 +888,10 @@
   position: relative;
   height: 100%;
   min-width: 320px;
-  overflow: auto;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: transparent;
 }
 
@@ -873,7 +915,7 @@
   width: min(680px, 75vw);
   height: min(680px, 75vw);
   top: 0;
-  left: -5%;
+  left: -2%;
   background: rgba(107, 140, 174, 0.5);
 }
 
@@ -881,7 +923,7 @@
   width: min(420px, 55vw);
   height: min(520px, 65vw);
   top: 15%;
-  left: 0%;
+  left: 4%;
   background: rgba(107, 140, 174, 0.38);
   filter: blur(88px);
 }
@@ -956,11 +998,11 @@
 
 .home-primary-button,
 .home-secondary-button {
-  min-height: 52px;
+  min-height: 56px;
   border-radius: var(--cloud-radius);
-  font-size: 12px;
+  font-size: clamp(0.9375rem, 0.4vw + 0.875rem, 1.0625rem);
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   transition: background 220ms ease, border-color 220ms ease, color 220ms ease, transform 220ms ease;
 }
@@ -1136,10 +1178,12 @@
 
 /* Projects page */
 .projects-page {
-  height: 100%;
-  overflow: auto;
-  padding: clamp(20px, 4vw, 48px) clamp(20px, 5vw, 80px);
-  max-width: 1280px;
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+  padding: 0;
 }
 
 .projects-header,
@@ -1355,10 +1399,25 @@
 }
 
 .upload-page {
-  height: 100%;
-  overflow: auto;
-  padding: clamp(20px, 4vw, 48px) clamp(20px, 5vw, 80px);
-  max-width: 1280px;
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+  padding: 0;
+}
+
+.home-page::-webkit-scrollbar {
+  width: 8px;
+}
+
+.home-page::-webkit-scrollbar-track {
+  background: var(--cloud-bg-charcoal);
+}
+
+.home-page::-webkit-scrollbar-thumb {
+  border-radius: var(--cloud-radius);
+  background: rgba(107, 140, 174, 0.35);
 }
 
 .upload-header {
@@ -1406,213 +1465,6 @@
 
 .upload-error {
   color: #e8a0a0;
-}
-
-.upload-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.upload-tab {
-  min-height: 38px;
-  padding: 0 16px;
-  border: 1px solid #2b3f57;
-  border-radius: 8px;
-  background: transparent;
-  color: #cbd5e1;
-  cursor: pointer;
-}
-
-.upload-tab--active,
-.upload-tab:hover {
-  background: #1b2a3d;
-  border-color: #3b82f6;
-  color: #e2e8f0;
-}
-
-.upload-tab-panel {
-  display: grid;
-  gap: 16px;
-  max-width: 960px;
-}
-
-.upload-tab-hint {
-  margin: 0;
-  color: #94a3b8;
-  line-height: 1.5;
-}
-
-.cloud-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 0 16px;
-  border: 1px solid #2b3f57;
-  border-radius: 8px;
-  background: #1b2a3d;
-  color: #e2e8f0;
-  cursor: pointer;
-}
-
-.cloud-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.cloud-btn--primary {
-  background: #1f6feb;
-  border-color: #3b82f6;
-}
-
-.cloud-btn--ghost {
-  background: transparent;
-}
-
-.cloud-card {
-  padding: 20px;
-  border: 1px solid #243041;
-  border-radius: 12px;
-  background: #151d27;
-}
-
-.cloud-field {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.cloud-input {
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid #2b3f57;
-  border-radius: 8px;
-  background: #0f1419;
-  color: #e2e8f0;
-}
-
-.cloud-badge {
-  display: inline-flex;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
-}
-
-.cloud-badge--info {
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
-}
-
-.cloud-badge--success {
-  background: rgba(16, 185, 129, 0.15);
-  color: #6ee7b7;
-}
-
-.cloud-badge--warning {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fcd34d;
-}
-
-.cloud-badge--danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
-}
-
-.cloud-progress {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 12px;
-  align-items: center;
-  margin-top: 12px;
-}
-
-.cloud-progress-bar {
-  height: 8px;
-  border-radius: 999px;
-  background: #243041;
-  overflow: hidden;
-}
-
-.cloud-progress-bar__fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #1f6feb, #3b82f6);
-  transition: width 0.2s ease;
-}
-
-.cloud-progress-label {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.dataset-upload-panel,
-.training-job-panel {
-  display: grid;
-  gap: 12px;
-}
-
-.dataset-upload-header,
-.training-job-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.dataset-upload-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.dataset-archive-summary {
-  margin: 0;
-  padding: 12px;
-  border-radius: 8px;
-  background: rgba(15, 20, 25, 0.65);
-  color: #cbd5e1;
-}
-
-.dataset-file-list {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  color: #94a3b8;
-  font-size: 13px;
-}
-
-.training-job-list {
-  display: grid;
-  gap: 12px;
-}
-
-.training-job-item {
-  padding: 14px;
-  border: 1px solid #243041;
-  border-radius: 10px;
-  background: #111820;
-}
-
-.training-job-item__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.training-job-meta,
-.training-job-message {
-  margin: 4px 0 0;
-  color: #94a3b8;
-  font-size: 13px;
-}
-
-.training-job-actions {
-  margin-top: 12px;
 }
 
 .supersplat-page {
