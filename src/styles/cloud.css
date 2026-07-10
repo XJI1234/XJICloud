@@ -26,7 +26,7 @@
   --cloud-cta-text: #0a0b0d;
   --cloud-glass: rgba(14, 16, 22, 0.68);
   --cloud-glass-blur: blur(18px);
-  --cloud-radius: 2px;
+  --cloud-radius: 0;
   --cloud-nav-tracking: 0.14em;
   --cloud-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
   --cloud-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
@@ -1319,7 +1319,7 @@
 .layer-viewer-root .floating-collapsed-toggle {
   top: 50%;
   right: 12px;
-  border-radius: var(--cloud-radius) 0 0 var(--cloud-radius);
+  border-radius: 0;
   background: var(--cloud-glass);
   backdrop-filter: var(--cloud-glass-blur);
   border: 1px solid var(--cloud-border);
@@ -1334,6 +1334,17 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.side-button--inline {
+  width: auto;
+  flex-shrink: 0;
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: var(--cloud-font-body);
+  white-space: nowrap;
 }
 
 .projects-current-title {

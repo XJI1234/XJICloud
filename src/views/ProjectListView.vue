@@ -101,7 +101,7 @@ function goHome() {
             </p>
           </template>
         </div>
-        <button class="side-button" type="button" @click="goHome">返回主页</button>
+        <button class="side-button side-button--inline" type="button" @click="goHome">返回主页</button>
       </div>
 
       <div v-if="projectStore.activeProject" class="projects-current-actions">
