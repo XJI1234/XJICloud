@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { ApiError } from '@/api/client'
 import { uploadModel } from '@/api/models'
+import { showComingSoon } from '@/utils/comingSoon'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -78,6 +79,10 @@ function formatDate(value: string) {
 function goHome() {
   router.push('/app/home')
 }
+
+function handleDeleteProject() {
+  showComingSoon('删除工程')
+}
 </script>
 
 <template>
@@ -127,21 +132,34 @@ function goHome() {
       <p v-if="projectStore.loading" class="projects-empty">加载中...</p>
       <p v-else-if="projectStore.projects.length === 0" class="projects-empty">暂无工程，请先新建。</p>
 
-      <button
+      <div
         v-for="project in projectStore.projects"
         :key="project.id"
         class="project-list-row"
         :class="{ 'is-active': projectStore.activeProjectId === project.id }"
-        type="button"
-        @click="selectProject(project.id)"
       >
-        <div class="project-list-copy">
-          <h4 class="project-card-title">{{ project.name }}</h4>
-          <p class="project-card-description">{{ project.description || '暂无描述' }}</p>
-          <p class="project-card-meta">{{ formatDate(project.createdAt) }}</p>
+        <button
+          class="project-list-row__select"
+          type="button"
+          @click="selectProject(project.id)"
+        >
+          <div class="project-list-copy">
+            <h4 class="project-card-title">{{ project.name }}</h4>
+            <p class="project-card-description">{{ project.description || '暂无描述' }}</p>
+            <p class="project-card-meta">{{ formatDate(project.createdAt) }}</p>
+          </div>
+        </button>
+        <div class="project-list-row__actions">
+          <span v-if="projectStore.activeProjectId === project.id" class="project-list-badge">当前工程</span>
+          <button
+            class="side-button side-button--inline"
+            type="button"
+            @click.stop="handleDeleteProject"
+          >
+            删除工程
+          </button>
         </div>
-        <span v-if="projectStore.activeProjectId === project.id" class="project-list-badge">当前工程</span>
-      </button>
+      </div>
     </section>
 
     <input

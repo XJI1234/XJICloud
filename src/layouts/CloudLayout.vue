@@ -5,12 +5,16 @@ import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
 import ToolIcon from '@/components/ToolIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { clearUserSession } from '@/utils/session'
+import { showComingSoon } from '@/utils/comingSoon'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const userMenuOpen = ref(false)
+const langMenuOpen = ref(false)
 const userMenuRootRef = ref<HTMLElement | null>(null)
+const langMenuRootRef = ref<HTMLElement | null>(null)
+const locale = ref<'zh' | 'en'>('zh')
 
 const cameraStatus = inject(CAMERA_STATUS_KEY, ref<CameraStatus>({
   longitude: '--',
@@ -55,16 +59,34 @@ function goHome() {
   }
 }
 
-function showComingSoon(label: string) {
-  window.alert(`${label} 功能即将推出`)
-}
-
 function toggleUserMenu() {
+  langMenuOpen.value = false
   userMenuOpen.value = !userMenuOpen.value
 }
 
 function closeUserMenu() {
   userMenuOpen.value = false
+}
+
+function toggleLangMenu() {
+  userMenuOpen.value = false
+  langMenuOpen.value = !langMenuOpen.value
+}
+
+function closeLangMenu() {
+  langMenuOpen.value = false
+}
+
+function selectLocale(next: 'zh' | 'en') {
+  if (next === 'en') {
+    showComingSoon('English 语言包')
+    closeLangMenu()
+    return
+  }
+
+  locale.value = 'zh'
+  localStorage.setItem('xjicloud_locale', 'zh')
+  closeLangMenu()
 }
 
 async function logout() {
@@ -74,23 +96,34 @@ async function logout() {
 }
 
 function onDocumentClick(event: MouseEvent) {
-  if (!userMenuOpen.value) {
-    return
+  const target = event.target
+
+  if (userMenuOpen.value) {
+    if (userMenuRootRef.value && target instanceof Node && !userMenuRootRef.value.contains(target)) {
+      closeUserMenu()
+    }
   }
 
-  const target = event.target
-  if (userMenuRootRef.value && target instanceof Node && !userMenuRootRef.value.contains(target)) {
-    closeUserMenu()
+  if (langMenuOpen.value) {
+    if (langMenuRootRef.value && target instanceof Node && !langMenuRootRef.value.contains(target)) {
+      closeLangMenu()
+    }
   }
 }
 
 function onDocumentKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     closeUserMenu()
+    closeLangMenu()
   }
 }
 
 onMounted(() => {
+  const savedLocale = localStorage.getItem('xjicloud_locale')
+  if (savedLocale === 'zh') {
+    locale.value = 'zh'
+  }
+
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onDocumentKeydown)
 })
@@ -134,14 +167,53 @@ const isImmersiveRoute = computed(() => route.name === 'home')
       </nav>
 
       <div class="cloud-header-actions">
-        <button class="cloud-icon-button" type="button" title="团队" @click="showComingSoon('团队')">团</button>
-        <button class="cloud-icon-button" type="button" title="下载" @click="showComingSoon('下载')">下</button>
-        <button class="cloud-icon-button" type="button" title="语言">中</button>
-        <button class="cloud-icon-button" type="button" title="帮助" @click="showComingSoon('帮助')">?</button>
+        <button class="cloud-header-tool-button" type="button" @click="showComingSoon('团队')">
+          <span class="cloud-header-tool-button__icon">
+            <ToolIcon name="team" />
+          </span>
+          <span class="cloud-header-tool-button__label">团队</span>
+        </button>
+
+        <div ref="langMenuRootRef" class="cloud-user-menu-root">
+          <button class="cloud-header-tool-button" type="button" @click.stop="toggleLangMenu">
+            <span class="cloud-header-tool-button__icon">
+              <ToolIcon name="language" />
+            </span>
+            <span class="cloud-header-tool-button__label">语言</span>
+            <span class="cloud-header-tool-button__caret" aria-hidden="true">▾</span>
+          </button>
+          <div v-if="langMenuOpen" class="cloud-user-menu cloud-lang-menu" role="menu">
+            <button
+              class="cloud-user-menu-item"
+              :class="{ 'is-active': locale === 'zh' }"
+              type="button"
+              role="menuitem"
+              @click="selectLocale('zh')"
+            >
+              中文
+            </button>
+            <button
+              class="cloud-user-menu-item"
+              :class="{ 'is-active': locale === 'en' }"
+              type="button"
+              role="menuitem"
+              @click="selectLocale('en')"
+            >
+              English
+            </button>
+          </div>
+        </div>
+
+        <button class="cloud-header-tool-button" type="button" @click="showComingSoon('帮助')">
+          <span class="cloud-header-tool-button__icon">
+            <ToolIcon name="help" />
+          </span>
+          <span class="cloud-header-tool-button__label">帮助</span>
+        </button>
 
         <div ref="userMenuRootRef" class="cloud-user-menu-root">
           <button class="cloud-user-chip" type="button" @click.stop="toggleUserMenu">
-            {{ authStore.displayName || authStore.username || '用户' }}
+            我的
           </button>
           <div v-if="userMenuOpen" class="cloud-user-menu" role="menu">
             <div class="cloud-user-menu-info">

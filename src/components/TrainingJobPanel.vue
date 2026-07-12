@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useTrainingJobStore } from '@/stores/trainingJob'
 import type { JobStatus } from '@/api/datasets'
+import { showComingSoon } from '@/utils/comingSoon'
 
 const props = defineProps<{
   projectId: string | null
@@ -64,6 +65,10 @@ onBeforeUnmount(() => {
 function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN')
 }
+
+function handleDeleteRecord() {
+  showComingSoon('删除上传记录')
+}
 </script>
 
 <template>
@@ -90,7 +95,16 @@ function formatTime(value: string) {
             <strong>{{ job.name }}</strong>
             <p class="training-job-meta">{{ formatTime(job.createdAt) }}</p>
           </div>
-          <span class="cloud-badge" :class="badgeClass(job.status)">{{ statusLabel[job.status] }}</span>
+          <div class="training-job-item__header-actions">
+            <span class="cloud-badge" :class="badgeClass(job.status)">{{ statusLabel[job.status] }}</span>
+            <button
+              class="cloud-btn cloud-btn--ghost cloud-btn--compact"
+              type="button"
+              @click="handleDeleteRecord"
+            >
+              删除上传记录
+            </button>
+          </div>
         </div>
 
         <div class="cloud-progress">
