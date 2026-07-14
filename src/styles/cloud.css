@@ -94,6 +94,11 @@
   -webkit-backdrop-filter: var(--cloud-glass-blur);
 }
 
+.cloud-shell--immersive .cloud-user-menu,
+.cloud-shell--immersive .cloud-lang-menu {
+  z-index: 100;
+}
+
 .cloud-shell--immersive .cloud-body {
   grid-row: 1 / 3;
   grid-template-columns: minmax(0, 1fr);
@@ -142,6 +147,7 @@
   backdrop-filter: var(--cloud-glass-blur);
   -webkit-backdrop-filter: var(--cloud-glass-blur);
   box-shadow: var(--cloud-inset);
+  overflow: visible;
 }
 
 .cloud-brand {
@@ -237,6 +243,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  position: relative;
+  z-index: 2;
 }
 
 .cloud-header-tool-button {
@@ -250,6 +258,7 @@
   background: rgba(0, 0, 0, 0.28);
   color: var(--cloud-text-muted);
   font-size: 12px;
+  cursor: pointer;
   transition: background 220ms ease, border-color 220ms ease, color 220ms ease;
 }
 
@@ -307,7 +316,7 @@
 
 .cloud-user-menu-root {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .cloud-user-chip {
@@ -317,6 +326,7 @@
   color: var(--cloud-text);
   font-size: 12px;
   letter-spacing: 0.04em;
+  cursor: pointer;
 }
 
 .cloud-user-menu {
@@ -788,6 +798,64 @@
   background: rgba(14, 16, 22, 0.92);
   backdrop-filter: var(--cloud-glass-blur);
   box-shadow: var(--cloud-shadow);
+}
+
+.header-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.header-modal-backdrop .app-modal {
+  border-radius: var(--cloud-radius);
+  border: 1px solid var(--cloud-border-strong);
+  background: rgba(14, 16, 22, 0.92);
+  backdrop-filter: var(--cloud-glass-blur);
+  -webkit-backdrop-filter: var(--cloud-glass-blur);
+  box-shadow: var(--cloud-shadow);
+}
+
+.header-modal {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.header-modal-user-info {
+  margin: 0;
+  padding: 12px 0 0;
+  border-bottom: none;
+}
+
+.header-modal-options {
+  display: grid;
+  gap: 6px;
+}
+
+.header-modal-option {
+  width: 100%;
+}
+
+.header-modal-footer {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.header-modal-footer .side-button.primary {
+  border-color: transparent;
+  background: var(--cloud-cta-bg);
+  color: var(--cloud-cta-text);
+  font-weight: 700;
+}
+
+.header-modal-footer .side-button.primary:hover:not(:disabled) {
+  background: #e8eaef;
+  color: var(--cloud-cta-text);
 }
 
 .cloud-shell .side-button.primary,

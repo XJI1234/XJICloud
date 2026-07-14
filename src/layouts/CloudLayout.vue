@@ -10,10 +10,8 @@ import { showComingSoon } from '@/utils/comingSoon'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const userMenuOpen = ref(false)
-const langMenuOpen = ref(false)
-const userMenuRootRef = ref<HTMLElement | null>(null)
-const langMenuRootRef = ref<HTMLElement | null>(null)
+const userModalVisible = ref(false)
+const langModalVisible = ref(false)
 const locale = ref<'zh' | 'en'>('zh')
 
 const cameraStatus = inject(CAMERA_STATUS_KEY, ref<CameraStatus>({
@@ -59,62 +57,50 @@ function goHome() {
   }
 }
 
-function toggleUserMenu() {
-  langMenuOpen.value = false
-  userMenuOpen.value = !userMenuOpen.value
+function openUserModal() {
+  langModalVisible.value = false
+  userModalVisible.value = true
 }
 
-function closeUserMenu() {
-  userMenuOpen.value = false
+function closeUserModal() {
+  userModalVisible.value = false
 }
 
-function toggleLangMenu() {
-  userMenuOpen.value = false
-  langMenuOpen.value = !langMenuOpen.value
+function openLangModal() {
+  userModalVisible.value = false
+  langModalVisible.value = true
 }
 
-function closeLangMenu() {
-  langMenuOpen.value = false
+function closeLangModal() {
+  langModalVisible.value = false
+}
+
+function closeAllModals() {
+  closeUserModal()
+  closeLangModal()
 }
 
 function selectLocale(next: 'zh' | 'en') {
   if (next === 'en') {
+    closeLangModal()
     showComingSoon('English 语言包')
-    closeLangMenu()
     return
   }
 
   locale.value = 'zh'
   localStorage.setItem('xjicloud_locale', 'zh')
-  closeLangMenu()
+  closeLangModal()
 }
 
 async function logout() {
-  closeUserMenu()
+  closeUserModal()
   clearUserSession()
   await router.replace({ name: 'login' })
 }
 
-function onDocumentClick(event: MouseEvent) {
-  const target = event.target
-
-  if (userMenuOpen.value) {
-    if (userMenuRootRef.value && target instanceof Node && !userMenuRootRef.value.contains(target)) {
-      closeUserMenu()
-    }
-  }
-
-  if (langMenuOpen.value) {
-    if (langMenuRootRef.value && target instanceof Node && !langMenuRootRef.value.contains(target)) {
-      closeLangMenu()
-    }
-  }
-}
-
 function onDocumentKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
-    closeUserMenu()
-    closeLangMenu()
+    closeAllModals()
   }
 }
 
@@ -124,12 +110,10 @@ onMounted(() => {
     locale.value = 'zh'
   }
 
-  document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onDocumentKeydown)
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocumentClick)
   document.removeEventListener('keydown', onDocumentKeydown)
 })
 
@@ -174,35 +158,12 @@ const isImmersiveRoute = computed(() => route.name === 'home')
           <span class="cloud-header-tool-button__label">团队</span>
         </button>
 
-        <div ref="langMenuRootRef" class="cloud-user-menu-root">
-          <button class="cloud-header-tool-button" type="button" @click.stop="toggleLangMenu">
-            <span class="cloud-header-tool-button__icon">
-              <ToolIcon name="language" />
-            </span>
-            <span class="cloud-header-tool-button__label">语言</span>
-            <span class="cloud-header-tool-button__caret" aria-hidden="true">▾</span>
-          </button>
-          <div v-if="langMenuOpen" class="cloud-user-menu cloud-lang-menu" role="menu">
-            <button
-              class="cloud-user-menu-item"
-              :class="{ 'is-active': locale === 'zh' }"
-              type="button"
-              role="menuitem"
-              @click="selectLocale('zh')"
-            >
-              中文
-            </button>
-            <button
-              class="cloud-user-menu-item"
-              :class="{ 'is-active': locale === 'en' }"
-              type="button"
-              role="menuitem"
-              @click="selectLocale('en')"
-            >
-              English
-            </button>
-          </div>
-        </div>
+        <button class="cloud-header-tool-button" type="button" @click="openLangModal">
+          <span class="cloud-header-tool-button__icon">
+            <ToolIcon name="language" />
+          </span>
+          <span class="cloud-header-tool-button__label">语言</span>
+        </button>
 
         <button class="cloud-header-tool-button" type="button" @click="showComingSoon('帮助')">
           <span class="cloud-header-tool-button__icon">
@@ -211,20 +172,9 @@ const isImmersiveRoute = computed(() => route.name === 'home')
           <span class="cloud-header-tool-button__label">帮助</span>
         </button>
 
-        <div ref="userMenuRootRef" class="cloud-user-menu-root">
-          <button class="cloud-user-chip" type="button" @click.stop="toggleUserMenu">
-            我的
-          </button>
-          <div v-if="userMenuOpen" class="cloud-user-menu" role="menu">
-            <div class="cloud-user-menu-info">
-              <strong>{{ authStore.displayName || '未设置显示名' }}</strong>
-              <span>@{{ authStore.username || 'unknown' }}</span>
-            </div>
-            <button class="cloud-user-menu-item" type="button" role="menuitem" @click="logout">
-              退出登录
-            </button>
-          </div>
-        </div>
+        <button class="cloud-user-chip" type="button" @click="openUserModal">
+          我的
+        </button>
       </div>
     </header>
 
@@ -264,5 +214,62 @@ const isImmersiveRoute = computed(() => route.name === 'home')
       </div>
       <div class="cloud-status-hint">GIS 底图与双屏显示将在后续版本启用</div>
     </footer>
+
+    <Teleport to="body">
+      <div
+        v-if="userModalVisible"
+        class="header-modal-backdrop app-modal-backdrop"
+        @click.self="closeUserModal"
+      >
+        <div class="app-modal header-modal" role="dialog" aria-labelledby="user-modal-title">
+          <div class="app-modal-header">
+            <h2 id="user-modal-title" class="app-modal-title">我的</h2>
+          </div>
+          <div class="app-modal-body">
+            <div class="cloud-user-menu-info header-modal-user-info">
+              <strong>{{ authStore.displayName || '未设置显示名' }}</strong>
+              <span>@{{ authStore.username || 'unknown' }}</span>
+            </div>
+          </div>
+          <div class="app-modal-footer header-modal-footer">
+            <button class="side-button" type="button" @click="closeUserModal">关闭</button>
+            <button class="side-button primary" type="button" @click="logout">退出登录</button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="langModalVisible"
+        class="header-modal-backdrop app-modal-backdrop"
+        @click.self="closeLangModal"
+      >
+        <div class="app-modal header-modal" role="dialog" aria-labelledby="lang-modal-title">
+          <div class="app-modal-header">
+            <h2 id="lang-modal-title" class="app-modal-title">语言</h2>
+          </div>
+          <div class="app-modal-body header-modal-options">
+            <button
+              class="header-modal-option cloud-user-menu-item"
+              :class="{ 'is-active': locale === 'zh' }"
+              type="button"
+              @click="selectLocale('zh')"
+            >
+              中文
+            </button>
+            <button
+              class="header-modal-option cloud-user-menu-item"
+              :class="{ 'is-active': locale === 'en' }"
+              type="button"
+              @click="selectLocale('en')"
+            >
+              English
+            </button>
+          </div>
+          <div class="app-modal-footer header-modal-footer">
+            <button class="side-button" type="button" @click="closeLangModal">关闭</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
