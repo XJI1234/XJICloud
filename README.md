@@ -111,6 +111,104 @@ npm run dev
 5. **模型查看**：Spark 标注 / 编辑 / 导出 SPZ  
 6. **高级编辑**：SuperSplat 原生编辑，**保存到云端** 上传 PLY（覆盖云端模型文件）；保存后可在模型查看中重新加载  
 
+## COLMAP 稀疏重建测试 Docker
+
+仓库内置一个**离线测试容器**，用于验证 COLMAP 稀疏重建链路是否打通。该测试**不依赖 backend / Redis / MinIO**，只需要输入一个 zip 数据集并挂载输出目录。
+
+适用场景：
+
+- 在开发机或 GPU 服务器上快速验证 `colmap/colmap` 镜像与本地 NVIDIA 运行环境是否匹配
+- 使用 `south-building.zip` 等公开数据集做一次完整的 `feature_extractor -> exhaustive_matcher -> mapper` 流程
+- 在接入真实训练算法前，先确认 Worker 测试镜像本身可完成 COLMAP 稀疏重建
+
+### 输入与输出
+
+- 推荐输入：仓库根目录 `south-building.zip`
+- 兼容输入：`gpu-worker/testdata/input/south-building.zip`
+- 默认输出目录：`gpu-worker/testdata/output/`
+- 成功产物目录：`gpu-worker/testdata/output/sparse/0/`
+
+常见输出文件：
+
+```text
+cameras.bin
+images.bin
+points3D.bin
+```
+
+### 方式 A：本机直接调用（推荐）
+
+适用于本机已安装 Docker、NVIDIA Driver、NVIDIA Container Toolkit 的 Linux / WSL2 + GPU 环境。
+
+```bash
+cd XJICloud
+
+# 清理旧结果
+rm -rf gpu-worker/testdata/output/*
+mkdir -p gpu-worker/testdata/output
+
+# 直接运行测试镜像
+docker run --rm --gpus all \
+  -v "$(pwd)/gpu-worker/testdata/output:/output" \
+  -v "$(pwd)/south-building.zip:/workspace/south-building.zip:ro" \
+  -e INPUT_ZIP=/workspace/south-building.zip \
+  -e COLMAP_SINGLE_CAMERA=0 \
+  -e COLMAP_USE_GPU=1 \
+  -e EXPORT_PLY=0 \
+  deploy-gpu-worker-test:latest
+```
+
+说明：
+
+- `--gpus all` 必须存在，否则容器内即使 `COLMAP_USE_GPU=1` 也可能报 CUDA / driver 相关错误
+- `INPUT_ZIP` 可以指向任意挂载进容器的 zip 文件
+- `EXPORT_PLY=0` 时默认只做稀疏重建，不额外生成 `model.ply`
+
+### 方式 B：通过 Compose 调用
+
+`deploy/docker-compose.gpu-test.yml` 已挂载：
+
+- `../gpu-worker/testdata/input -> /input`
+- `../gpu-worker/testdata/output -> /output`
+- `../south-building.zip -> /workspace/south-building.zip`
+
+默认环境变量如下：
+
+```yaml
+INPUT_ZIP: /input/south-building.zip
+COLMAP_SINGLE_CAMERA: "0"
+COLMAP_USE_GPU: "1"
+EXPORT_PLY: "0"
+```
+
+如果你希望直接使用仓库根目录的 zip，可以临时取消注释 `deploy/docker-compose.gpu-test.yml` 中的 `command:` 示例，或等价传入：
+
+```bash
+./entrypoint.local.sh --input-zip /workspace/south-building.zip --use-gpu 1
+```
+
+### 可选参数
+
+`gpu-worker/entrypoint.local.sh` 现已支持命令行参数覆盖环境变量：
+
+- `--input-zip PATH`
+- `--extract-dir PATH`
+- `--output-root PATH`
+- `--output-ply PATH`
+- `--export-ply 0|1`
+- `--single-camera 0|1`
+- `--use-gpu 0|1`
+
+例如：
+
+```bash
+./entrypoint.local.sh \
+  --input-zip /workspace/south-building.zip \
+  --output-root /output \
+  --use-gpu 1 \
+  --single-camera 0
+```
+
 ### 双编辑器说明
 
 | 入口 | 引擎 | 云端保存格式 |

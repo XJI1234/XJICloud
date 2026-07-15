@@ -209,6 +209,16 @@ docker build -t xjicloud/gpu-worker:latest gpu-worker/
 # docker push registry.cn-hangzhou.aliyuncs.com/your-ns/xjicloud-gpu-worker:latest
 ```
 
+如果你要验证 **COLMAP 离线稀疏重建容器**，另有一个独立测试镜像：
+
+```bash
+docker build -f gpu-worker/Dockerfile.test \
+  -t xjicloud/gpu-worker-colmap-test:latest \
+  gpu-worker/
+```
+
+该测试镜像入口为 `gpu-worker/entrypoint.local.sh`，不依赖 backend / Redis / MinIO，直接读取 zip 数据集并输出到挂载目录。
+
 ---
 
 ## 5. 分机部署步骤
@@ -526,6 +536,55 @@ Worker 通过后端下发的 **presigned URL** 访问 OSS，通常**无需**在 
 
 启动流程：等待 B `/actuator/health` → 注册 → 心跳 → 长轮询领任务 → mock 训练 → 回传模型。
 
+#### 5.4.1 本机 / GPU 服务器离线验证 COLMAP 稀疏重建
+
+如果目标是验证**当前 GPU 主机上的 COLMAP 运行环境**，建议先运行离线测试容器，而不是直接连后端 Worker。
+
+前置条件：
+
+- 已安装 Docker
+- 已安装 NVIDIA Driver
+- 已安装 NVIDIA Container Toolkit
+- `docker run --gpus all ...` 可正常工作
+
+推荐输入直接使用仓库根目录的 `south-building.zip`：
+
+```bash
+cd XJICloud
+
+rm -rf gpu-worker/testdata/output/*
+mkdir -p gpu-worker/testdata/output
+
+docker run --rm --gpus all \
+  -v "$(pwd)/gpu-worker/testdata/output:/output" \
+  -v "$(pwd)/south-building.zip:/workspace/south-building.zip:ro" \
+  -e INPUT_ZIP=/workspace/south-building.zip \
+  -e COLMAP_SINGLE_CAMERA=0 \
+  -e COLMAP_USE_GPU=1 \
+  -e EXPORT_PLY=0 \
+  deploy-gpu-worker-test:latest
+```
+
+验证：
+
+```bash
+ls -lah gpu-worker/testdata/output/sparse/0
+```
+
+预期文件：
+
+```text
+cameras.bin
+images.bin
+points3D.bin
+```
+
+补充说明：
+
+- `gpu-worker/entrypoint.local.sh` 已支持命令行参数覆盖环境变量，例如 `--input-zip`、`--output-root`、`--use-gpu`
+- 如果只想验证链路，不强依赖 GPU，也可以改为 `COLMAP_USE_GPU=0`
+- `deploy/docker-compose.gpu-test.yml` 提供了等价测试挂载示例，但 GPU 注入是否生效取决于目标机器 Docker / Compose 环境
+
 ---
 
 ### 5.5 生产环境 — 阿里云 OSS
@@ -612,6 +671,65 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 ```
 
 具体 API 字段随阿里云产品更新，请以 [容器计算服务 CCI 文档](https://help.aliyun.com/product/97658.html) 为准。
+
+#### 5.6.5 阿里云上的容器用法区分
+
+阿里云上建议区分两类镜像用途：
+
+| 用途 | 镜像 | 入口 | 是否依赖后端 |
+|------|------|------|--------------|
+| 正式 Worker | `xjicloud/gpu-worker:latest` | `entrypoint.sh` | 是 |
+| 离线 COLMAP 测试 | `xjicloud/gpu-worker-colmap-test:latest` | `entrypoint.local.sh` | 否 |
+
+#### 5.6.6 阿里云 ECS 上直接验证离线 COLMAP 容器
+
+如果你有一台阿里云 GPU ECS，最简单的验证方式是在 ECS 上直接运行离线测试容器：
+
+```bash
+docker run --rm --gpus all \
+  -v /data/xjicloud-test/output:/output \
+  -v /data/xjicloud-test/south-building.zip:/workspace/south-building.zip:ro \
+  -e INPUT_ZIP=/workspace/south-building.zip \
+  -e COLMAP_SINGLE_CAMERA=0 \
+  -e COLMAP_USE_GPU=1 \
+  -e EXPORT_PLY=0 \
+  registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker-colmap-test:latest
+```
+
+验证：
+
+```bash
+ls -lah /data/xjicloud-test/output/sparse/0
+```
+
+#### 5.6.7 阿里云 CCI 上部署离线 COLMAP 测试容器
+
+如果要在 CCI 中做一次性环境验收或批处理重建，可以使用离线 COLMAP 测试镜像，而不是连接后端队列的正式 Worker 镜像。
+
+至少需要配置这些环境变量：
+
+| 变量 | 示例 | 说明 |
+|------|------|------|
+| `INPUT_ZIP` | `/workspace/south-building.zip` | 容器内 zip 路径 |
+| `COLMAP_SINGLE_CAMERA` | `0` | 官方 south-building 推荐 |
+| `COLMAP_USE_GPU` | `1` | 启用 GPU 特征提取与匹配 |
+| `EXPORT_PLY` | `0` | 默认只输出 sparse/0 |
+
+如果希望直接覆盖容器入口参数，也可以使用：
+
+```bash
+./entrypoint.local.sh \
+  --input-zip /workspace/south-building.zip \
+  --output-root /output \
+  --use-gpu 1 \
+  --single-camera 0
+```
+
+生产建议：
+
+- **正式训练链路**继续使用 `xjicloud/gpu-worker:latest` 连接后端队列
+- **离线 COLMAP 容器**用于镜像验收、GPU 环境验收、算法试跑或离线批处理任务
+- 如果离线结果还要进入业务系统，可在后续流程中再上传 OSS 或回传后端
 
 ---
 

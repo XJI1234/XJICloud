@@ -33,3 +33,10 @@ deploy/config/install-summary.txt
 *.sln
 *.sw?
 Cookies
+
+# Local COLMAP testdata / large datasets (do not push to GitHub)
+south-building.zip
+gpu-worker/testdata/input/**
+!gpu-worker/testdata/input/.gitkeep
+gpu-worker/testdata/output/**
+!gpu-worker/testdata/output/.gitkeep

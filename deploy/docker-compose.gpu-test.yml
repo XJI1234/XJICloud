@@ -4,11 +4,18 @@ services:
       context: ../gpu-worker
       dockerfile: Dockerfile.test
       network: host
+    runtime: nvidia
     volumes:
       - ../gpu-worker/testdata/input:/input:ro
       - ../gpu-worker/testdata/output:/output
+      # Optional: allow using repo-root south-building.zip without copying
+      - ../south-building.zip:/workspace/south-building.zip:ro
     environment:
       INPUT_ZIP: /input/south-building.zip
       COLMAP_SINGLE_CAMERA: "0"
       COLMAP_USE_GPU: "1"
       EXPORT_PLY: "0"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    # Optional args (takes precedence over env defaults):
+    # command: ["./entrypoint.local.sh", "--input-zip", "/workspace/south-building.zip", "--use-gpu", "1"]

@@ -4,6 +4,7 @@ ARG USE_CN_APT_MIRROR=1
 ARG UBUNTU_MIRROR=https://mirrors.aliyun.com/ubuntu
 
 COPY configure-apt-mirrors.sh /usr/local/bin/configure-apt-mirrors.sh
+RUN sed -i 's/\r$//' /usr/local/bin/configure-apt-mirrors.sh
 RUN if [ "${USE_CN_APT_MIRROR}" = "1" ]; then \
         UBUNTU_MIRROR="${UBUNTU_MIRROR}" bash /usr/local/bin/configure-apt-mirrors.sh; \
     fi && \
@@ -14,7 +15,7 @@ RUN if [ "${USE_CN_APT_MIRROR}" = "1" ]; then \
 WORKDIR /opt/xjicloud-worker
 
 COPY entrypoint.local.sh ./
-RUN chmod +x entrypoint.local.sh
+RUN sed -i 's/\r$//' entrypoint.local.sh && chmod +x entrypoint.local.sh
 
 ENV INPUT_ZIP=/input/south-building.zip \
     COLMAP_SINGLE_CAMERA=0 \

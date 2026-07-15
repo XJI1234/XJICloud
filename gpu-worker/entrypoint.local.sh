@@ -1,6 +1,29 @@
 #!/bin/bash
 set -euo pipefail
 
+usage() {
+    cat <<'EOF'
+[entrypoint] XJICloud COLMAP local run
+
+Usage:
+  entrypoint.local.sh [options]
+
+Options (override env defaults):
+  --input-zip PATH         Input zip file path (default: $INPUT_ZIP or /input/south-building.zip)
+  --extract-dir PATH       Extraction directory (default: $EXTRACT_DIR or /tmp/colmap_input)
+  --output-root PATH       Output root directory (default: $OUTPUT_ROOT or /output)
+  --output-ply PATH        Optional PLY output path (default: $OUTPUT_PATH or $OUTPUT_ROOT/model.ply)
+  --export-ply 0|1         Whether to export sparse as PLY (default: $EXPORT_PLY or 0)
+  --single-camera 0|1      COLMAP ImageReader.single_camera (default: $COLMAP_SINGLE_CAMERA or 0)
+  --use-gpu 0|1            COLMAP feature/matching use_gpu (default: $COLMAP_USE_GPU or 0)
+  -h, --help               Show this help
+
+Examples:
+  ./entrypoint.local.sh --input-zip /workspace/south-building.zip --use-gpu 1
+  ./entrypoint.local.sh --input-zip /input/south-building.zip --output-root /output --export-ply 0
+EOF
+}
+
 echo "[entrypoint] XJICloud COLMAP local run starting..."
 
 if ! command -v colmap &>/dev/null; then
@@ -21,6 +44,35 @@ COLMAP_SINGLE_CAMERA="${COLMAP_SINGLE_CAMERA:-0}"
 
 # 没有 GPU 时也能跑：建议先把 COLMAP_USE_GPU=0
 COLMAP_USE_GPU="${COLMAP_USE_GPU:-0}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --input-zip)
+            INPUT_ZIP="$2"; shift 2 ;;
+        --extract-dir)
+            EXTRACT_DIR="$2"; shift 2 ;;
+        --output-root)
+            OUTPUT_ROOT="$2"; shift 2 ;;
+        --output-ply)
+            OUTPUT_PATH="$2"; shift 2 ;;
+        --export-ply)
+            EXPORT_PLY="$2"; shift 2 ;;
+        --single-camera)
+            COLMAP_SINGLE_CAMERA="$2"; shift 2 ;;
+        --use-gpu)
+            COLMAP_USE_GPU="$2"; shift 2 ;;
+        -h|--help)
+            usage; exit 0 ;;
+        *)
+            echo "[entrypoint] ERROR: unknown arg: $1" >&2
+            usage
+            exit 2
+            ;;
+    esac
+done
+
+DATABASE_PATH="${OUTPUT_ROOT}/database.db"
+SPARSE_DIR="${OUTPUT_ROOT}/sparse"
 
 DATABASE_PATH="${OUTPUT_ROOT}/database.db"
 SPARSE_DIR="${OUTPUT_ROOT}/sparse"
