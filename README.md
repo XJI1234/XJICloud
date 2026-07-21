@@ -12,7 +12,7 @@
 ## 架构概览
 
 ```
-浏览器 / Electron
+     浏览器
        │
        ▼
   Vue 3 前端 (Vite)          ──►  SparkViewport + WASM
