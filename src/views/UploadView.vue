@@ -74,6 +74,7 @@ function goToViewer() {
 
 <template>
   <div class="upload-page">
+    <div class="cloud-page-inner">
     <header class="upload-header">
       <div>
         <p class="eyebrow">数据上传</p>
@@ -148,5 +149,6 @@ function goToViewer() {
       accept=".ply,.spz"
       @change="handleUpload"
     />
+    </div>
   </div>
 </template>

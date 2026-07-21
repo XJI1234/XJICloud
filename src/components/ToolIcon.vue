@@ -2,7 +2,7 @@
 import { computed, h } from 'vue'
 
 const props = defineProps<{
-  name: 'home' | 'route' | 'upload' | 'view' | 'edit'
+  name: 'home' | 'route' | 'upload' | 'view' | 'edit' | 'team' | 'language' | 'help'
 }>()
 
 const svgAttrs = {
@@ -43,6 +43,25 @@ const icons = {
       h('path', { d: 'M4 20h4l10-10-4-4L4 16v4z' }),
       h('path', { d: 'M13 6l4 4' }),
       h('path', { d: 'M3 21h18', 'stroke-width': '1.25' }),
+    ]),
+  team: () =>
+    h('svg', svgAttrs, [
+      h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }),
+      h('circle', { cx: '9', cy: '7', r: '4' }),
+      h('path', { d: 'M22 21v-2a4 4 0 0 0-3-3.87' }),
+      h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
+    ]),
+  language: () =>
+    h('svg', svgAttrs, [
+      h('circle', { cx: '12', cy: '12', r: '10' }),
+      h('path', { d: 'M2 12h20' }),
+      h('path', { d: 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z' }),
+    ]),
+  help: () =>
+    h('svg', svgAttrs, [
+      h('circle', { cx: '12', cy: '12', r: '10' }),
+      h('path', { d: 'M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3' }),
+      h('path', { d: 'M12 17h.01' }),
     ]),
 } as const
 

@@ -452,6 +452,14 @@ xjicloud:
 
 ### 5.2 服务器 B — 后端
 
+<<<<<<< HEAD
+
+
+#### 依赖：PostgreSQL + Redis
+=======
+>>>>>>> origin/main
+
+
 #### 依赖：Java 17+、PostgreSQL、Redis
 
 **Java 17 为硬性要求**（Spring Boot 3.3 不支持 Java 8/11）。构建前请确认：
