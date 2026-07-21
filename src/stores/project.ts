@@ -89,6 +89,15 @@ export const useProjectStore = defineStore('project', () => {
     setActiveProject(projectId)
   }
 
+  function resetOnLogout() {
+    projects.value = []
+    activeProjectId.value = null
+    recentEntries.value = []
+    loading.value = false
+    localStorage.removeItem('xjicloud_active_project_id')
+    localStorage.removeItem(RECENT_PROJECTS_KEY)
+  }
+
   return {
     projects,
     activeProjectId,
@@ -100,5 +109,6 @@ export const useProjectStore = defineStore('project', () => {
     setActiveProject,
     openProject,
     recordRecentAccess,
+    resetOnLogout,
   }
 })

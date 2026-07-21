@@ -65,6 +65,8 @@ flowchart TB
 
 > **说明：** PLY/SPZ 模型文件仍存后端服务器 B 本地磁盘（`xjicloud.storage.root`）；图片数据集与训练产出走 OSS（C 或阿里云 OSS）。
 
+
+
 ### 1.2 流量与连接关系
 
 
@@ -77,6 +79,8 @@ flowchart TB
 | 服务器 B       | PostgreSQL / Redis | 5432 / 6379      | 元数据与任务队列                   |
 | 服务器 D / CCI | 服务器 B              | 8080 HTTP(S)     | Worker 注册、心跳、领任务           |
 | 服务器 D / CCI | OSS                | HTTPS            | 通过 presigned URL 下载图片、上传模型 |
+
+
 
 
 ### 1.3 预生产 vs 生产对照
@@ -92,20 +96,26 @@ flowchart TB
 | 前端           | 服务器 A + 域名 + HTTPS                                | 同左，建议 WAF/CDN                                              |
 
 
+
+
 ### 1.4 运维能力说明
 
 运维能力（OSS/DB 配置、Worker 监控）统一在 **Spring Boot 后端（8080）** 与 **Vue 管理面板**，无需单独部署额外运维服务。
 
-| 能力 | 实现方式 |
-|------|----------|
-| OSS / 数据库初始配置 | `sudo ./deploy/deploy-backend.sh configure` 写入 `/etc/xjicloud/application-prod.yml` |
-| OSS 运行时热更新 | 管理后台 **OSS 对象存储**（写入 `system_config` 表） |
-| GPU 算力 / Worker | 手动启动 Docker Worker 或阿里云 CCI，向 `/api/v1/worker/*` 注册；队列深度见管理面板 |
-| SSH 终端 / 节点 Agent | 运维直连 SSH；Worker 心跳在管理面板「算力容器」查看 |
-| K8s / Docker 部署 | [`deploy/k8s/scripts/`](k8s/scripts/) 与 `docker-compose`（K8s 用 secrets + configmap，不用 shell 向导） |
-| ECI 自动扩缩 | 不内置；可按队列深度用阿里云 API / 运维脚本手动启停 CCI（见 [§5.6.3](#563-按需启停)） |
+
+| 能力                | 实现方式                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| OSS / 数据库初始配置     | `sudo ./deploy/deploy-backend.sh configure` 写入 `/etc/xjicloud/application-prod.yml`             |
+| OSS 运行时热更新        | 管理后台 **OSS 对象存储**（写入 `system_config` 表）                                                         |
+| GPU 算力 / Worker   | 手动启动 Docker Worker 或阿里云 CCI，向 `/api/v1/worker/*` 注册；队列深度见管理面板                                   |
+| SSH 终端 / 节点 Agent | 运维直连 SSH；Worker 心跳在管理面板「算力容器」查看                                                                 |
+| K8s / Docker 部署   | `[deploy/k8s/scripts/](k8s/scripts/)` 与 `docker-compose`（K8s 用 secrets + configmap，不用 shell 向导） |
+| ECI 自动扩缩          | 不内置；可按队列深度用阿里云 API / 运维脚本手动启停 CCI（见 [§5.6.3](#563-按需启停)）                                        |
+
 
 ---
+
+
 
 ## 2. 环境要求
 
@@ -126,6 +136,8 @@ flowchart TB
 
 ---
 
+
+
 ## 3. 网络与安全组规划
 
 以下为 **最小放通** 建议（优先使用**内网/VPC 互通**，公网仅开放必要入口）。
@@ -138,6 +150,8 @@ flowchart TB
 | 入站  | 443  | 0.0.0.0/0   | HTTPS 用户访问       |
 | 入站  | 80   | 0.0.0.0/0   | 可选，跳转 HTTPS      |
 | 出站  | 8080 | 服务器 B 内网 IP | Nginx 反代 `/api/` |
+
+
 
 
 ### 3.2 服务器 B（后端）
@@ -164,6 +178,8 @@ flowchart TB
 | 入站  | 9001 | 运维 IP                              | MinIO 控制台（可选，勿公开）                  |
 
 
+
+
 ### 3.4 服务器 D（GPU Worker，预生产）
 
 
@@ -175,6 +191,8 @@ flowchart TB
 
 ---
 
+
+
 ## 4. 构建（在构建机或各服务器上执行）
 
 ```bash
@@ -182,16 +200,21 @@ git clone https://github.com/XJI1234/XJICloud.git
 cd XJICloud
 ```
 
+
+
 ### 4.1 用户前端 + 管理面板
 
 ```bash
 npm ci
 npm run build:supersplat   # 可选，需 modules/supersplat 源码
 npm run build
-npm run build:admin
+cd admin
+npm run build
 # 产物：dist/ 、admin/dist/
 # 或：npm run build:all:cloud
 ```
+
+
 
 ### 4.2 后端
 
@@ -199,6 +222,8 @@ npm run build:admin
 cd backend && mvn -DskipTests package
 # 产物：backend/target/xjicloud-backend-1.0.0.jar
 ```
+
+
 
 ### 4.3 GPU Worker 镜像
 
@@ -210,6 +235,8 @@ docker build -t xjicloud/gpu-worker:latest gpu-worker/
 ```
 
 ---
+
+
 
 ## 5. 分机部署步骤
 
@@ -225,6 +252,8 @@ docker build -t xjicloud/gpu-worker:latest gpu-worker/
 
 
 ---
+
+
 
 ### 5.1 服务器 C — MinIO（预生产专用，Linux 原生安装）
 
@@ -250,6 +279,8 @@ rm -f /tmp/minio /tmp/mc
 minio --version
 mc --version
 ```
+
+
 
 #### 5.1.2 环境变量与 systemd 服务
 
@@ -298,6 +329,8 @@ curl -I http://127.0.0.1:9000/minio/health/live
 # 控制台（仅运维内网访问）：http://10.0.1.30:9001
 ```
 
+
+
 #### 5.1.3 防火墙（若启用 firewalld）
 
 ```bash
@@ -320,6 +353,8 @@ mc alias set local http://127.0.0.1:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASS
 mc mb --ignore-existing local/xjicloud
 mc ls local
 ```
+
+
 
 #### 5.1.5 CORS（社区版 MinIO：仅全局 CORS）
 
@@ -366,7 +401,7 @@ sudo firewall-cmd --reload
 
 ---
 
-**步骤 3：在后端 B 配置 API CORS（与 MinIO 无关，但 `/api/` 也需要）**
+**步骤 3：在后端 B 配置 API CORS（与 MinIO 无关，但** `/api/` **也需要）**
 
 `deploy/config/application-prod.yml`：
 
@@ -413,22 +448,61 @@ xjicloud:
 
 ---
 
+
+
 ### 5.2 服务器 B — 后端
 
-#### 依赖：PostgreSQL + Redis
+#### 依赖：Java 17+、PostgreSQL、Redis
 
-可与 JAR 同机安装；生产推荐 **RDS + 云 Redis**，在 `application-prod.yml` 中填**内网地址**。
+**Java 17 为硬性要求**（Spring Boot 3.3 不支持 Java 8/11）。构建前请确认：
+
+```bash
+java -version
+# 应显示 openjdk version "17.x" 或 "21.x"
+```
+
+若版本过低，在 **Alibaba Cloud Linux / CentOS** 上：
+
+```bash
+sudo yum install -y java-17-openjdk java-17-openjdk-devel
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
+```
+
+**Ubuntu / Debian：**
+
+```bash
+sudo apt update && sudo apt install -y openjdk-17-jdk
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
+可与 JAR 同机安装 PostgreSQL、Redis；生产推荐 **RDS + 云 Redis**，在 `application-prod.yml` 中填**内网地址**。
 
 ```bash
 # PostgreSQL（同机示例）
+sudo apt update && sudo apt install -y postgresql-client
+
+
 sudo -u postgres psql <<'SQL'
 CREATE USER xjicloud WITH PASSWORD 'your-password';
 CREATE DATABASE xjicloud OWNER xjicloud;
 SQL
 
+#配置权限
+psql -h 127.0.0.1 -U postgres -d xjicloud
+GRANT ALL ON SCHEMA public TO xjicloud;
+GRANT CREATE ON SCHEMA public TO xjicloud;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO xjicloud;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO xjicloud;
+
+
 # Redis（同机示例）
 sudo systemctl enable --now redis
 ```
+
+
 
 #### 配置
 
@@ -462,6 +536,8 @@ xjicloud:
     shared-secret: 与 Worker/CCI 环境变量一致的密钥
 ```
 
+
+
 #### 一键部署
 
 ```bash
@@ -478,6 +554,8 @@ curl http://10.0.1.20:8080/actuator/health
 详见 `[deploy/config/README.md](config/README.md)`、`[deploy/deploy-backend.sh](deploy/deploy-backend.sh)`。
 
 ---
+
+
 
 ### 5.3 服务器 A — 前端
 
@@ -510,6 +588,8 @@ sudo certbot --nginx -d cloud.example.com
 
 ---
 
+
+
 ### 5.4 服务器 D — GPU Worker（预生产）
 
 ```bash
@@ -528,6 +608,8 @@ Worker 通过后端下发的 **presigned URL** 访问 OSS，通常**无需**在 
 
 ---
 
+
+
 ### 5.5 生产环境 — 阿里云 OSS
 
 生产**不再部署服务器 C（MinIO）**，在后端配置（或管理面板 **OSS 设置**）中改为：
@@ -535,25 +617,147 @@ Worker 通过后端下发的 **presigned URL** 访问 OSS，通常**无需**在 
 ```yaml
 xjicloud:
   oss:
-    endpoint: https://oss-cn-hangzhou.aliyuncs.com   # 与 Bucket 地域一致
-    region: cn-hangzhou
-    bucket: your-production-bucket
+    endpoint: https://oss-cn-shanghai.aliyuncs.com   # 与 Bucket 地域一致
+    region: cn-shanghai
+    bucket: xjicloud
     access-key: RAM 子账号 AccessKey
     secret-key: RAM 子账号 SecretKey
     path-style-access: false
     presign-expiration-minutes: 120
 ```
 
-**控制台配置：**
+**控制台基础配置：**
 
-1. 创建 Bucket（建议私有读写）
-2. **跨域 CORS**：来源 `https://cloud.example.com`，方法 `GET/PUT/HEAD`，Headers `*`
-3. RAM 用户授予该 Bucket 的读写权限（`AliyunOSSFullAccess` 或自定义最小权限）
-4. 服务器 B 安全组允许 **出站 443** 访问 `*.aliyuncs.com`
+1. 创建 Bucket（建议私有读写），地域与 `endpoint` 一致（如华东 2 上海）
+2. RAM 用户授予该 Bucket 的读写权限（`AliyunOSSFullAccess` 或自定义最小权限：`oss:ListObjects`、`oss:GetObject`、`oss:PutObject`）
+3. 服务器 B 安全组允许 **出站 443** 访问 `*.aliyuncs.com`
 
-**验证：** 管理面板 → OSS 配置 → **测试连接**。
+**验证服务端连通：** 管理面板 → OSS 配置 → **测试连接**（成功表示后端 Java SDK 可访问 OSS）。
+
+> **注意：** 「测试连接」**不能**代替 Bucket 跨域配置。图片数据集上传是 **用户浏览器** 拿 presigned URL 后 **直连** `https://{bucket}.oss-cn-*.aliyuncs.com`，与后端测试走的是两条完全不同的路径。
+
+#### 5.5.1 为什么 OSS 测试成功，但前端上传仍报 CORS / 网络错误？
+
+系统里存在 **两套独立的 CORS**，缺一不可：
+
+| 检测方式 | 谁发起请求 | 目标 | 是否跨域 | 需要什么 |
+| -------- | ---------- | ---- | -------- | -------- |
+| 管理端 **OSS 测试** | 服务器 B（Java SDK） | 阿里云 OSS | 否 | RAM 密钥 + endpoint 正确 |
+| 前端调 **`/api/`** | 用户 PC 浏览器 | 服务器 B | 是 | 后端 `xjicloud.cors.allowed-origins` |
+| 用户 **图片数据集上传** | 用户 PC 浏览器 | **阿里云 OSS**（presigned PUT） | **是** | **OSS Bucket 跨域规则（CORS）** |
+
+常见控制台报错（浏览器）：
+
+```text
+Access to XMLHttpRequest at 'https://xjicloud.oss-cn-shanghai.aliyuncs.com/...' from origin 'http://192.168.230.132'
+has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+这说明 **Bucket `xjicloud` 未允许前端 Origin `http://192.168.230.132`**，与后端「测试连接」是否成功无关。
+
+图片上传流程简述：浏览器先请求 B 的 `/api/v1/projects/{id}/datasets` 拿到 presigned URL，再 **跨域 PUT** 到 OSS。后者不经过 Nginx/后端，必须在 **OSS 控制台** 单独放行。
+
+#### 5.5.2 步骤 1：在 OSS 控制台配置 Bucket 跨域（CORS）
+
+1. 登录 [阿里云 OSS 控制台](https://oss.console.aliyun.com/)
+2. 选择 Bucket（如 **`xjicloud`**，地域与 endpoint 一致）
+3. 进入 **数据安全** → **跨域设置（CORS）** → **创建规则**
+4. 填写（示例以内网前端 `http://192.168.230.132` 为例）：
+
+| 字段 | 值 |
+| ---- | -- |
+| 来源 Origin | `http://192.168.230.132`（**必须带协议**；不要只填 IP） |
+| 允许 Methods | `PUT`、`GET`、`HEAD` |
+| 允许 Headers | `*` |
+| 暴露 Headers | `ETag`（可选 `x-oss-request-id`） |
+| 缓存时间（秒） | `3600` |
+
+若有多个访问入口，可 **新增多条规则**（每条一个 Origin），例如：
+
+- `http://114.55.113.49`（公网 IP 访问前端）
+- `https://cloud.example.com`（正式域名）
+
+内网联调可临时将 Origin 设为 `*`（**生产环境不建议**）。
+
+也可用 XML + ossutil 批量配置（`cors.xml` 示例）：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<CORSConfiguration>
+  <CORSRule>
+    <AllowedOrigin>http://192.168.230.132</AllowedOrigin>
+    <AllowedMethod>PUT</AllowedMethod>
+    <AllowedMethod>GET</AllowedMethod>
+    <AllowedMethod>HEAD</AllowedMethod>
+    <AllowedHeader>*</AllowedHeader>
+    <ExposeHeader>ETag</ExposeHeader>
+    <MaxAgeSeconds>3600</MaxAgeSeconds>
+  </CORSRule>
+</CORSConfiguration>
+```
+
+```bash
+ossutil cors --method put oss://xjicloud cors.xml
+```
+
+保存后等待约 1 分钟生效，再在用户前端重试「开始上传并训练」。
+
+#### 5.5.3 步骤 2：在后端 B 配置 API CORS（与 OSS Bucket CORS 无关）
+
+`/api/v1/projects/.../datasets` 等接口仍走 Spring Boot，需在 `application-prod.yml` 中允许 **前端页面 Origin**（不是 OSS 域名）：
+
+```yaml
+xjicloud:
+  cors:
+    allowed-origins: http://192.168.230.132,http://114.55.113.49,https://cloud.example.com
+```
+
+修改后重启后端：`sudo systemctl restart xjicloud-backend`。
+
+部署脚本交互安装时，`CORS 域名` 一项填的是 **用户访问前端的地址**（协议 + 主机 + 非 80/443 端口），逗号分隔。
+
+#### 5.5.4 步骤 3：验证（在「用户 PC」或浏览器所在机器上执行）
+
+**3a. OSS CORS 预检（应返回 `Access-Control-Allow-Origin`）**
+
+```bash
+curl -i -X OPTIONS "https://xjicloud.oss-cn-shanghai.aliyuncs.com/" \
+  -H "Origin: http://192.168.230.132" \
+  -H "Access-Control-Request-Method: PUT" \
+  -H "Access-Control-Request-Headers: content-type"
+```
+
+将 `xjicloud`、`oss-cn-shanghai`、Origin 换成你的 Bucket、地域与前端地址。
+
+**3b. 后端 API CORS 预检**
+
+```bash
+curl -i -X OPTIONS "http://114.55.113.49/api/v1/projects" \
+  -H "Origin: http://192.168.230.132" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type,authorization"
+```
+
+**结果判读：**
+
+| 现象 | 原因 | 处理 |
+| ---- | ---- | ---- |
+| 3a 无 `Access-Control-Allow-Origin` | OSS Bucket CORS 未配置或 Origin 不匹配 | 见 [§5.5.2](#552-步骤-1在-oss-控制台配置-bucket-跨域cors) |
+| 3a 正常但浏览器仍失败 | Origin 与地址栏不一致（`http` vs `https`、端口、尾斜杠） | 使 CORS 规则与浏览器地址栏 **完全一致** |
+| 3b 失败 | 后端 `xjicloud.cors.allowed-origins` 未含前端 Origin | 见 [§5.5.3](#553-步骤-2在后端-b-配置-api-cors与-oss-bucket-cors-无关) |
+| 管理端测试成功、3a/3b 均成功，上传仍失败 | 少见；查 presigned URL 是否过期、RAM 权限 | 管理面板重测；查浏览器 Network 中 PUT 状态码 |
+
+#### 5.5.5 完整验收（图片数据集上传）
+
+1. 管理面板 **OSS 测试连接** 成功
+2. 上述 **3a OSS CORS 预检** 成功
+3. 用户前端打开项目 → **数据上传** → 选择图片文件夹 → **开始上传并训练**
+4. 浏览器 Network 中 presigned **PUT** 返回 `200`（非 CORS / `net::ERR_FAILED`）
+5. 任务进入 **排队中**，Worker 消费后 SSE 显示进度，完成后可下载 `model.ply`
 
 ---
+
+
 
 ### 5.6 生产环境 — 阿里云 CCI 弹性容器实例
 
@@ -568,6 +772,8 @@ docker tag xjicloud/gpu-worker:latest \
   registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest
 docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest
 ```
+
+
 
 #### 5.6.2 创建 CCI 实例（控制台要点）
 
@@ -592,6 +798,8 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 > Worker 使用后端 API 返回的 presigned URL 读写 OSS，**生产一般无需**在 CCI 中配置 OSS AccessKey。
 
+
+
 #### 5.6.3 按需启停
 
 
@@ -615,6 +823,8 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 ---
 
+
+
 ## 6. 配置检查清单（分机 + 生产）
 
 
@@ -632,6 +842,8 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 ---
 
+
+
 ## 7. 单机 / 开发环境（可选）
 
 本地或单机演示仍可使用 Docker Compose（Redis + MinIO + Backend + Worker 同机）：
@@ -646,11 +858,15 @@ cd admin && npm run dev   # 管理面板 :5175
 
 ---
 
+
+
 ## 8. 管理控制面板
 
 - 地址：`https://cloud.example.com/admin/`（部署在服务器 A）
 - 登录接口：`POST /api/v1/admin/auth/login`（与用户前台 `/api/v1/auth/login` **不是同一套账号**）
 - 账号存储在数据库表 `**admin_users`**，与 `users` 表（普通用户）分离
+
+
 
 ### 8.1 管理员账号与 yml 的关系
 
@@ -694,6 +910,8 @@ sudo systemctl restart xjicloud-backend
 
 ---
 
+
+
 ## 9. 验收清单
 
 - [ ] 用户通过 **服务器 A 域名** 注册/登录
@@ -704,9 +922,13 @@ sudo systemctl restart xjicloud-backend
 - [ ] PLY/SPZ 模型上传与 Spark 查看器正常（文件在 **服务器 B** 本地盘）
 - [ ] 生产：OSS 为阿里云、CCI 可按需启动并完成一次完整训练
 - [ ] 管理后台 **OSS 对象存储** 可保存配置并测试连接成功
+- [ ] **阿里云 OSS：** Bucket 跨域 CORS 已允许前端 Origin；`curl` OSS OPTIONS 预检通过（见 [§5.5.4](#554-步骤-3验证在用户-pc或浏览器所在机器上执行)）
+- [ ] 图片数据集可浏览器直传 OSS（PUT 200），任务可入队并完成训练
 - [ ] `sudo ./deploy/deploy-backend.sh configure` 可交互生成完整 `application-prod.yml`
 
 ---
+
+
 
 ## 10. 故障排查
 
@@ -714,17 +936,20 @@ sudo systemctl restart xjicloud-backend
 | 现象                    | 可能原因                                                    | 处理                                                         |
 | --------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
 | 前端 502 / API 失败       | A 无法访问 B:8080                                           | 检查 Nginx `proxy_pass`、B 安全组                                |
-| CORS 错误               | B 未配置 A 的域名                                             | 修改 `xjicloud.cors.allowed-origins`                         |
-| OSS PUT 失败 / 前端「网络错误」 | MinIO **全局 CORS** 填错；或防火墙只放了 A/B 服务器 IP、未放 **用户 PC 网段** | 见 [§5.1.5](#515-cors社区版-minio仅全局-cors)；在用户 PC 上 curl 4a/4b |
+| CORS 错误（调 `/api/` 失败） | B 未配置前端 Origin | 修改 `xjicloud.cors.allowed-origins`（见 [§5.5.3](#553-步骤-2在后端-b-配置-api-cors与-oss-bucket-cors-无关)） |
+| OSS PUT 失败 / 前端「网络错误」 | **预生产 MinIO：** 全局 CORS 填错；防火墙只放了 A/B、未放用户 PC 网段 | 见 [§5.1.5](#515-cors社区版-minio仅全局-cors) |
+| OSS PUT 失败 / 浏览器 CORS（阿里云） | **生产 OSS：** Bucket 未配置跨域；Origin 与地址栏不一致 | 见 [§5.5.1](#551-为什么-oss-测试成功但前端上传仍报-cors--网络错误)～[§5.5.4](#554-步骤-3验证在用户-pc或浏览器所在机器上执行) |
 | 任务一直 QUEUED           | Worker/CCI 未运行                                          | 启动 D 或 CCI；检查 `WORKER_SECRET`                              |
 | Worker OFFLINE        | 心跳超时                                                    | B 防火墙；`XJICLOUD_BACKEND_URL` 是否用内网地址                       |
 | CCI 无法注册              | VPC 不通或 URL 错误                                          | CCI 与 B 同 VPC；健康检查 `/actuator/health`                      |
 | SSE 无进度               | Nginx 缓冲                                                | A 上 `proxy_buffering off`                                  |
-| 生产 OSS 失败             | RAM 权限 / endpoint 地域                                    | 管理面板测试连接；核对 `path-style-access: false`                     |
+| 生产 OSS 失败（管理端测试） | RAM 权限 / endpoint 地域 / 密钥错误 | 管理面板测试连接；核对 `path-style-access: false`；密钥须完整明文保存 |
 | 管理面板 401              | yml 改密未同步到 `admin_users`                                | 见 [§8.1](#81-管理员账号与-yml-的关系)                               |
 
 
 ---
+
+
 
 ## 11. 相关文件
 
@@ -740,9 +965,12 @@ sudo systemctl restart xjicloud-backend
 | `[deploy/env.example](env.example)`                                                 | Compose 环境变量              |
 | `[gpu-worker/Dockerfile](../gpu-worker/Dockerfile)`                                 | Worker 镜像（预生产 D / 生产 CCI） |
 | `[AGENT_CONTEXT.md](../AGENT_CONTEXT.md)`                                           | Agent 项目上下文               |
-| `[deploy/k8s/README.md](k8s/README.md)`                                           | **K3s/K8s** 本地三节点与 ACK 上云 |
+| `[deploy/k8s/README.md](k8s/README.md)`                                             | **K3s/K8s** 本地三节点与 ACK 上云 |
+
 
 ---
+
+
 
 ## 12. Kubernetes 部署（K3s / ACK）
 
@@ -758,5 +986,3 @@ sudo ./deploy/k8s/scripts/validate-local.sh
 ```
 
 134/135 加入 Agent 后执行 `label-nodes.sh`；生产 ACK 使用 `deploy/k8s/overlays/aliyun/`，GPU 算力见 `overlays/aliyun/CCI.md`。
-
-

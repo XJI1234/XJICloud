@@ -42,6 +42,7 @@ const router = createRouter({
           path: 'layer',
           name: 'layer',
           component: () => import('@/modules/viewer/LayerViewerView.vue'),
+          meta: { transition: 'cloud-fade' },
         },
         {
           path: 'supersplat',

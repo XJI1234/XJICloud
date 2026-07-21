@@ -41,6 +41,87 @@ EOF
 log() { printf '[deploy-backend] %s\n' "$*"; }
 die() { printf '[deploy-backend] 错误: %s\n' "$*" >&2; exit 1; }
 
+java_major_version() {
+  local java_bin="$1"
+  local ver major
+  ver=$("$java_bin" -version 2>&1 | awk -F '"' '/version/ {print $2; exit}')
+  major="${ver%%.*}"
+  if [[ "$major" == "1" ]]; then
+    major="${ver#*.}"
+    major="${major%%.*}"
+  fi
+  printf '%s' "$major"
+}
+
+require_java17() {
+  local java_bin="$1"
+  local major
+  command -v "$java_bin" >/dev/null 2>&1 || return 1
+  major="$(java_major_version "$java_bin")"
+  [[ "$major" =~ ^[0-9]+$ ]] && [[ "$major" -ge 17 ]]
+}
+
+find_java17() {
+  local candidates=(
+    "${JAVA_BIN:-}"
+    "${JAVA_HOME:+$JAVA_HOME/bin/java}"
+    java
+    /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+    /usr/lib/jvm/java-17-openjdk/bin/java
+    /usr/lib/jvm/temurin-17-jdk-amd64/bin/java
+    /usr/lib/jvm/temurin-17-jdk/bin/java
+  )
+  local c
+  for c in "${candidates[@]}"; do
+    [[ -n "$c" ]] || continue
+    if require_java17 "$c"; then
+      printf '%s' "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+
+java17_install_hint() {
+  cat <<'EOF'
+
+需要 Java 17 或更高版本（Spring Boot 3.3 要求）。
+
+当前系统默认 java 版本过低。请安装 JDK 17 后重试，例如:
+
+  # Alibaba Cloud Linux / CentOS / RHEL
+  sudo yum install -y java-17-openjdk java-17-openjdk-devel
+  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+  export PATH="$JAVA_HOME/bin:$PATH"
+
+  # Ubuntu / Debian
+  sudo apt update
+  sudo apt install -y openjdk-17-jdk
+  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+  export PATH="$JAVA_HOME/bin:$PATH"
+
+验证: java -version   # 应显示 17 或 21
+
+或在 deploy/config/deploy.conf 中指定:
+  JAVA_BIN=/usr/lib/jvm/java-17-openjdk/bin/java
+EOF
+}
+
+resolve_java_bin() {
+  local found
+  if require_java17 "${JAVA_BIN:-java}"; then
+    printf '%s' "${JAVA_BIN:-java}"
+    return 0
+  fi
+  if found="$(find_java17)"; then
+    log "使用 Java 17+: $found（默认 java 版本过低）"
+    printf '%s' "$found"
+    return 0
+  fi
+  java17_install_hint >&2
+  die "未找到 Java 17+。请先安装 openjdk-17 并确认 java -version"
+}
+
 prompt_with_default() {
   local label="$1"
   local default="$2"
@@ -151,6 +232,7 @@ xjicloud:
 EOF
   chmod 600 "$out" 2>/dev/null || true
   log "已写入 $out"
+}
 
 write_install_summary() {
   local out="$CONFIG_SRC/install-summary.txt"
@@ -287,7 +369,9 @@ do_install_or_upgrade() {
 
   [[ -f "$PROD_YML_SRC" ]] || die "缺少 $PROD_YML_SRC，请先运行: sudo $0 configure"
 
-  command -v "$JAVA_BIN" >/dev/null 2>&1 || die "未找到 Java: $JAVA_BIN（需要 Java 17+）"
+  JAVA_BIN="$(resolve_java_bin)"
+  export JAVA_HOME="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$JAVA_BIN" 2>/dev/null || echo "$JAVA_BIN")")")}"
+  log "Java: $JAVA_BIN ($("$JAVA_BIN" -version 2>&1 | head -1))"
 
   if [[ "$SKIP_BUILD" -eq 0 ]]; then
     if command -v mvn >/dev/null 2>&1; then
@@ -298,7 +382,7 @@ do_install_or_upgrade() {
       die "未找到 mvn 或 backend/mvnw，请安装 Maven 3.9+ 或使用 --skip-build"
     fi
     log "开始 Maven 构建..."
-    (cd "$BACKEND_DIR" && "${MVN[@]}" -DskipTests package)
+    (cd "$BACKEND_DIR" && JAVA_HOME="$JAVA_HOME" PATH="$(dirname "$JAVA_BIN"):$PATH" "${MVN[@]}" -DskipTests package)
   else
     log "跳过构建 (--skip-build)"
   fi

@@ -2,33 +2,47 @@
 import { computed, h } from 'vue'
 
 const props = defineProps<{
-  name: 'route' | 'upload' | 'view' | 'edit'
+  name: 'home' | 'route' | 'upload' | 'view' | 'edit'
 }>()
 
+const svgAttrs = {
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  'stroke-width': '1.5',
+  'stroke-linecap': 'round' as const,
+  'stroke-linejoin': 'round' as const,
+  'aria-hidden': 'true',
+}
+
 const icons = {
+  home: () =>
+    h('svg', svgAttrs, [
+      h('path', { d: 'M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z' }),
+    ]),
   route: () =>
-    h('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [
-      h('path', {
-        d: 'M4 6h16v2H4V6zm0 5h10v2H4v-2zm0 5h16v2H4v-2z',
-      }),
+    h('svg', svgAttrs, [
+      h('path', { d: 'M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z' }),
+      h('circle', { cx: '12', cy: '11', r: '2', fill: 'currentColor', stroke: 'none' }),
+      h('path', { d: 'M5 3l3 3M19 3l-3 3', 'stroke-width': '1.25' }),
     ]),
   upload: () =>
-    h('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [
-      h('path', {
-        d: 'M12 3l5 5h-3v6h-4V8H7l5-5zm-7 14h14v2H5v-2z',
-      }),
+    h('svg', svgAttrs, [
+      h('rect', { x: '3', y: '4', width: '18', height: '12', rx: '1.5' }),
+      h('path', { d: 'M8 20h8' }),
+      h('path', { d: 'M12 16v4' }),
+      h('path', { d: 'M6 13l3-3 3 2 3-4 3 3', 'stroke-width': '1.75' }),
     ]),
   view: () =>
-    h('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [
-      h('path', {
-        d: 'M12 5c-5 0-9 4.5-9 7s4 7 9 7 9-4.5 9-7-4-7-9-7zm0 11a4 4 0 110-8 4 4 0 010 8z',
-      }),
+    h('svg', svgAttrs, [
+      h('path', { d: 'M12 4 4 8.5v7L12 20l8-4.5v-7L12 4z' }),
+      h('path', { d: 'M4 8.5 12 13l8-4.5M12 13v7' }),
     ]),
   edit: () =>
-    h('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, [
-      h('path', {
-        d: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.04a1 1 0 000-1.41l-2.5-2.5a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.99-1.67z',
-      }),
+    h('svg', svgAttrs, [
+      h('path', { d: 'M4 20h4l10-10-4-4L4 16v4z' }),
+      h('path', { d: 'M13 6l4 4' }),
+      h('path', { d: 'M3 21h18', 'stroke-width': '1.25' }),
     ]),
 } as const
 

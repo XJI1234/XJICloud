@@ -102,7 +102,12 @@ export function putToOss(
       reject(new Error(`OSS 上传失败 (${xhr.status})`))
     }
 
-    xhr.onerror = () => reject(new Error('OSS 上传网络错误'))
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          'OSS 上传网络错误：多为 Bucket 未配置浏览器跨域（CORS）。请在 OSS 控制台为 Bucket 添加前端 Origin（含协议，如 http://192.168.230.132），允许 PUT/GET/HEAD 与 Headers *。后端「测试连接」仅验证服务端，不覆盖此项。',
+        ),
+      )
     xhr.send(blob)
   })
 }
