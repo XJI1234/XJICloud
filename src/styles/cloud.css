@@ -442,11 +442,14 @@
 }
 
 .cloud-tool-label {
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: pre-line;
   text-align: center;
   max-width: 100%;
+  word-break: break-word;
 }
 
 .cloud-main {

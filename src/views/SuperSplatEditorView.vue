@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ApiError } from '@/api/client'
 import { createDownloadToken, listModels, uploadExport, type ModelSummary } from '@/api/models'
@@ -15,6 +16,7 @@ import { useProjectStore } from '@/stores/project'
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const { t } = useI18n()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const models = ref<ModelSummary[]>([])
@@ -27,7 +29,7 @@ async function ensureProjects() {
   try {
     await projectStore.fetchProjects()
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : '加载项目失败'
+    errorMessage.value = error instanceof ApiError ? error.message : t('supersplat.loadProjectsFailed')
   }
 }
 
@@ -50,7 +52,7 @@ async function refreshModels() {
       selectedModelId.value = models.value[0]?.id ?? null
     }
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : '加载模型列表失败'
+    errorMessage.value = error instanceof ApiError ? error.message : t('supersplat.loadModelsFailed')
     models.value = []
   } finally {
     loadingModels.value = false
@@ -79,7 +81,7 @@ async function loadEditor() {
       query: { ...route.query, modelId: model.id },
     })
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : '加载编辑器失败'
+    errorMessage.value = error instanceof ApiError ? error.message : t('supersplat.loadEditorFailed')
   } finally {
     loadingEditor.value = false
   }
@@ -110,7 +112,7 @@ async function handleCloudSaveRequest(event: MessageEvent) {
   } catch (error) {
     source.postMessage({
       type: CLOUD_SAVE_ERROR,
-      message: error instanceof Error ? error.message : '保存到云端失败',
+      message: error instanceof Error ? error.message : t('supersplat.saveToCloudFailed'),
     }, event.origin)
   }
 }
@@ -158,7 +160,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
 
   try {
     const dirty = await isDirty(iframe)
-    if (dirty && !window.confirm('当前编辑尚未保存到云端，确定离开吗？')) {
+    if (dirty && !window.confirm(t('supersplat.leaveConfirm'))) {
       next(false)
       return
     }
@@ -176,27 +178,27 @@ onBeforeRouteLeave(async (_to, _from, next) => {
       <iframe
         ref="iframeRef"
         class="supersplat-iframe"
-        title="SuperSplat 高级编辑"
+        :title="t('supersplat.title')"
         allow="fullscreen"
       />
-      <p v-if="loadingEditor" class="supersplat-loading">正在加载编辑器...</p>
+      <p v-if="loadingEditor" class="supersplat-loading">{{ t('supersplat.loadingEditor') }}</p>
     </section>
 
     <section v-else-if="projectStore.activeProject && !loadingModels" class="supersplat-empty section-card">
-      <h3 class="section-title">{{ errorMessage || '当前工程暂无模型' }}</h3>
-      <p v-if="!errorMessage">请先在「数据上传」页上传 PLY 或 SPZ 模型。</p>
-      <button class="side-button primary" type="button" @click="router.push('/app/upload')">前往数据上传</button>
+      <h3 class="section-title">{{ errorMessage || t('supersplat.noModels') }}</h3>
+      <p v-if="!errorMessage">{{ t('supersplat.uploadHint') }}</p>
+      <button class="side-button primary" type="button" @click="router.push('/app/upload')">{{ t('supersplat.goToUpload') }}</button>
     </section>
 
     <section v-else-if="!projectStore.activeProject && !loadingModels" class="supersplat-empty section-card">
-      <h3 class="section-title">{{ errorMessage || '尚未打开工程' }}</h3>
-      <p v-if="!errorMessage">请先在主页新建或打开项目，再使用高级编辑。</p>
+      <h3 class="section-title">{{ errorMessage || t('supersplat.noProjectOpen') }}</h3>
+      <p v-if="!errorMessage">{{ t('supersplat.noProjectHint') }}</p>
       <div class="supersplat-empty-actions">
-        <button class="side-button primary" type="button" @click="goToHome">前往主页</button>
-        <button class="side-button" type="button" @click="goToProjects">前往工程项目</button>
+        <button class="side-button primary" type="button" @click="goToHome">{{ t('supersplat.goToHome') }}</button>
+        <button class="side-button" type="button" @click="goToProjects">{{ t('supersplat.goToProjects') }}</button>
       </div>
     </section>
 
-    <p v-else class="supersplat-loading">正在准备高级编辑...</p>
+    <p v-else class="supersplat-loading">{{ t('supersplat.preparing') }}</p>
   </div>
 </template>

@@ -1,24 +1,28 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTrainingJobStore } from '@/stores/trainingJob'
 import type { JobStatus } from '@/api/datasets'
 import { showComingSoon } from '@/utils/comingSoon'
+import { useFormatDateTime } from '@/composables/useAppLocale'
 
 const props = defineProps<{
   projectId: string | null
 }>()
 
 const trainingJobStore = useTrainingJobStore()
+const { t } = useI18n()
+const { formatDateTime } = useFormatDateTime()
 
-const statusLabel: Record<JobStatus, string> = {
-  PENDING: '待处理',
-  UPLOADING: '上传中',
-  QUEUED: '排队中',
-  RUNNING: '训练中',
-  COMPLETED: '已完成',
-  FAILED: '失败',
-  CANCELLED: '已取消',
-}
+const statusLabel = computed<Record<JobStatus, string>>(() => ({
+  PENDING: t('training.status.pending'),
+  UPLOADING: t('training.status.uploading'),
+  QUEUED: t('training.status.queued'),
+  RUNNING: t('training.status.running'),
+  COMPLETED: t('training.status.completed'),
+  FAILED: t('training.status.failed'),
+  CANCELLED: t('training.status.cancelled'),
+}))
 
 const badgeClass = computed(() => (status: JobStatus) => {
   switch (status) {
@@ -62,12 +66,8 @@ onBeforeUnmount(() => {
   trainingJobStore.clearSubscriptions()
 })
 
-function formatTime(value: string) {
-  return new Date(value).toLocaleString('zh-CN')
-}
-
 function handleDeleteRecord() {
-  showComingSoon('删除上传记录')
+  showComingSoon('training.deleteRecordFeature')
 }
 </script>
 
@@ -75,25 +75,25 @@ function handleDeleteRecord() {
   <section class="cloud-card training-job-panel">
     <div class="training-job-header">
       <div>
-        <p class="eyebrow">训练任务</p>
-        <h3 class="section-title">实时进度</h3>
+        <p class="eyebrow">{{ t('training.eyebrow') }}</p>
+        <h3 class="section-title">{{ t('training.title') }}</h3>
       </div>
       <button class="cloud-btn cloud-btn--ghost" type="button" :disabled="!projectId" @click="loadJobs">
-        刷新
+        {{ t('training.refresh') }}
       </button>
     </div>
 
-    <p v-if="!projectId" class="upload-empty-text">请先打开项目以查看训练任务。</p>
-    <p v-else-if="trainingJobStore.loading" class="upload-empty-text">加载中...</p>
+    <p v-if="!projectId" class="upload-empty-text">{{ t('training.openProjectFirst') }}</p>
+    <p v-else-if="trainingJobStore.loading" class="upload-empty-text">{{ t('common.loading') }}</p>
     <p v-else-if="trainingJobStore.errorMessage" class="upload-error">{{ trainingJobStore.errorMessage }}</p>
-    <p v-else-if="trainingJobStore.jobs.length === 0" class="upload-empty-text">暂无训练任务。</p>
+    <p v-else-if="trainingJobStore.jobs.length === 0" class="upload-empty-text">{{ t('training.noJobs') }}</p>
 
     <div v-else class="training-job-list">
       <article v-for="job in trainingJobStore.jobs" :key="job.id" class="training-job-item">
         <div class="training-job-item__header">
           <div>
             <strong>{{ job.name }}</strong>
-            <p class="training-job-meta">{{ formatTime(job.createdAt) }}</p>
+            <p class="training-job-meta">{{ formatDateTime(job.createdAt) }}</p>
           </div>
           <div class="training-job-item__header-actions">
             <span class="cloud-badge" :class="badgeClass(job.status)">{{ statusLabel[job.status] }}</span>
@@ -102,7 +102,7 @@ function handleDeleteRecord() {
               type="button"
               @click="handleDeleteRecord"
             >
-              删除上传记录
+              {{ t('training.deleteRecord') }}
             </button>
           </div>
         </div>
@@ -121,7 +121,7 @@ function handleDeleteRecord() {
 
         <div v-if="job.downloadUrl" class="training-job-actions">
           <a class="cloud-btn cloud-btn--primary" :href="job.downloadUrl" target="_blank" rel="noopener">
-            下载模型
+            {{ t('training.downloadModel') }}
           </a>
         </div>
       </article>
