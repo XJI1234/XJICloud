@@ -134,7 +134,10 @@ public class EciInstanceService {
             entity.setStatus(InstanceStatus.FAILED);
             entity.setFailureReason(view.statusDetail() != null ? view.statusDetail() : view.status());
         } else if (view.isTerminatedOrMissing()
-                && (entity.getStatus() == InstanceStatus.STOPPING || entity.getStatus() == InstanceStatus.RUNNING)) {
+                && (entity.getStatus() == InstanceStatus.STOPPING
+                || entity.getStatus() == InstanceStatus.RUNNING
+                || entity.getStatus() == InstanceStatus.CREATING)) {
+            // CREATING + cloud gone (deleted externally / never found) must leave CREATING
             entity.setStatus(InstanceStatus.TERMINATED);
             entity.setFailureReason(null);
         }

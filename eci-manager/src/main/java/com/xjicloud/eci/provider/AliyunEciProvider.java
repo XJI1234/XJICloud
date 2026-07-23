@@ -41,10 +41,12 @@ public class AliyunEciProvider implements EciProvider {
         request.setRegionId(properties.getRegionId());
         request.setSecurityGroupId(properties.getSecurityGroupId());
         request.setVSwitchId(properties.getVswitchId());
-        request.setContainerGroupName(sanitizeName(spec.name()));
+        // One sanitized name for both group and container — avoid mismatched random suffixes
+        String resourceName = sanitizeName(spec.name());
+        request.setContainerGroupName(resourceName);
 
         CreateContainerGroupRequest.Container container = new CreateContainerGroupRequest.Container();
-        container.setName(sanitizeName(spec.name()));
+        container.setName(resourceName);
         container.setImage(spec.image());
         container.setCpu((float) spec.cpu());
         container.setMemory((float) spec.memory());
