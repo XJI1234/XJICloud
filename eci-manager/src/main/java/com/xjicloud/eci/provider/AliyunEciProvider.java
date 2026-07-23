@@ -94,7 +94,7 @@ public class AliyunEciProvider implements EciProvider {
                 return new CloudInstanceView(cloudInstanceId, "NotFound", null);
             }
             DescribeContainerGroupsResponse.ContainerGroup group = response.getContainerGroups().get(0);
-            return new CloudInstanceView(cloudInstanceId, group.getStatus(), group.getStatus());
+            return new CloudInstanceView(cloudInstanceId, group.getStatus(), null);
         } catch (ClientException e) {
             if ("InvalidParameter.NotFound".equalsIgnoreCase(e.getErrCode())
                     || "ContainerGroupNotFound".equalsIgnoreCase(e.getErrCode())) {
