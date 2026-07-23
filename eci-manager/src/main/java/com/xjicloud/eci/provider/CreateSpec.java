@@ -8,6 +8,10 @@ public record CreateSpec(
         String image,
         double cpu,
         double memory,
-        Map<String, String> env
+        Map<String, String> env,
+        /** 可选；ECI 指定 ECS 规格，如 GPU：{@code ecs.gn7i-c32g1.8xlarge}。 */
+        String instanceType,
+        /** 可选；容器占用的 GPU 个数（指定 GPU 规格时通常必填）。 */
+        Integer gpu
 ) {
 }

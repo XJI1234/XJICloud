@@ -95,7 +95,14 @@ public class EciInstanceService {
         // 单独提交后再触发异步，避免 CREATING 记录尚未可见
         repository.save(entity);
 
-        CreateSpec spec = new CreateSpec(name, image, cpu, memory, env);
+        CreateSpec spec = new CreateSpec(
+                name,
+                image,
+                cpu,
+                memory,
+                env,
+                StringUtils.hasText(request.getInstanceType()) ? request.getInstanceType() : null,
+                request.getGpu());
         lifecycleWorker.scheduleCreate(id, spec);
 
         return toResponse(entity);

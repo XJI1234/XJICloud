@@ -15,6 +15,10 @@ public class CreateInstanceRequest {
     private Double memory;
     /** 透传到容器的环境变量（如日后 Worker 对接用）。 */
     private Map<String, String> env;
+    /** 可选；指定 ECS 规格创建 ECI（如 {@code ecs.gn7i-c32g1.8xlarge}）。 */
+    private String instanceType;
+    /** 可选；容器 GPU 个数；指定 GPU 规格时建议传 1。 */
+    private Integer gpu;
 
     public String getName() {
         return name;
@@ -54,5 +58,21 @@ public class CreateInstanceRequest {
 
     public void setEnv(Map<String, String> env) {
         this.env = env;
+    }
+
+    public String getInstanceType() {
+        return instanceType;
+    }
+
+    public void setInstanceType(String instanceType) {
+        this.instanceType = instanceType;
+    }
+
+    public Integer getGpu() {
+        return gpu;
+    }
+
+    public void setGpu(Integer gpu) {
+        this.gpu = gpu;
     }
 }
