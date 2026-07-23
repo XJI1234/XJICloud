@@ -37,7 +37,7 @@ eci-manager/
     ├── config/          # EciProperties、Security、Async、ProviderConfig
     ├── instance/        # Controller、Service、Entity、Repository、DTO、InstanceStatus
     ├── provider/        # EciProvider、MockEciProvider、AliyunEciProvider、CreateSpec、CloudInstanceView
-    └── lifecycle/       # AsyncLifecycleWorker（@Async 创建轮询 / 删除确认）
+    └── lifecycle/       # AsyncLifecycleWorker、StartupCompensationRunner
 ```
 
 配置：
@@ -75,7 +75,8 @@ flowchart LR
 | Controller | HTTP 契约；统一 `ApiResponse` |
 | Service | **本地状态权威**、幂等删除、触发异步 |
 | EciProvider | 仅云侧 Create / Describe / Delete |
-| AsyncLifecycleWorker | 创建后轮询 Running；删除后确认消失；超时 → FAILED |
+| AsyncLifecycleWorker | 创建后轮询 Running；删除后确认消失；超时 → FAILED；提供 resume 供启动补偿 |
+| StartupCompensationRunner | 启动扫 CREATING/STOPPING/RUNNING：refresh 或续跑；无 cloudId 的 CREATING → FAILED |
 | ApiKeyAuthFilter | 仅 `/api/v1/eci/**`；`/actuator/health` 公开 |
 
 ### 状态机（本地权威）
@@ -93,6 +94,17 @@ CREATING|RUNNING|STOPPING + 云侧已删/NotFound → TERMINATED（refresh 可�
 - **先 `repository.save` 再 `@Async`**，避免事务未提交时异步读不到行  
 
 删除：先置 `STOPPING`；`TERMINATED` 再 DELETE **幂等成功**；`CREATING` 中删除 → 409。
+
+### 启动补偿
+
+进程崩溃可能留下 `CREATING`/`STOPPING`。`StartupCompensationRunner` 启动时扫描未终态（含 `RUNNING`）：
+
+- `CREATING` 无 `cloudInstanceId` → 本地 `FAILED`（进程中断，创建未提交到云）
+- 有 `cloudInstanceId`：先 `refresh`；仍 `CREATING`/`STOPPING` 则 `resumeCreatePoll` / `resumeDelete`（**不再**重复 Create）
+- `RUNNING`：仅 refresh；云已删 → `TERMINATED`
+- 按条独立事务提交；失败不阻断启动
+
+Demo **单实例**；多节点 HA 并发补偿需分布式锁（如 ShedLock），本阶段不做。
 
 ### 鉴权 vs 云凭证（两种 key，勿混）
 
@@ -206,5 +218,6 @@ gpu-worker 启动后仍 register 到主后端 :8080
 | `../ECI容器管理后端Demo产品需求文档(PRD).md` | 需求 v1.1 |
 | `../训练队列驱动的CCI-GPU-Worker自动启停产品需求文档(PRD).md` | 另一条产品线 |
 | `src/.../provider/AliyunEciProvider.java` | 真实云 SDK |
-| `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 |
-| `src/.../instance/EciInstanceService.java` | 状态机与 refresh |
+| `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 / resume |
+| `src/.../lifecycle/StartupCompensationRunner.java` | 启动补偿 |
+| `src/.../instance/EciInstanceService.java` | 状态机、refresh、compensateOne |

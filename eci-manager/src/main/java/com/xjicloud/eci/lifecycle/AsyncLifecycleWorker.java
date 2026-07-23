@@ -61,6 +61,35 @@ public class AsyncLifecycleWorker {
      */
     @Async("eciLifecycleExecutor")
     public void scheduleDelete(UUID localId) {
+        runDeleteLifecycle(localId);
+    }
+
+    /**
+     * 启动补偿：仅续跑创建轮询（不再调云 Create），避免重复建实例。
+     */
+    @Async("eciLifecycleExecutor")
+    public void resumeCreatePoll(UUID localId, String cloudId) {
+        long start = System.currentTimeMillis();
+        try {
+            pollUntilRunning(localId, cloudId);
+            log.info("resume create poll done localId={} cloudInstanceId={} elapsedMs={}",
+                    localId, cloudId, System.currentTimeMillis() - start);
+        } catch (Exception e) {
+            markFailed(localId, e.getMessage());
+            log.error("resume create poll failed localId={} elapsedMs={}",
+                    localId, System.currentTimeMillis() - start, e);
+        }
+    }
+
+    /**
+     * 启动补偿：续跑删除（Delete 幂等 + 轮询消失），语义同 {@link #scheduleDelete}。
+     */
+    @Async("eciLifecycleExecutor")
+    public void resumeDelete(UUID localId) {
+        runDeleteLifecycle(localId);
+    }
+
+    private void runDeleteLifecycle(UUID localId) {
         long start = System.currentTimeMillis();
         try {
             EciInstanceEntity entity = repository.findById(localId).orElse(null);

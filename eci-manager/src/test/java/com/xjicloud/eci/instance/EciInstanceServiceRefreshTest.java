@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -33,6 +34,8 @@ class EciInstanceServiceRefreshTest {
     private EciProvider eciProvider;
     @Mock
     private AsyncLifecycleWorker lifecycleWorker;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private EciInstanceService service;
 
@@ -43,7 +46,9 @@ class EciInstanceServiceRefreshTest {
                 new EciProperties(),
                 eciProvider,
                 lifecycleWorker,
-                new ObjectMapper());
+                new ObjectMapper(),
+                transactionManager,
+                null);
     }
 
     @Test

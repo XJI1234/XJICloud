@@ -11,16 +11,21 @@ import com.xjicloud.eci.lifecycle.AsyncLifecycleWorker;
 import com.xjicloud.eci.provider.CloudInstanceView;
 import com.xjicloud.eci.provider.CreateSpec;
 import com.xjicloud.eci.provider.EciProvider;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -29,23 +34,37 @@ import java.util.UUID;
 @Service
 public class EciInstanceService {
 
+    private static final String INTERRUPTED_CREATE_REASON = "进程中断，创建未提交到云";
+
+    private static final Set<InstanceStatus> COMPENSATION_STATUSES = EnumSet.of(
+            InstanceStatus.CREATING,
+            InstanceStatus.STOPPING,
+            InstanceStatus.RUNNING);
+
     private final EciInstanceRepository repository;
     private final EciProperties properties;
     private final EciProvider eciProvider;
     private final AsyncLifecycleWorker lifecycleWorker;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
+    /** 经 Spring 代理调用，使 {@link #refresh} 的 {@code @Transactional} 在补偿路径生效。 */
+    private final EciInstanceService self;
 
     public EciInstanceService(
             EciInstanceRepository repository,
             EciProperties properties,
             EciProvider eciProvider,
             AsyncLifecycleWorker lifecycleWorker,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            PlatformTransactionManager transactionManager,
+            @Lazy EciInstanceService self) {
         this.repository = repository;
         this.properties = properties;
         this.eciProvider = eciProvider;
         this.lifecycleWorker = lifecycleWorker;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.self = self;
     }
 
     /**
@@ -156,6 +175,91 @@ public class EciInstanceService {
 
         repository.save(entity);
         return toResponse(entity);
+    }
+
+    /**
+     * 启动补偿扫描范围：CREATING / STOPPING / RUNNING（只读，短查询）。
+     * <p>
+     * 本方法不加写事务；逐条补偿见 {@link #compensateOne(UUID)}。
+     */
+    @Transactional(readOnly = true)
+    public List<UUID> listIdsForStartupCompensation() {
+        return repository.findByStatusIn(COMPENSATION_STATUSES).stream()
+                .map(EciInstanceEntity::getId)
+                .toList();
+    }
+
+    /**
+     * 对单条未终态实例做启动补偿。方法本身<strong>不加</strong>长事务；
+     * 写库经 {@link TransactionTemplate} 或代理调用的 {@link #refresh} 按条提交。
+     */
+    public CompensationOutcome compensateOne(UUID id) {
+        EciInstanceEntity entity = repository.findById(id).orElse(null);
+        if (entity == null || !COMPENSATION_STATUSES.contains(entity.getStatus())) {
+            return CompensationOutcome.SKIPPED;
+        }
+
+        return switch (entity.getStatus()) {
+            case CREATING -> compensateCreating(entity);
+            case STOPPING -> compensateStopping(entity);
+            case RUNNING -> {
+                if (StringUtils.hasText(entity.getCloudInstanceId())) {
+                    self.refresh(id);
+                }
+                yield CompensationOutcome.REFRESHED_ONLY;
+            }
+            default -> CompensationOutcome.SKIPPED;
+        };
+    }
+
+    private CompensationOutcome compensateCreating(EciInstanceEntity entity) {
+        UUID id = entity.getId();
+        if (!StringUtils.hasText(entity.getCloudInstanceId())) {
+            markInterruptedCreating(id);
+            return CompensationOutcome.FAILED_LOCAL;
+        }
+        InstanceResponse refreshed = self.refresh(id);
+        if (refreshed.status() == InstanceStatus.CREATING) {
+            lifecycleWorker.resumeCreatePoll(id, refreshed.cloudInstanceId());
+            return CompensationOutcome.RESUMED_CREATE;
+        }
+        return CompensationOutcome.REFRESHED_ONLY;
+    }
+
+    private CompensationOutcome compensateStopping(EciInstanceEntity entity) {
+        UUID id = entity.getId();
+        if (!StringUtils.hasText(entity.getCloudInstanceId())) {
+            markTerminatedLocal(id);
+            return CompensationOutcome.TERMINATED_LOCAL;
+        }
+        InstanceResponse refreshed = self.refresh(id);
+        if (refreshed.status() == InstanceStatus.STOPPING) {
+            lifecycleWorker.resumeDelete(id);
+            return CompensationOutcome.RESUMED_DELETE;
+        }
+        return CompensationOutcome.REFRESHED_ONLY;
+    }
+
+    private void markInterruptedCreating(UUID id) {
+        transactionTemplate.executeWithoutResult(status -> repository.findById(id).ifPresent(entity -> {
+            if (entity.getStatus() != InstanceStatus.CREATING) {
+                return;
+            }
+            entity.setStatus(InstanceStatus.FAILED);
+            entity.setFailureReason(INTERRUPTED_CREATE_REASON);
+            entity.setUpdatedAt(Instant.now());
+            repository.save(entity);
+        }));
+    }
+
+    private void markTerminatedLocal(UUID id) {
+        transactionTemplate.executeWithoutResult(status -> repository.findById(id).ifPresent(entity -> {
+            entity.setStatus(InstanceStatus.TERMINATED);
+            entity.setCloudStatus("Deleted");
+            entity.setFailureReason(null);
+            entity.setUpdatedAt(Instant.now());
+            repository.save(entity);
+        }));
     }
 
     private EciInstanceEntity findEntity(UUID id) {
