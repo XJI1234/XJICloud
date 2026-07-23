@@ -19,6 +19,7 @@ release
 rust/target
 backend/data/
 data/
+.tools/
 deploy/config/application-prod.yml
 deploy/config/install-summary.txt
 

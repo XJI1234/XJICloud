@@ -1,0 +1,6 @@
+eci:
+  mock: false
+  # 真实模式必须通过环境变量或 application-local.yml 提供：
+  # ECI_API_KEY / ECI_ACCESS_KEY_ID / ECI_ACCESS_KEY_SECRET
+  # ECI_REGION_ID / ECI_VSWITCH_ID / ECI_SECURITY_GROUP_ID
+  # （可选）ECI_VPC_ID

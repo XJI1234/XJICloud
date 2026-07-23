@@ -1,0 +1,13 @@
+package com.xjicloud.eci.instance;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface EciInstanceRepository extends JpaRepository<EciInstanceEntity, UUID> {
+
+    List<EciInstanceEntity> findByStatusOrderByCreatedAtDesc(InstanceStatus status);
+
+    List<EciInstanceEntity> findAllByOrderByCreatedAtDesc();
+}
