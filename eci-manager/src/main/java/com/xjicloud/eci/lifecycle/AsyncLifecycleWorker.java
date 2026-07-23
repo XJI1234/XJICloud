@@ -16,6 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * 异步生命周期执行器：在独立线程中完成「调云 + 轮询」，避免阻塞 HTTP。
+ */
 @Component
 public class AsyncLifecycleWorker {
 
@@ -34,6 +37,9 @@ public class AsyncLifecycleWorker {
         this.properties = properties;
     }
 
+    /**
+     * 异步创建：Create → 写入 cloudInstanceId → 轮询至 Running / 失败 / 超时。
+     */
     @Async("eciLifecycleExecutor")
     public void scheduleCreate(UUID localId, CreateSpec spec) {
         long start = System.currentTimeMillis();
@@ -50,6 +56,9 @@ public class AsyncLifecycleWorker {
         }
     }
 
+    /**
+     * 异步删除：调用云 Delete 后轮询直至消失；无 cloudId 则直接本地 TERMINATED。
+     */
     @Async("eciLifecycleExecutor")
     public void scheduleDelete(UUID localId) {
         long start = System.currentTimeMillis();
@@ -113,8 +122,7 @@ public class AsyncLifecycleWorker {
             }
             Thread.sleep(properties.getPollIntervalMs());
         }
-        // Delete API already accepted; treat timeout after delete as terminated for demo simplicity
-        // if describe still returns something transient
+        // Delete 已受理但 Describe 仍短暂可见时，超时后再判一次
         CloudInstanceView last = eciProvider.describe(cloudId);
         if (last.isTerminatedOrMissing()) {
             markTerminated(localId);

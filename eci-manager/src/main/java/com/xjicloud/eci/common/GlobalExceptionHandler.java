@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
+/**
+ * 全局异常处理：将业务异常、校验异常等转为 {@link ApiResponse} 失败体。
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

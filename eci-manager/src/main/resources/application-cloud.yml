@@ -4,3 +4,5 @@ eci:
   # ECI_API_KEY / ECI_ACCESS_KEY_ID / ECI_ACCESS_KEY_SECRET
   # ECI_REGION_ID / ECI_VSWITCH_ID / ECI_SECURITY_GROUP_ID
   # （可选）ECI_VPC_ID
+  # 使用阿里云公开镜像，避免 Docker Hub 拉取失败导致一直 Pending
+  default-image: registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2

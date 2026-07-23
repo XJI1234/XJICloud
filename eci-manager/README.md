@@ -2,6 +2,9 @@
 
 独立 Spring Boot Demo：通过 REST API 管理阿里云 **ECI** 容器实例生命周期（创建 / 查询 / **删除**）。
 
+> **详细文档（结构 / 接口 / 用法）：** [docs/设计与使用说明.md](docs/设计与使用说明.md)  
+> **Agent 上下文（架构 / 决策 / 联调记忆）：** [AGENT.md](AGENT.md)
+
 > **费用警告：** `eci.mock=false`（cloud profile）会创建真实云资源并产生账单。演示结束后务必调用 `DELETE` 删除实例。
 
 对应 PRD：`ECI容器管理后端Demo产品需求文档(PRD).md` v1.1。本工程不修改主仓 `backend/`。
@@ -106,6 +109,12 @@ mvn spring-boot:run
 
 
 真实模式创建后请到阿里云控制台核对 ECI，用完后 **DELETE**。
+
+默认镜像建议使用阿里云仓库（避免 Docker Hub 拉取一直 Pending），例如：
+
+`registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2`
+
+（已写入 `application-local.yml.example` / `application-cloud.yml`）
 
 ## API 摘要
 

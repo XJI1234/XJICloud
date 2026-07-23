@@ -23,6 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 实例业务服务：维护本地状态机权威，编排异步创建/删除，并支持按云状态 refresh。
+ */
 @Service
 public class EciInstanceService {
 
@@ -45,6 +48,11 @@ public class EciInstanceService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 受理创建：落库 CREATING 后立即返回，后台由 {@link AsyncLifecycleWorker} 调云并轮询。
+     * <p>
+     * 先 {@code save} 再调度异步，避免事务未提交时异步线程读不到记录。
+     */
     public InstanceResponse create(CreateInstanceRequest request) {
         Instant now = Instant.now();
         UUID id = UUID.randomUUID();
@@ -65,7 +73,7 @@ public class EciInstanceService {
         entity.setEnvJson(toJson(env));
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
-        // save commits in its own transaction before async work starts
+        // 单独提交后再触发异步，避免 CREATING 记录尚未可见
         repository.save(entity);
 
         CreateSpec spec = new CreateSpec(name, image, cpu, memory, env);
@@ -74,6 +82,9 @@ public class EciInstanceService {
         return toResponse(entity);
     }
 
+    /**
+     * 受理删除：TERMINATED/STOPPING 幂等；CREATING 中拒绝；否则置 STOPPING 并异步删云。
+     */
     public InstanceResponse delete(UUID id) {
         EciInstanceEntity entity = findEntity(id);
 
@@ -111,6 +122,7 @@ public class EciInstanceService {
         return toResponse(findEntity(id));
     }
 
+    /** 按云侧 Describe 结果回写本地状态（含 CREATING 时云侧已消失 → TERMINATED）。 */
     @Transactional
     public InstanceResponse refresh(UUID id) {
         EciInstanceEntity entity = findEntity(id);
@@ -137,7 +149,7 @@ public class EciInstanceService {
                 && (entity.getStatus() == InstanceStatus.STOPPING
                 || entity.getStatus() == InstanceStatus.RUNNING
                 || entity.getStatus() == InstanceStatus.CREATING)) {
-            // CREATING + cloud gone (deleted externally / never found) must leave CREATING
+            // 创建过程中云侧被删或不存在时，不能卡在 CREATING
             entity.setStatus(InstanceStatus.TERMINATED);
             entity.setFailureReason(null);
         }

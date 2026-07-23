@@ -16,9 +16,16 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
+/**
+ * 校验请求头 {@code X-Api-Key} 是否与配置 {@code eci.api-key} 一致。
+ * <p>
+ * 仅拦截 {@code /api/v1/eci/**}；健康检查等路径不经过本过滤器。
+ * 校验失败返回 401 与统一 {@link ApiResponse} 失败体，不执行后续业务（避免误创建云资源）。
+ */
 @Component
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
+    /** 客户端须携带的请求头名称。 */
     public static final String HEADER_API_KEY = "X-Api-Key";
 
     private final EciProperties eciProperties;
@@ -31,6 +38,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        // 非 ECI API 路径直接跳过（由 Security 另行控制）
         String path = request.getRequestURI();
         return !path.startsWith("/api/v1/eci/");
     }
@@ -60,6 +68,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         objectMapper.writeValue(response.getOutputStream(), ApiResponse.fail(message));
     }
 
+    /** 常量时间比较，降低时序旁路猜测密钥的风险。 */
     private static boolean constantTimeEquals(String expected, String actual) {
         byte[] a = expected.getBytes(StandardCharsets.UTF_8);
         byte[] b = actual.getBytes(StandardCharsets.UTF_8);

@@ -21,6 +21,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 单元测试：refresh 在云侧 NotFound 且本地为 CREATING 时应转为 TERMINATED。
+ */
 @ExtendWith(MockitoExtension.class)
 class EciInstanceServiceRefreshTest {
 

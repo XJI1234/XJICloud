@@ -10,11 +10,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
+/**
+ * 按 {@code eci.mock} 装配 Mock 或阿里云 Provider，并在启动时校验必填配置。
+ */
 @Configuration
 public class ProviderConfig {
 
     private static final Logger log = LoggerFactory.getLogger(ProviderConfig.class);
 
+    /**
+     * mock=true → {@link MockEciProvider}；否则校验云配置后返回 {@link AliyunEciProvider}。
+     */
     @Bean
     public EciProvider eciProvider(EciProperties properties) {
         if (properties.isMock()) {
@@ -26,6 +32,7 @@ public class ProviderConfig {
         return new AliyunEciProvider(properties);
     }
 
+    /** 启动失败快：api-key 未配置则直接拒绝启动。 */
     @Bean
     public ApplicationRunner apiKeyStartupCheck(EciProperties properties) {
         return args -> {

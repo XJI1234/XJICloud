@@ -19,6 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 阿里云 ECI OpenAPI 实现：CreateContainerGroup / DescribeContainerGroups / DeleteContainerGroup。
+ * <p>
+ * 日志只记录实例 ID 与错误码，不打印 AccessKey / Api-Key。
+ */
 public class AliyunEciProvider implements EciProvider {
 
     private static final Logger log = LoggerFactory.getLogger(AliyunEciProvider.class);
@@ -41,7 +46,7 @@ public class AliyunEciProvider implements EciProvider {
         request.setRegionId(properties.getRegionId());
         request.setSecurityGroupId(properties.getSecurityGroupId());
         request.setVSwitchId(properties.getVswitchId());
-        // One sanitized name for both group and container — avoid mismatched random suffixes
+        // 容器组名与容器名共用同一规范化名称，避免两次随机后缀不一致
         String resourceName = sanitizeName(spec.name());
         request.setContainerGroupName(resourceName);
 
@@ -124,6 +129,10 @@ public class AliyunEciProvider implements EciProvider {
         }
     }
 
+    /**
+     * 将显示名规范为 ECI 可接受的名称（小写、数字、连字符），并附加短随机后缀保证唯一。
+     * 同一 create 调用内应对返回值只使用一次，勿重复调用以免后缀不同。
+     */
     private static String sanitizeName(String name) {
         String base = StringUtils.hasText(name) ? name : "eci-demo";
         String sanitized = base.toLowerCase().replaceAll("[^a-z0-9-]", "-");

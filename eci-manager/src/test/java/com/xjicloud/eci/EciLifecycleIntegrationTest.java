@@ -20,6 +20,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * Mock 模式下的端到端集成测试：鉴权、异步创建→RUNNING、删除→TERMINATED、幂等删除。
+ */
 @SpringBootTest(properties = {
         "eci.mock=true",
         "eci.api-key=test-api-key",

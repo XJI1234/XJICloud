@@ -2,21 +2,33 @@ package com.xjicloud.eci.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * 绑定配置前缀 {@code eci.} 的属性。
+ * <p>
+ * 可通过 {@code application.yml}、profile 文件或环境变量覆盖（如 {@code ECI_API_KEY}）。
+ */
 @ConfigurationProperties(prefix = "eci")
 public class EciProperties {
 
+    /** 为 true 时使用 MockProvider，不调用阿里云。 */
     private boolean mock = true;
+    /** HTTP 鉴权密钥，对应请求头 X-Api-Key。 */
     private String apiKey = "";
     private String accessKeyId = "";
     private String accessKeySecret = "";
     private String regionId = "cn-hangzhou";
     private String vpcId = "";
+    /** 真实模式创建 ECI 必填。 */
     private String vswitchId = "";
+    /** 真实模式创建 ECI 必填。 */
     private String securityGroupId = "";
+    /** 请求未传 image 时的默认镜像。 */
     private String defaultImage = "nginx:alpine";
     private double defaultCpu = 1.0;
     private double defaultMemory = 2.0;
+    /** 等待 Running / 删除完成的超时秒数。 */
     private int createTimeoutSec = 300;
+    /** 后台轮询云状态的间隔毫秒。 */
     private long pollIntervalMs = 3000L;
 
     public boolean isMock() {

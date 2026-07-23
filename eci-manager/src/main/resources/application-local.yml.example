@@ -12,7 +12,8 @@ eci:
   vpc-id: vpc-xxxxxxxx
   vswitch-id: vsw-xxxxxxxx
   security-group-id: sg-xxxxxxxx
-  default-image: nginx:alpine
+  # Real ECI: prefer Aliyun registry (Docker Hub often stays Pending without NAT)
+  default-image: registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2
   default-cpu: 1.0
   default-memory: 2.0
   create-timeout-sec: 300

@@ -11,6 +11,10 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * 本地持久化的 ECI 实例记录（H2 表 {@code eci_instance}）。
+ * 本地 {@link InstanceStatus} 为权威状态；{@code cloudInstanceId}/{@code cloudStatus} 为云侧镜像。
+ */
 @Entity
 @Table(name = "eci_instance")
 public class EciInstanceEntity {
@@ -34,9 +38,11 @@ public class EciInstanceEntity {
     @Column(nullable = false, length = 32)
     private InstanceStatus status;
 
+    /** 云侧容器组 ID；Mock 下为 mock-eci-... */
     @Column(length = 128)
     private String cloudInstanceId;
 
+    /** 最近一次 Describe 得到的云侧状态字符串。 */
     @Column(length = 64)
     private String cloudStatus;
 
