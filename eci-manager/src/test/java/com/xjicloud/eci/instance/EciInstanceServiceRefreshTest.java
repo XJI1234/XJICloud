@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 单元测试：refresh 在云侧 NotFound 且本地为 CREATING 时应转为 TERMINATED。
+ * 单元测试：refresh 在云侧 NotFound 时将 CREATING / FAILED 转为 TERMINATED。
  */
 @ExtendWith(MockitoExtension.class)
 class EciInstanceServiceRefreshTest {
@@ -53,6 +53,15 @@ class EciInstanceServiceRefreshTest {
 
     @Test
     void refreshTransitionsCreatingToTerminatedWhenCloudMissing() {
+        assertRefreshToTerminated(InstanceStatus.CREATING);
+    }
+
+    @Test
+    void refreshTransitionsFailedToTerminatedWhenCloudMissing() {
+        assertRefreshToTerminated(InstanceStatus.FAILED);
+    }
+
+    private void assertRefreshToTerminated(InstanceStatus localStatus) {
         UUID id = UUID.randomUUID();
         EciInstanceEntity entity = new EciInstanceEntity();
         entity.setId(id);
@@ -60,11 +69,14 @@ class EciInstanceServiceRefreshTest {
         entity.setImage("nginx:alpine");
         entity.setCpu(1);
         entity.setMemory(2);
-        entity.setStatus(InstanceStatus.CREATING);
+        entity.setStatus(localStatus);
         entity.setCloudInstanceId("eci-gone");
         entity.setEnvJson("{}");
         entity.setCreatedAt(Instant.now());
         entity.setUpdatedAt(Instant.now());
+        if (localStatus == InstanceStatus.FAILED) {
+            entity.setFailureReason("ScheduleFailed");
+        }
 
         when(repository.findById(id)).thenReturn(Optional.of(entity));
         when(eciProvider.describe("eci-gone"))
@@ -74,8 +86,10 @@ class EciInstanceServiceRefreshTest {
         var response = service.refresh(id);
 
         assertThat(response.status()).isEqualTo(InstanceStatus.TERMINATED);
+        assertThat(response.failureReason()).isNull();
         ArgumentCaptor<EciInstanceEntity> captor = ArgumentCaptor.forClass(EciInstanceEntity.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(InstanceStatus.TERMINATED);
+        assertThat(captor.getValue().getFailureReason()).isNull();
     }
 }

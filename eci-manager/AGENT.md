@@ -84,7 +84,7 @@ flowchart LR
 ```
 CREATING → RUNNING | FAILED
 RUNNING  → STOPPING → TERMINATED | FAILED
-CREATING|RUNNING|STOPPING + 云侧已删/NotFound → TERMINATED（refresh 可回写）
+CREATING|RUNNING|STOPPING|FAILED + 云侧已删/NotFound → TERMINATED（refresh 可回写）
 ```
 
 ### 创建语义（已锁定：**异步**）
@@ -106,14 +106,20 @@ CREATING|RUNNING|STOPPING + 云侧已删/NotFound → TERMINATED（refresh 可�
 
 Demo **单实例**；多节点 HA 并发补偿需分布式锁（如 ShedLock），本阶段不做。
 
-### 鉴权 vs 云凭证（两种 key，勿混）
+### 鉴权 vs 云凭证（两种身份，勿混）
 
 | 名称 | 用途 | 来源 |
 |------|------|------|
 | `eci.api-key` / `X-Api-Key` | 保护本服务 HTTP | **自建**，非阿里云颁发 |
-| AccessKey ID/Secret | 调阿里云 OpenAPI | **RAM 用户** AK（勿用主账号） |
+| 阿里云调用身份 | 调 ECI OpenAPI | **方式 A：ECS RAM 角色**（推荐）；本机可用临时环境变量。**不使用** yml 长期 AK |
 
----
+#### 云凭证（方式 A）
+
+- 生产：ECS 绑 RAM 角色；可选 `eci.ecs-ram-role-name` 或 `ALIBABA_CLOUD_ECS_METADATA`。  
+- SDK：`InstanceProfileCredentialsProvider`（有角色名）或 `DefaultCredentialsProvider`（默认链）。  
+- 本机无 IMDS：export `ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET`（及 STS `SECURITY_TOKEN`）；无凭证时探 `100.100.100.200` 超时属预期。  
+- `access-key-id/secret` 配置项已废弃，不建客户端。  
+- 最小权限示例见 [docs/设计与使用说明.md](docs/设计与使用说明.md)。  
 
 ## 4. HTTP API 摘要
 
@@ -165,7 +171,7 @@ Demo **单实例**；多节点 HA 并发补偿需分布式锁（如 ShedLock）�
 ### 运维注意
 
 - 真实模式**计费**：测完必须 DELETE，并到控制台确认无残留  
-- `application-local.yml` 含密钥，**禁止提交**；对话中曾出现过 AK，建议用户在 RAM **轮换**  
+- **不要**在 yml/Git 写长期 AccessKey；生产用实例角色；曾泄露的 AK 在 RAM **轮换/禁用**  
 - 路径参数必须用真实 UUID，**不要**写字面量 `{id}`  
 - `ECI_API_KEY` 须与配置 `api-key` 一致，否则 401  
 
@@ -176,11 +182,11 @@ cd eci-manager
 source ../.tools/env.sh
 # Mock:
 mvn spring-boot:run
-# 真实:
+# 真实（ECS 已绑角色，或本机已 export ALIBABA_CLOUD_*）:
 export SPRING_PROFILES_ACTIVE=cloud,local
 export ECI_API_KEY='<与 application-local.yml 中 api-key 一致>'
 mvn spring-boot:run
-# 日志期望：ECI provider mode: ALIYUN（非 MOCK）
+# 日志期望：ECI provider mode: ALIYUN … credential=INSTANCE_PROFILE|DEFAULT_CHAIN
 ```
 
 测试：`mvn test`（仅 Mock，不调云）。
@@ -205,7 +211,8 @@ gpu-worker 启动后仍 register 到主后端 :8080
 ## 7. Agent 工作约束（本子工程）
 
 - **不要**修改 `backend/` 来「集成」本 Demo，除非用户明确要求新需求  
-- **不要**把 `application-local.yml`、AccessKey、Api-Key 写入 Git 或文档示例明文  
+- **不要**把 `application-local.yml`、长期 AccessKey、Api-Key 写入 Git 或文档示例明文  
+- 真实模式云身份用 **ECS RAM 角色**（或本机临时环境变量），勿再依赖 yml AK  
 - 改 Provider / 状态机时保持：**本地状态权威**、异步创建语义、删除=删云  
 - 详细接口与配置以 [docs/设计与使用说明.md](docs/设计与使用说明.md) 为准；本文偏决策与对话记忆  
 

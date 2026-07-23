@@ -14,8 +14,18 @@ public class EciProperties {
     private boolean mock = true;
     /** HTTP 鉴权密钥，对应请求头 X-Api-Key。 */
     private String apiKey = "";
+    /**
+     * 已废弃：真实模式不再用 yml 长期 AK 建客户端。
+     * 保留字段以免旧配置报未知属性；请改用 ECS RAM 角色或环境变量凭证链。
+     */
     private String accessKeyId = "";
+    /** @deprecated 同 {@link #accessKeyId}，不再用于建客户端。 */
     private String accessKeySecret = "";
+    /**
+     * 可选。ECS 实例 RAM 角色名；有值时用 {@code InstanceProfileCredentialsProvider}。
+     * 也可设环境变量 {@code ALIBABA_CLOUD_ECS_METADATA}。
+     */
+    private String ecsRamRoleName = "";
     private String regionId = "cn-hangzhou";
     private String vpcId = "";
     /** 真实模式创建 ECI 必填。 */
@@ -26,8 +36,10 @@ public class EciProperties {
     private String defaultImage = "nginx:alpine";
     private double defaultCpu = 1.0;
     private double defaultMemory = 2.0;
-    /** 等待 Running / 删除完成的超时秒数。 */
+    /** 等待创建至 Running 的超时秒数。 */
     private int createTimeoutSec = 300;
+    /** 等待删除完成（云侧消失）的超时秒数。 */
+    private int deleteTimeoutSec = 300;
     /** 后台轮询云状态的间隔毫秒。 */
     private long pollIntervalMs = 3000L;
 
@@ -61,6 +73,14 @@ public class EciProperties {
 
     public void setAccessKeySecret(String accessKeySecret) {
         this.accessKeySecret = accessKeySecret;
+    }
+
+    public String getEcsRamRoleName() {
+        return ecsRamRoleName;
+    }
+
+    public void setEcsRamRoleName(String ecsRamRoleName) {
+        this.ecsRamRoleName = ecsRamRoleName;
     }
 
     public String getRegionId() {
@@ -125,6 +145,14 @@ public class EciProperties {
 
     public void setCreateTimeoutSec(int createTimeoutSec) {
         this.createTimeoutSec = createTimeoutSec;
+    }
+
+    public int getDeleteTimeoutSec() {
+        return deleteTimeoutSec;
+    }
+
+    public void setDeleteTimeoutSec(int deleteTimeoutSec) {
+        this.deleteTimeoutSec = deleteTimeoutSec;
     }
 
     public long getPollIntervalMs() {

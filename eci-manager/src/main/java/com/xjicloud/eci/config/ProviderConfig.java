@@ -28,7 +28,11 @@ public class ProviderConfig {
             return new MockEciProvider();
         }
         validateCloudConfig(properties);
-        log.info("ECI provider mode: ALIYUN region={}", properties.getRegionId());
+        String credentialHint = StringUtils.hasText(properties.getEcsRamRoleName())
+                ? "INSTANCE_PROFILE role=" + properties.getEcsRamRoleName()
+                : "DEFAULT_CHAIN";
+        log.info("ECI provider mode: ALIYUN credential={} region={}",
+                credentialHint, properties.getRegionId());
         return new AliyunEciProvider(properties);
     }
 
@@ -42,9 +46,8 @@ public class ProviderConfig {
         };
     }
 
+    /** 真实模式只校验网络/地域；云身份靠 ECS RAM 角色或默认凭证链，不强制 yml AK。 */
     private static void validateCloudConfig(EciProperties properties) {
-        require(properties.getAccessKeyId(), "eci.access-key-id");
-        require(properties.getAccessKeySecret(), "eci.access-key-secret");
         require(properties.getRegionId(), "eci.region-id");
         require(properties.getVswitchId(), "eci.vswitch-id");
         require(properties.getSecurityGroupId(), "eci.security-group-id");

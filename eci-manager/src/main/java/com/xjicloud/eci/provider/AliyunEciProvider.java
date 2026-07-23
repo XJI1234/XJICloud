@@ -2,6 +2,9 @@ package com.xjicloud.eci.provider;
 
 import com.aliyuncs.DefaultAcsClient;
 import com.aliyuncs.IAcsClient;
+import com.aliyuncs.auth.AlibabaCloudCredentialsProvider;
+import com.aliyuncs.auth.DefaultCredentialsProvider;
+import com.aliyuncs.auth.InstanceProfileCredentialsProvider;
 import com.aliyuncs.eci.model.v20180808.CreateContainerGroupRequest;
 import com.aliyuncs.eci.model.v20180808.CreateContainerGroupResponse;
 import com.aliyuncs.eci.model.v20180808.DeleteContainerGroupRequest;
@@ -22,22 +25,45 @@ import java.util.UUID;
 /**
  * 阿里云 ECI OpenAPI 实现：CreateContainerGroup / DescribeContainerGroups / DeleteContainerGroup。
  * <p>
- * 日志只记录实例 ID 与错误码，不打印 AccessKey / Api-Key。
+ * 云凭证走 SDK 内置链（ECS RAM 角色 / 环境变量等），不使用 yml 长期 AccessKey。
+ * 日志只记录实例 ID 与错误码，不打印凭证 / Api-Key。
  */
 public class AliyunEciProvider implements EciProvider {
 
     private static final Logger log = LoggerFactory.getLogger(AliyunEciProvider.class);
+
+    private static final String CREDENTIAL_HINT =
+            "无法解析阿里云凭证：生产请为 ECS 绑定 RAM 角色（可配 eci.ecs-ram-role-name）；"
+                    + "本机请设置 ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET（及 SECURITY_TOKEN）临时环境变量。"
+                    + "非 ECS 上出现连接 100.100.100.200 超时属预期。";
 
     private final EciProperties properties;
     private final IAcsClient client;
 
     public AliyunEciProvider(EciProperties properties) {
         this.properties = properties;
-        DefaultProfile profile = DefaultProfile.getProfile(
-                properties.getRegionId(),
-                properties.getAccessKeyId(),
-                properties.getAccessKeySecret());
-        this.client = new DefaultAcsClient(profile);
+        String regionId = properties.getRegionId();
+        String roleName = properties.getEcsRamRoleName();
+        String credentialMode;
+        AlibabaCloudCredentialsProvider creds;
+        try {
+            if (StringUtils.hasText(roleName)) {
+                credentialMode = "INSTANCE_PROFILE";
+                creds = new InstanceProfileCredentialsProvider(roleName.trim());
+            } else {
+                credentialMode = "DEFAULT_CHAIN";
+                creds = new DefaultCredentialsProvider();
+            }
+            // 启动期失败快：非 ECS 无 env 时可能 IMDS 超时后抛错
+            creds.getCredentials();
+        } catch (ClientException e) {
+            throw new IllegalStateException(CREDENTIAL_HINT + " 原因: " + e.getErrMsg(), e);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(CREDENTIAL_HINT + " 原因: " + e.getMessage(), e);
+        }
+        DefaultProfile profile = DefaultProfile.getProfile(regionId);
+        this.client = new DefaultAcsClient(profile, creds);
+        log.info("ECI Aliyun client ready credentialMode={} region={}", credentialMode, regionId);
     }
 
     @Override

@@ -100,11 +100,13 @@ public class AsyncLifecycleWorker {
             if (cloudId != null && !cloudId.isBlank()) {
                 eciProvider.delete(cloudId);
                 pollUntilDeleted(localId, cloudId);
+                log.info("delete lifecycle done localId={} cloudInstanceId={} elapsedMs={}",
+                        localId, cloudId, System.currentTimeMillis() - start);
             } else {
                 markTerminated(localId);
+                log.info("delete lifecycle done localId={} cloudInstanceId={} elapsedMs={}",
+                        localId, "(none)", System.currentTimeMillis() - start);
             }
-            log.info("delete lifecycle done localId={} cloudInstanceId={} elapsedMs={}",
-                    localId, cloudId, System.currentTimeMillis() - start);
         } catch (Exception e) {
             markFailed(localId, e.getMessage());
             log.error("delete lifecycle failed localId={} elapsedMs={}",
@@ -141,7 +143,7 @@ public class AsyncLifecycleWorker {
     }
 
     private void pollUntilDeleted(UUID localId, String cloudId) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + properties.getCreateTimeoutSec() * 1000L;
+        long deadline = System.currentTimeMillis() + properties.getDeleteTimeoutSec() * 1000L;
         while (System.currentTimeMillis() < deadline) {
             CloudInstanceView view = eciProvider.describe(cloudId);
             applyCloudStatus(localId, view);
@@ -156,7 +158,7 @@ public class AsyncLifecycleWorker {
         if (last.isTerminatedOrMissing()) {
             markTerminated(localId);
         } else {
-            markFailed(localId, "等待删除完成超时（" + properties.getCreateTimeoutSec() + "s）");
+            markFailed(localId, "等待删除完成超时（" + properties.getDeleteTimeoutSec() + "s）");
         }
     }
 

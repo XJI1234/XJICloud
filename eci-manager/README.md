@@ -83,30 +83,33 @@ curl -s -X DELETE "http://127.0.0.1:8081/api/v1/eci/instances/{id}" -H "X-Api-Ke
 
 ## 真实 ECI 模式
 
-1. 复制配置模板并填写凭证（**不要提交 Git**）：
+1. 复制配置模板（网络与 `api-key`；**不要**写长期 AccessKey，勿提交 Git）：
 
 ```bash
 cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
 ```
 
-1. 启动：
+2. 云身份（方式 A）：
+   - **ECS：** 绑定 RAM 角色；可选 `eci.ecs-ram-role-name`
+   - **本机：** `export ALIBABA_CLOUD_ACCESS_KEY_ID` / `ALIBABA_CLOUD_ACCESS_KEY_SECRET`（临时；STS 加 `ALIBABA_CLOUD_SECURITY_TOKEN`）
+
+3. 启动：
 
 ```bash
 export SPRING_PROFILES_ACTIVE=cloud,local
+export ECI_API_KEY='<与 yml 中 api-key 一致>'
 mvn spring-boot:run
 ```
 
-或用环境变量（无需 local 文件）：
+常用环境变量：
 
-
-| 变量                                            | 说明              |
-| --------------------------------------------- | --------------- |
-| `ECI_API_KEY`                                 | 请求头 `X-Api-Key` |
-| `ECI_ACCESS_KEY_ID` / `ECI_ACCESS_KEY_SECRET` | 阿里云凭证           |
-| `ECI_REGION_ID`                               | 如 `cn-hangzhou` |
-| `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID`    | 网络（必填）          |
-| `ECI_VPC_ID`                                  | 可选记录            |
-
+| 变量 | 说明 |
+|------|------|
+| `ECI_API_KEY` | 请求头 `X-Api-Key` |
+| `ECI_ECS_RAM_ROLE_NAME` | 可选，实例角色名 |
+| `ECI_REGION_ID` | 如 `cn-hangzhou` |
+| `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 网络（必填） |
+| `ALIBABA_CLOUD_ACCESS_KEY_*` | 本机临时云凭证（非 yml） |
 
 真实模式创建后请到阿里云控制台核对 ECI，用完后 **DELETE**。
 

@@ -1,13 +1,23 @@
-# Copy to application-local.yml (gitignored) and fill in secrets.
+# Copy to application-local.yml (gitignored) and fill in non-secret settings.
 # Start with: SPRING_PROFILES_ACTIVE=cloud,local mvn spring-boot:run
 #
 # WARNING: real ECI instances incur cost. Always DELETE when done.
+#
+# Cloud identity (方式 A — 无长期 yml AK):
+#   Production: attach a RAM role to the ECS instance; optionally set ecs-ram-role-name
+#               or ALIBABA_CLOUD_ECS_METADATA=<roleName>.
+#   Local (WSL/dev, no IMDS): export temporary credentials, e.g.
+#     ALIBABA_CLOUD_ACCESS_KEY_ID / ALIBABA_CLOUD_ACCESS_KEY_SECRET
+#     (+ ALIBABA_CLOUD_SECURITY_TOKEN for STS).
+#   Without env or role, startup may wait ~1–2s probing 100.100.100.200 then fail (expected).
+#
+# Deprecated (ignored for API client): access-key-id / access-key-secret in yml.
 
 eci:
   mock: false
   api-key: change-me-to-a-strong-key
-  access-key-id: your-access-key-id
-  access-key-secret: your-access-key-secret
+  # Optional: ECS instance RAM role name (InstanceProfileCredentialsProvider)
+  # ecs-ram-role-name: your-eci-manager-role
   region-id: cn-hangzhou
   vpc-id: vpc-xxxxxxxx
   vswitch-id: vsw-xxxxxxxx
@@ -17,4 +27,5 @@ eci:
   default-cpu: 1.0
   default-memory: 2.0
   create-timeout-sec: 300
+  delete-timeout-sec: 300
   poll-interval-ms: 3000

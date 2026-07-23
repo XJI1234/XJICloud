@@ -141,7 +141,7 @@ public class EciInstanceService {
         return toResponse(findEntity(id));
     }
 
-    /** 按云侧 Describe 结果回写本地状态（含 CREATING 时云侧已消失 → TERMINATED）。 */
+    /** 按云侧 Describe 结果回写本地状态（含 CREATING/FAILED 时云侧已消失 → TERMINATED）。 */
     @Transactional
     public InstanceResponse refresh(UUID id) {
         EciInstanceEntity entity = findEntity(id);
@@ -167,8 +167,9 @@ public class EciInstanceService {
         } else if (view.isTerminatedOrMissing()
                 && (entity.getStatus() == InstanceStatus.STOPPING
                 || entity.getStatus() == InstanceStatus.RUNNING
-                || entity.getStatus() == InstanceStatus.CREATING)) {
-            // 创建过程中云侧被删或不存在时，不能卡在 CREATING
+                || entity.getStatus() == InstanceStatus.CREATING
+                || entity.getStatus() == InstanceStatus.FAILED)) {
+            // 云侧已删/不存在时对齐为 TERMINATED（含 CREATING 卡住、FAILED 后资源已清）
             entity.setStatus(InstanceStatus.TERMINATED);
             entity.setFailureReason(null);
         }

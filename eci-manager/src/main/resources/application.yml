@@ -45,6 +45,7 @@ eci:
   default-cpu: 1.0
   default-memory: 2.0
   create-timeout-sec: 300
+  delete-timeout-sec: 300
   poll-interval-ms: 3000
 
 logging:
