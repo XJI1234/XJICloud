@@ -83,16 +83,15 @@ curl -s -X DELETE "http://127.0.0.1:8081/api/v1/eci/instances/{id}" -H "X-Api-Ke
 
 ## 真实 ECI 模式
 
-1. 复制配置模板（网络与 `api-key`；**不要**写长期 AccessKey，勿提交 Git）：
+详细分场景配置（Mock / 本机环境变量 / ECS 角色）见 **[docs/设计与使用说明.md](docs/设计与使用说明.md) §4.2、§6**。
 
-```bash
-cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
-```
+摘要：
 
-2. 云身份（方式 A）：
-   - **ECS：** 绑定 RAM 角色；可选 `eci.ecs-ram-role-name`
-   - **本机：** `export ALIBABA_CLOUD_ACCESS_KEY_ID` / `ALIBABA_CLOUD_ACCESS_KEY_SECRET`（临时；STS 加 `ALIBABA_CLOUD_SECURITY_TOKEN`）
-
+1. `cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml`  
+   填写 `api-key`、region、vswitch、security-group；**不要**指望 yml 里的 AccessKey 建客户端。  
+2. 云身份：  
+   - **有 ECS：** 绑 RAM 角色，可选 `eci.ecs-ram-role-name`  
+   - **本机 WSL：** `export ALIBABA_CLOUD_ACCESS_KEY_ID` / `ALIBABA_CLOUD_ACCESS_KEY_SECRET`（STS 加 `SECURITY_TOKEN`）  
 3. 启动：
 
 ```bash
@@ -109,15 +108,12 @@ mvn spring-boot:run
 | `ECI_ECS_RAM_ROLE_NAME` | 可选，实例角色名 |
 | `ECI_REGION_ID` | 如 `cn-hangzhou` |
 | `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 网络（必填） |
-| `ALIBABA_CLOUD_ACCESS_KEY_*` | 本机临时云凭证（非 yml） |
+| `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | 本机云凭证（非 yml） |
+| `ALIBABA_CLOUD_SECURITY_TOKEN` | STS 时需要 |
 
-真实模式创建后请到阿里云控制台核对 ECI，用完后 **DELETE**。
+创建可带 GPU：`instanceType`（如 `ecs.gn7i-c32g1.8xlarge`）+ `gpu: 1`。测完务必 **DELETE**（GPU 费用高；库存不足会 `NoStock`）。
 
-默认镜像建议使用阿里云仓库（避免 Docker Hub 拉取一直 Pending），例如：
-
-`registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2`
-
-（已写入 `application-local.yml.example` / `application-cloud.yml`）
+默认镜像建议：`registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2`
 
 ## API 摘要
 

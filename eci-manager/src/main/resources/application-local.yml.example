@@ -1,17 +1,17 @@
 # Copy to application-local.yml (gitignored) and fill in non-secret settings.
 # Start with: SPRING_PROFILES_ACTIVE=cloud,local mvn spring-boot:run
 #
-# WARNING: real ECI instances incur cost. Always DELETE when done.
+# Full config guide: docs/设计与使用说明.md §4.2
 #
-# Cloud identity (方式 A — 无长期 yml AK):
-#   Production: attach a RAM role to the ECS instance; optionally set ecs-ram-role-name
-#               or ALIBABA_CLOUD_ECS_METADATA=<roleName>.
-#   Local (WSL/dev, no IMDS): export temporary credentials, e.g.
-#     ALIBABA_CLOUD_ACCESS_KEY_ID / ALIBABA_CLOUD_ACCESS_KEY_SECRET
-#     (+ ALIBABA_CLOUD_SECURITY_TOKEN for STS).
+# WARNING: real ECI instances incur cost (GPU much higher). Always DELETE when done.
+#
+# Cloud identity (yml AccessKey is IGNORED for the Aliyun client):
+#   Production ECS: bind instance RAM role; set ecs-ram-role-name (or ALIBABA_CLOUD_ECS_METADATA).
+#   Local WSL (no IMDS): export ALIBABA_CLOUD_ACCESS_KEY_ID / SECRET (+ SECURITY_TOKEN for STS).
 #   Without env or role, startup may wait ~1–2s probing 100.100.100.200 then fail (expected).
 #
-# Deprecated (ignored for API client): access-key-id / access-key-secret in yml.
+# Create GPU example (POST body): instanceType=ecs.gn7i-c32g1.8xlarge, gpu=1
+#   May fail with OperationDenied.NoStock if the vSwitch zone has no capacity.
 
 eci:
   mock: false

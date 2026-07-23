@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（2026-06 版尚未收录本子工程时，以本文为准）。
 
-**最后更新：** 2026-07-23（ECI Demo 实现、真实联调、文档与中文注释）
+**最后更新：** 2026-07-23（启动补偿、方式 A 云凭证、GPU instanceType/gpu、文档配置说明）
 
 ---
 
@@ -127,12 +127,14 @@ Demo **单实例**；多节点 HA 并发补偿需分布式锁（如 ShedLock）�
 
 | 方法 | 路径 | 行为 |
 |------|------|------|
-| POST | `/instances` | 异步创建 → CREATING |
+| POST | `/instances` | 异步创建 → CREATING；可选 `instanceType`/`gpu`（GPU 规格） |
 | DELETE | `/instances/{id}` | 删除云资源 |
 | GET | `/instances?status=` | 列表 |
 | GET | `/instances/{id}` | 详情 |
 | POST | `/instances/{id}/refresh` | Describe 回写 |
 | GET | `/actuator/health` | 无 Api-Key |
+
+创建 body 可选字段：`name`、`image`、`cpu`、`memory`、`env`、`instanceType`（如 `ecs.gn7i-c32g1.8xlarge`）、`gpu`（容器 GPU 个数，GPU 规格时通常传 `1`）。配置步骤见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4 / §6。
 
 ---
 
@@ -146,6 +148,9 @@ Demo **单实例**；多节点 HA 并发补偿需分布式锁（如 ShedLock）�
 | 联调镜像 | 小镜像验证；真实模式应用**阿里云仓库**镜像 |
 | 生产选型 ECI/CCI | 待定，不阻塞 Demo |
 | D4 完整 CCI Provider | 未做；仅薄接口 `EciProvider` |
+| 启动补偿 | Hybrid：扫 CREATING/STOPPING/RUNNING；无 cloudId 的 CREATING→FAILED；有 cloudId 先 refresh 再 resume；单实例 |
+| 云凭证 | **方式 A**：ECS RAM 角色 / `DefaultCredentialsProvider`；yml AK **废弃不建客户端**；本机用 `ALIBABA_CLOUD_*` |
+| GPU 创建 | POST 支持 `instanceType` + `gpu`；库存不足时云返回 `OperationDenied.NoStock` |
 
 ### 实现分期（已完成）
 
@@ -153,27 +158,33 @@ Demo **单实例**；多节点 HA 并发补偿需分布式锁（如 ShedLock）�
 - **D2** `AliyunEciProvider` + cloud 配置校验  
 - **D3** 超时/`failureReason`、env 透传、README、example yml  
 - **文档** `docs/设计与使用说明.md` + 主代码**中文**类/方法注释  
+- **启动补偿** `StartupCompensationRunner` + Worker resume  
+- **方式 A 凭证** 实例角色 / 环境变量链；去掉 AK 启动必填  
+- **GPU 字段** `instanceType` / `gpu` 透传 CreateContainerGroup  
 
 ### 代码修复（对话中）
 
 1. `sanitizeName`：同一 `create` 内容器组名与容器名**共用一次**规范化名，避免双随机后缀  
-2. `refresh`：云侧 NotFound 时 **CREATING** 也须 → TERMINATED（勿卡死）  
+2. `refresh`：云侧 NotFound 时 **CREATING**（及 FAILED）也须 → TERMINATED（勿卡死）  
 
 ### 真实联调结论（2026-07-23）
 
-| 尝试 | 镜像 | 结果 |
-|------|------|------|
+| 尝试 | 规格 / 镜像 | 结果 |
+|------|-------------|------|
 | 1 | `nginx:alpine`（Docker Hub） | 云创建成功，长期 Pending → 本地超时 FAILED；已 DELETE |
-| 2 | `registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2` | **RUNNING 成功** → DELETE → TERMINATED |
+| 2 | `eci_open/nginx:1.14.2` 1c2g | **RUNNING** → DELETE → TERMINATED |
+| 3 | `ecs.gn7i-c32g1.8xlarge` + gpu=1 + nginx | 鉴权成功；云侧 **`OperationDenied.NoStock`**（交换机可用区无库存）→ 本地 FAILED → 已清理 |
+| 4 | 长期 AK 经 `ALIBABA_CLOUD_*` + 小规格 nginx | **RUNNING** → DELETE → TERMINATED（证明环境变量凭证可用） |
 
-因此：`application-cloud.yml` / `application-local.yml.example` 默认真实镜像用阿里云 `eci_open/nginx`。Mock 默认仍可为 `nginx:alpine`（`application.yml` / `EciProperties`）。
+因此：默认真实镜像用阿里云 `eci_open/nginx`。GPU 规格依赖可用区库存；无自有 ECS 时角色无法绑定，本机用环境变量 AK/STS。
 
 ### 运维注意
 
-- 真实模式**计费**：测完必须 DELETE，并到控制台确认无残留  
+- 真实模式**计费**（尤其 GPU）：测完必须 DELETE，并到控制台确认无残留  
 - **不要**在 yml/Git 写长期 AccessKey；生产用实例角色；曾泄露的 AK 在 RAM **轮换/禁用**  
 - 路径参数必须用真实 UUID，**不要**写字面量 `{id}`  
 - `ECI_API_KEY` 须与配置 `api-key` 一致，否则 401  
+- 配置操作步骤以 [docs/设计与使用说明.md](docs/设计与使用说明.md) **§4 配置与云凭证**、**§6 使用方法** 为准  
 
 ### 启动速查
 
