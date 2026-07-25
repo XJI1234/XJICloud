@@ -28,6 +28,11 @@ server {
         try_files $uri $uri/ /supersplat/index.html;
     }
 
+    location /route/ {
+        alias /var/www/xjicloud/dist/route/;
+        try_files $uri $uri/ /route/index.html;
+    }
+
     # API 反向代理到「后端服务器」（非本机）
     location /api/ {
         proxy_pass http://10.0.1.20:8080;

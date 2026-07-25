@@ -50,6 +50,12 @@ const router = createRouter({
           component: () => import('@/views/SuperSplatEditorView.vue'),
           meta: { immersive: true },
         },
+        {
+          path: 'wayline',
+          name: 'wayline',
+          component: () => import('@/views/WaylineEditorView.vue'),
+          meta: { immersive: true },
+        },
       ],
     },
   ],

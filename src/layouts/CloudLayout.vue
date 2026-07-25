@@ -32,7 +32,7 @@ const navItems = [
 ] as const
 
 const toolItems = [
-  { label: '航线规划', route: null, icon: 'route' as const },
+  { label: '航线规划', route: '/app/wayline', icon: 'route' as const },
   { label: '数据上传', route: '/app/upload', icon: 'upload' as const },
   { label: '模型查看', route: '/app/layer', icon: 'view' as const },
   { label: '高级编辑', route: '/app/supersplat', icon: 'edit' as const },
@@ -42,10 +42,7 @@ function isActiveNav(path: string | null) {
   return Boolean(path && route.path === path)
 }
 
-function navigate(path: string | null) {
-  if (!path) {
-    return
-  }
+function navigate(path: string) {
   router.push(path)
 }
 
@@ -101,7 +98,7 @@ onBeforeUnmount(() => {
 })
 
 const statusText = computed(() => cameraStatus.value)
-const hideStatusBar = computed(() => route.name === 'supersplat')
+const hideStatusBar = computed(() => route.name === 'supersplat' || route.name === 'wayline')
 const isImmersiveRoute = computed(() => route.name === 'home')
 </script>
 
@@ -165,7 +162,7 @@ const isImmersiveRoute = computed(() => route.name === 'home')
           :class="{ 'is-active': isActiveNav(item.route) }"
           type="button"
           :title="item.label"
-          @click="item.route ? navigate(item.route) : showComingSoon(item.label)"
+          @click="navigate(item.route)"
         >
           <span class="cloud-tool-glyph">
             <ToolIcon :name="item.icon" />

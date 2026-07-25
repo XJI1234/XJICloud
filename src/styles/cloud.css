@@ -379,7 +379,8 @@
   position: relative;
 }
 
-.cloud-shell:has(.supersplat-page) .cloud-body {
+.cloud-shell:has(.supersplat-page) .cloud-body,
+.cloud-shell:has(.wayline-page) .cloud-body {
   grid-template-rows: minmax(0, 1fr);
 }
 
@@ -1636,6 +1637,34 @@
   height: 100%;
   border: 0;
   background: var(--cloud-bg-charcoal);
+}
+
+.wayline-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--cloud-bg-charcoal);
+}
+
+.wayline-iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--cloud-bg-charcoal);
+}
+
+.wayline-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--cloud-text-muted);
+  background: rgba(10, 11, 13, 0.78);
+  pointer-events: none;
 }
 
 .supersplat-loading {
