@@ -24,13 +24,16 @@
 - 验收以 Linux + JDK 17 + Maven 为准；开发验证优先 `mock=true`
 - PRD 流程：T0 评审与本计划批准前，不写 T1–T3 业务代码、不调云资源
 
-### 现状基线（D0–D3 已完成，勿重复造）
+### 现状基线（截至 2026-07-27）
 
 | 已有 | 路径提示 |
 |------|----------|
 | 实例 CRUD、幂等删除、Api-Key | `instance/`、`auth/` |
-| Mock / Aliyun Provider | `provider/`；`CreateSpec` 已含 command/args/gpu/instanceType |
+| Mock / Aliyun Provider；`CreateSpec` 含 restartPolicy / command / args / gpu / instanceType | `provider/` |
 | 创建轮询至 Running、删除确认、启动补偿 | `lifecycle/AsyncLifecycleWorker`、`StartupCompensationRunner` |
+| 任务领域模型（尚无 `/tasks` API） | `task/`：`TaskStatus`、`EciTaskEntity`、`EciTaskRepository` |
+| 任务运行时配置键 | `eci.default-restart-policy` / `default-max-runtime-sec` / `task-poll-interval-sec` |
+| Mock 终态测试钩子 | `MockEciProvider.simulateStatus`（Succeeded/Failed） |
 | H2、`ApiResponse`、统一异常 | `application.yml`、`common/` |
 
 ### 分期总览
@@ -38,10 +41,20 @@
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | **T0** | PRD 评审定稿 + 本计划批准 | ✅ 已完成（2026-07-27） |
-| **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | 进行中（Task 1 领域模型 ✅；待 Task 2–4） |
+| **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | 进行中：Task 1–2 ✅；**待 Task 3–4**（`/tasks` API） |
 | **T2** | Running 轮询、Succeeded/Failed 自动删、`maxRuntimeSec`、任务恢复 | 待做 |
-| **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | 待做 |
+| **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | 部分提前：Mock `simulateStatus` ✅；其余待做 |
 | **T4 / I1** | 镜像注册表等 / 主仓联调与生产选型 | 本期不做 |
+
+### 进度日志（2026-07-27）
+
+| 项 | 说明 |
+|----|------|
+| Task 0 | 评审批准已记录 |
+| Task 1（T1.1） | 配置三键、`eci_task` 实体/仓库、实例扩展字段、`CreateSpec.restartPolicy`；本地提交 `62db50b` |
+| Task 2（T1.2） | Aliyun/Mock 透传 `restartPolicy`；`EciProviderRestartPolicyTest`；代码完成，**待用户要求再 commit** |
+| 补强（Bugfix） | 手动请求可传 `restartPolicy`/`command`/`args`；Aliyun `setCommands`/`setArgs`；Mock `simulateStatus` + `CloudInstanceView.isSucceeded` |
+| **下一刀** | Task 3：`POST/GET/cancel /api/v1/eci/tasks` |
 
 ```mermaid
 flowchart TD
@@ -156,21 +169,9 @@ JPA + H2；`ddl-auto: update` 下可自动建表。
 Run: `cd eci-manager && mvn -q test`  
 Expected: PASS（含 `EciTaskEntityMappingTest`）；H2 可落任务行。
 
-- [ ] **Step 5: Commit（仅当用户要求提交时）**
+- [x] **Step 5: Commit（仅当用户要求提交时）**
 
-```bash
-git add eci-manager/src/main/java/com/xjicloud/eci/config \
-  eci-manager/src/main/java/com/xjicloud/eci/task \
-  eci-manager/src/main/java/com/xjicloud/eci/instance/EciInstanceEntity.java \
-  eci-manager/src/main/java/com/xjicloud/eci/provider/CreateSpec.java \
-  eci-manager/src/main/resources/application*.yml \
-  eci-manager/src/test/java/com/xjicloud/eci/task
-git commit -m "$(cat <<'EOF'
-feat(eci-manager): add task entity and runtime config keys
-
-EOF
-)"
-```
+本地提交：`62db50b feat(eci-manager): 增加任务领域模型与运行时配置`（未 push）。
 
 ---
 
@@ -186,18 +187,18 @@ EOF
 - Consumes: `CreateSpec.restartPolicy()`（可为 null → 调用方/Service 已合并为默认 `Never`）
 - Produces: 云侧/Mock 创建带上 RestartPolicy
 
-- [ ] **Step 1: `AliyunEciProvider.create` 写入 RestartPolicy**
+- [x] **Step 1: `AliyunEciProvider.create` 写入 RestartPolicy**
 
 使用 ECI OpenAPI 对应字段（与现有 CreateContainerGroup 请求组装方式一致）。
 
-- [ ] **Step 2: `MockEciProvider` 记录/接受 restartPolicy**
+- [x] **Step 2: `MockEciProvider` 记录/接受 restartPolicy**
 
 便于后续 Mock 终态行为按策略扩展。
 
-- [ ] **Step 3: 测试**
+- [x] **Step 3: 测试**
 
-Run: `cd eci-manager && mvn -q -Dtest='*Provider*,*Create*' test`  
-Expected: PASS。
+Run: `cd eci-manager && mvn -q test`  
+Expected: PASS（含 `EciProviderRestartPolicyTest`）。
 
 - [ ] **Step 4: Commit（用户要求时）**
 
@@ -367,7 +368,9 @@ EOF
 - `mock=true` 不调云；创建后进 Running；可模拟 Succeeded/Failed 后走自动删除
 - `cloudInstanceId` 形如 `mock-eci-xxx`
 
-- [ ] **Step 1: Mock 支持任务完成后的云状态迁移**（可时间触发或测试钩子）
+- [x] **Step 1: Mock 支持任务完成后的云状态迁移**（可时间触发或测试钩子）
+
+已提供测试钩子 `MockEciProvider.simulateStatus(cloudId, Succeeded|Failed|...)`（2026-07-27）。自动时间触发与端到端任务链路仍待 Task 5/6 其余步骤。
 
 - [ ] **Step 2: 端到端 Mock：提交 → Running → 终态 → 实例 TERMINATED → 任务 SUCCEEDED/FAILED**
 
@@ -468,8 +471,8 @@ EOF
 
 **下次开聊示例：**
 
-> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 Task 0 / Task 1 开始；用 Inline Execution。
+> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 **Task 3**（任务 API）开始。
 
 ---
 
-*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。*
+*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–2 + Provider command/args/Mock 终态钩子已完成；下一刀 Task 3。*

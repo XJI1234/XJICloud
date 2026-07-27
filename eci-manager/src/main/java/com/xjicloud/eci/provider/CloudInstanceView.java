@@ -16,6 +16,11 @@ public record CloudInstanceView(
         return status != null && "Running".equalsIgnoreCase(status);
     }
 
+    /** 是否为任务成功终态（容器组 Succeeded）。 */
+    public boolean isSucceeded() {
+        return status != null && "Succeeded".equalsIgnoreCase(status);
+    }
+
     /** 是否为创建/调度失败类终态。 */
     public boolean isFailed() {
         if (status == null) {

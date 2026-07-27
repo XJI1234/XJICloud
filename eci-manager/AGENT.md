@@ -4,20 +4,25 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（2026-06 版尚未收录本子工程时，以本文为准）。
 
-**最后更新：** 2026-07-23（启动补偿、方式 A 云凭证、GPU instanceType/gpu、文档配置说明）
+**最后更新：** 2026-07-27（PRD v2.0；T0 批准；Task 1–2 与 Provider command/args/Mock 终态钩子已落地；`/tasks` API 未做）
 
 ---
 
 ## 1. 本子工程是什么
 
-独立 **Spring Boot 3.3.5 / Java 17** Demo，目录在主仓 Monorepo 的 `eci-manager/`：
+独立 **Spring Boot 3.3.5 / Java 17** 服务，目录在主仓 Monorepo 的 `eci-manager/`：
 
-- 通过 REST + 阿里云 **ECI** OpenAPI 做容器实例 **创建 / 查询 / 删除**（关闭 = 删除，非 Stop）
+- **已交付（Demo 基座 D0–D3）：** REST + 阿里云 **ECI** OpenAPI 做容器实例 **创建 / 查询 / 删除**（关闭 = 删除，非 Stop）
+- **进行中（PRD v2.0 任务编排）：**
+  - ✅ Task 1：任务实体/仓库、运行时配置、实例关联字段
+  - ✅ Task 2：Provider 透传 `restartPolicy`；补强 `command`/`args` 全链路；Mock `simulateStatus`
+  - ⏳ 待做：Task 3+ `/tasks` API、终态自动删、超时、文档验收
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
-- 对应 PRD：仓库根目录 `ECI容器管理后端Demo产品需求文档(PRD).md` **v1.1**
-- 与「训练队列驱动的 CCI GPU Worker 自动启停 PRD」**并行、不互相替代**；生产最终用 ECI 还是 CCI **仍待定**
+- 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**
+- **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
+- 生产最终用 ECI 还是 CCI **仍待定**（属后续集成评审，不阻塞本期）
 
-**非目标：** 训练队列、Worker 注册/心跳、自动扩缩、前端、CCI 实现。
+**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交。
 
 ---
 
@@ -36,6 +41,7 @@ eci-manager/
     ├── auth/            # ApiKeyAuthFilter（X-Api-Key）
     ├── config/          # EciProperties、Security、Async、ProviderConfig
     ├── instance/        # Controller、Service、Entity、Repository、DTO、InstanceStatus
+    ├── task/            # TaskStatus、EciTaskEntity、EciTaskRepository（尚无 Controller/Service）
     ├── provider/        # EciProvider、MockEciProvider、AliyunEciProvider、CreateSpec、CloudInstanceView
     └── lifecycle/       # AsyncLifecycleWorker、StartupCompensationRunner
 ```

@@ -50,6 +50,14 @@ public class EciInstanceEntity {
     @Column
     private String envJson;
 
+    @Lob
+    @Column
+    private String commandJson;
+
+    @Lob
+    @Column
+    private String argsJson;
+
     /** 关联任务 UUID；手动创建的实例为空。 */
     @Column
     private UUID taskId;
@@ -145,6 +153,22 @@ public class EciInstanceEntity {
 
     public void setEnvJson(String envJson) {
         this.envJson = envJson;
+    }
+
+    public String getCommandJson() {
+        return commandJson;
+    }
+
+    public void setCommandJson(String commandJson) {
+        this.commandJson = commandJson;
+    }
+
+    public String getArgsJson() {
+        return argsJson;
+    }
+
+    public void setArgsJson(String argsJson) {
+        this.argsJson = argsJson;
     }
 
     public UUID getTaskId() {

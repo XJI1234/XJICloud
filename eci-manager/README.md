@@ -1,13 +1,23 @@
 # eci-manager
 
-独立 Spring Boot Demo：通过 REST API 管理阿里云 **ECI** 容器实例生命周期（创建 / 查询 / **删除**）。
+独立 Spring Boot 服务：通过 REST API 管理阿里云 **ECI** 容器实例生命周期（创建 / 查询 / **删除**），并按 PRD v2.0 演进为任务驱动编排（进行中）。
 
 > **详细文档（结构 / 接口 / 用法）：** [docs/设计与使用说明.md](docs/设计与使用说明.md)  
-> **Agent 上下文（架构 / 决策 / 联调记忆）：** [AGENT.md](AGENT.md)
+> **Agent 上下文（架构 / 决策 / 联调记忆）：** [AGENT.md](AGENT.md)  
+> **实现计划：** [docs/superpowers/plans/2026-07-27-eci-task-orchestration.md](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
 
 > **费用警告：** `eci.mock=false`（cloud profile）会创建真实云资源并产生账单。演示结束后务必调用 `DELETE` 删除实例。
 
-对应 PRD：`ECI容器管理后端Demo产品需求文档(PRD).md` v1.1。本工程不修改主仓 `backend/`。
+对应 PRD：[`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**（前身 Demo PRD v1.1 已被取代）。本工程不修改主仓 `backend/`。
+
+### 实现进度（2026-07-27）
+
+| 范围 | 状态 |
+|------|------|
+| 实例 `/api/v1/eci/instances`（含 restartPolicy / command / args） | ✅ 可用 |
+| 任务领域模型与配置（`eci_task`、默认超时/轮询键） | ✅ 已落地 |
+| Provider 透传 restartPolicy；Mock `simulateStatus` | ✅ 已落地 |
+| 任务 HTTP `/api/v1/eci/tasks`、终态自动删、超时保护 | ⏳ 未做（计划 Task 3+） |
 
 ## 环境要求（Linux）
 

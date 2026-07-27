@@ -1,5 +1,6 @@
 package com.xjicloud.eci.instance.dto;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,6 +20,12 @@ public class CreateInstanceRequest {
     private String instanceType;
     /** 可选；容器 GPU 个数；指定 GPU 规格时建议传 1。 */
     private Integer gpu;
+    /** 可选；Never / OnFailure / Always；未传则用 {@code eci.default-restart-policy}。 */
+    private String restartPolicy;
+    /** 可选；覆盖镜像 ENTRYPOINT。 */
+    private List<String> command;
+    /** 可选；覆盖镜像 CMD。 */
+    private List<String> args;
 
     public String getName() {
         return name;
@@ -74,5 +81,29 @@ public class CreateInstanceRequest {
 
     public void setGpu(Integer gpu) {
         this.gpu = gpu;
+    }
+
+    public String getRestartPolicy() {
+        return restartPolicy;
+    }
+
+    public void setRestartPolicy(String restartPolicy) {
+        this.restartPolicy = restartPolicy;
+    }
+
+    public List<String> getCommand() {
+        return command;
+    }
+
+    public void setCommand(List<String> command) {
+        this.command = command;
+    }
+
+    public List<String> getArgs() {
+        return args;
+    }
+
+    public void setArgs(List<String> args) {
+        this.args = args;
     }
 }

@@ -83,7 +83,11 @@ public class EciInstanceService {
         Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
         String instanceType = StringUtils.hasText(request.getInstanceType()) ? request.getInstanceType() : null;
         Integer gpu = request.getGpu();
-        String restartPolicy = properties.getDefaultRestartPolicy();
+        String restartPolicy = StringUtils.hasText(request.getRestartPolicy())
+                ? request.getRestartPolicy().trim()
+                : properties.getDefaultRestartPolicy();
+        List<String> command = request.getCommand();
+        List<String> args = request.getArgs();
 
         EciInstanceEntity entity = new EciInstanceEntity();
         entity.setId(id);
@@ -93,6 +97,8 @@ public class EciInstanceService {
         entity.setMemory(memory);
         entity.setStatus(InstanceStatus.CREATING);
         entity.setEnvJson(toJson(env));
+        entity.setCommandJson(toJson(command));
+        entity.setArgsJson(toJson(args));
         entity.setInstanceType(instanceType);
         entity.setGpu(gpu);
         entity.setRestartPolicy(restartPolicy);
@@ -109,7 +115,9 @@ public class EciInstanceService {
                 env,
                 instanceType,
                 gpu,
-                restartPolicy);
+                restartPolicy,
+                command,
+                args);
         lifecycleWorker.scheduleCreate(id, spec);
 
         return toResponse(entity);
@@ -298,11 +306,14 @@ public class EciInstanceService {
                 entity.getUpdatedAt());
     }
 
-    private String toJson(Map<String, String> env) {
+    private String toJson(Object value) {
+        if (value == null) {
+            return null;
+        }
         try {
-            return objectMapper.writeValueAsString(env);
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("序列化 env 失败", e);
+            throw new IllegalStateException("序列化 JSON 失败", e);
         }
     }
 
