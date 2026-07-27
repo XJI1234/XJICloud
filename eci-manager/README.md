@@ -2,7 +2,9 @@
 
 独立 Spring Boot 服务：通过 REST API 管理阿里云 **ECI** 容器实例生命周期（创建 / 查询 / **删除**），并按 PRD v2.0 演进为任务驱动编排（进行中）。
 
-> **详细文档（结构 / 接口 / 用法）：** [docs/设计与使用说明.md](docs/设计与使用说明.md)  
+> **API 文档（业务导读 / 接口字段 / 联调速查）：** [docs/API文档.md](docs/API文档.md)  
+> **详细文档（结构 / 配置 / 用法）：** [docs/设计与使用说明.md](docs/设计与使用说明.md)  
+> **逐步测试说明（Mock / 真云，含每条命令）：** [docs/测试说明.md](docs/测试说明.md)  
 > **Agent 上下文（架构 / 决策 / 联调记忆）：** [AGENT.md](AGENT.md)  
 > **实现计划：** [docs/superpowers/plans/2026-07-27-eci-task-orchestration.md](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
 
@@ -17,7 +19,8 @@
 | 实例 `/api/v1/eci/instances`（含 restartPolicy / command / args） | ✅ 可用 |
 | 任务领域模型与配置（`eci_task`、默认超时/轮询键） | ✅ 已落地 |
 | Provider 透传 restartPolicy；Mock `simulateStatus` | ✅ 已落地 |
-| 任务 HTTP `/api/v1/eci/tasks`、终态自动删、超时保护 | ⏳ 未做（计划 Task 3+） |
+| 任务 HTTP `/api/v1/eci/tasks`（提交 / 查询 / 取消）与手动实例兼容 | ✅ 可用（T1） |
+| 终态自动删、`maxRuntimeSec` 超时保护 | ⏳ 未做（计划 Task 5） |
 
 ## 环境要求（Linux）
 
