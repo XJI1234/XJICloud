@@ -12,6 +12,8 @@ import com.aliyuncs.eci.model.v20180808.DescribeContainerGroupsRequest;
 import com.aliyuncs.eci.model.v20180808.DescribeContainerGroupsResponse;
 import com.aliyuncs.exceptions.ClientException;
 import com.aliyuncs.profile.DefaultProfile;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.config.EciProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +33,8 @@ import java.util.UUID;
 public class AliyunEciProvider implements EciProvider {
 
     private static final Logger log = LoggerFactory.getLogger(AliyunEciProvider.class);
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final String CREDENTIAL_HINT =
             "无法解析阿里云凭证：生产请为 ECS 绑定 RAM 角色（可配 eci.ecs-ram-role-name）；"
@@ -131,7 +135,7 @@ public class AliyunEciProvider implements EciProvider {
     public CloudInstanceView describe(String cloudInstanceId) {
         DescribeContainerGroupsRequest request = new DescribeContainerGroupsRequest();
         request.setRegionId(properties.getRegionId());
-        request.setContainerGroupIds("[\"" + cloudInstanceId + "\"]");
+        request.setContainerGroupIds(toContainerGroupIdsJson(cloudInstanceId));
 
         try {
             DescribeContainerGroupsResponse response = client.getAcsResponse(request);
@@ -171,6 +175,21 @@ public class AliyunEciProvider implements EciProvider {
             log.error("ECI delete failed cloudInstanceId={} errCode={} requestId={}",
                     cloudInstanceId, e.getErrCode(), e.getRequestId());
             throw new IllegalStateException("阿里云 ECI 删除失败: " + e.getErrCode() + " " + e.getErrMsg(), e);
+        }
+    }
+
+    /**
+     * 将 cloudInstanceId 编码为 Describe API 所需的 JSON 数组字符串。
+     * 使用 Jackson 序列化，避免手工拼接导致的 JSON 注入 / 畸形。
+     */
+    static String toContainerGroupIdsJson(String cloudInstanceId) {
+        if (!StringUtils.hasText(cloudInstanceId)) {
+            throw new IllegalArgumentException("cloudInstanceId must not be blank");
+        }
+        try {
+            return JSON.writeValueAsString(List.of(cloudInstanceId));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("序列化 ContainerGroupIds 失败", e);
         }
     }
 
