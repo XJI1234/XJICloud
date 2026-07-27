@@ -41,7 +41,7 @@
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | **T0** | PRD 评审定稿 + 本计划批准 | ✅ 已完成（2026-07-27） |
-| **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | 进行中：Task 1–2 ✅；**待 Task 3–4**（`/tasks` API） |
+| **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | 进行中：Task 1–3 ✅；**待 Task 4**（手动 `/instances` 兼容确认） |
 | **T2** | Running 轮询、Succeeded/Failed 自动删、`maxRuntimeSec`、任务恢复 | 待做 |
 | **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | 部分提前：Mock `simulateStatus` ✅；其余待做 |
 | **T4 / I1** | 镜像注册表等 / 主仓联调与生产选型 | 本期不做 |
@@ -53,8 +53,8 @@
 | Task 0 | 评审批准已记录 |
 | Task 1（T1.1） | 配置三键、`eci_task` 实体/仓库、实例扩展字段、`CreateSpec.restartPolicy`；本地提交 `62db50b` |
 | Task 2（T1.2） | Aliyun/Mock 透传 `restartPolicy`；`EciProviderRestartPolicyTest`；代码完成，**待用户要求再 commit** |
-| 补强（Bugfix） | 手动请求可传 `restartPolicy`/`command`/`args`；Aliyun `setCommands`/`setArgs`；Mock `simulateStatus` + `CloudInstanceView.isSucceeded` |
-| **下一刀** | Task 3：`POST/GET/cancel /api/v1/eci/tasks` |
+| Task 3（T1.3） | `/tasks` 提交/查询/取消；实例 `taskId`；Running/失败回写；`EciTaskApiTest` PASS；**待用户要求再 commit** |
+| **下一刀** | Task 4：手动 `/instances` 兼容确认 |
 
 ```mermaid
 flowchart TD
@@ -242,17 +242,17 @@ EOF
 - 创建失败 → 任务 `FAILED` + `failureReason`
 - **终态自动删除留给 Task 5（T2）**
 
-- [ ] **Step 1: 写失败测试（API 契约）**
+- [x] **Step 1: 写失败测试（API 契约）**
 
 覆盖：缺 image → 4xx；无 Api-Key → 401/403；成功提交返回 taskId；cancel 幂等。
 
-- [ ] **Step 2: 实现 DTO + Service + Controller**
+- [x] **Step 2: 实现 DTO + Service + Controller**
 
 先 `repository.save` 任务，再创建实例并 `save`，再触发 `@Async`（与现有实例创建事务顺序一致）。
 
-- [ ] **Step 3: 实例响应带 `taskId`；手动创建 `taskId` 为空**
+- [x] **Step 3: 实例响应带 `taskId`；手动创建 `taskId` 为空**
 
-- [ ] **Step 4: Mock 下跑测试 + 手工 curl**
+- [x] **Step 4: Mock 下跑测试 + 手工 curl**
 
 ```bash
 curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
@@ -263,15 +263,9 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 
 Expected: `success=true`，可查到 `instanceId`；cancel 后任务 `CANCELLED`。
 
-- [ ] **Step 5: Commit（用户要求时）**
+- [x] **Step 5: Commit（用户要求时）**
 
-```bash
-git commit -m "$(cat <<'EOF'
-feat(eci-manager): add task submit, query, and cancel APIs
-
-EOF
-)"
-```
+本地提交：`feat(eci-manager): add task submit, query, and cancel APIs`（未 push）。
 
 ---
 
@@ -471,8 +465,8 @@ EOF
 
 **下次开聊示例：**
 
-> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 **Task 3**（任务 API）开始。
+> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 **Task 4**（手动 `/instances` 兼容确认）开始。
 
 ---
 
-*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–2 + Provider command/args/Mock 终态钩子已完成；下一刀 Task 3。*
+*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–3 已完成；下一刀 Task 4。*

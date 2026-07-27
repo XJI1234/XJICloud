@@ -7,8 +7,10 @@ import com.xjicloud.eci.instance.InstanceStatus;
 import com.xjicloud.eci.provider.CloudInstanceView;
 import com.xjicloud.eci.provider.CreateSpec;
 import com.xjicloud.eci.provider.EciProvider;
+import com.xjicloud.eci.task.EciTaskService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,18 +29,23 @@ public class AsyncLifecycleWorker {
     private final EciInstanceRepository repository;
     private final EciProvider eciProvider;
     private final EciProperties properties;
+    private final EciTaskService taskService;
 
     public AsyncLifecycleWorker(
             EciInstanceRepository repository,
             EciProvider eciProvider,
-            EciProperties properties) {
+            EciProperties properties,
+            @Lazy EciTaskService taskService) {
         this.repository = repository;
         this.eciProvider = eciProvider;
         this.properties = properties;
+        this.taskService = taskService;
     }
 
     /**
      * 异步创建：Create → 写入 cloudInstanceId → 轮询至 Running / 失败 / 超时。
+     * <p>
+     * 若任务取消已将实例置为 STOPPING/TERMINATED，则改为删云，避免推成 RUNNING。
      */
     @Async("eciLifecycleExecutor")
     public void scheduleCreate(UUID localId, CreateSpec spec) {
@@ -46,6 +53,12 @@ public class AsyncLifecycleWorker {
         try {
             String cloudId = eciProvider.create(spec);
             updateAfterCreateAccepted(localId, cloudId);
+            if (isCreateAborted(localId)) {
+                runDeleteLifecycle(localId);
+                log.info("create aborted after accept (cancel race) localId={} cloudInstanceId={} elapsedMs={}",
+                        localId, cloudId, System.currentTimeMillis() - start);
+                return;
+            }
             pollUntilRunning(localId, cloudId);
             log.info("create lifecycle done localId={} cloudInstanceId={} elapsedMs={}",
                     localId, cloudId, System.currentTimeMillis() - start);
@@ -124,12 +137,28 @@ public class AsyncLifecycleWorker {
         });
     }
 
+    private boolean isCreateAborted(UUID localId) {
+        return repository.findById(localId)
+                .map(entity -> entity.getStatus() == InstanceStatus.STOPPING
+                        || entity.getStatus() == InstanceStatus.TERMINATED)
+                .orElse(true);
+    }
+
     private void pollUntilRunning(UUID localId, String cloudId) throws InterruptedException {
         long deadline = System.currentTimeMillis() + properties.getCreateTimeoutSec() * 1000L;
         while (System.currentTimeMillis() < deadline) {
+            if (isCreateAborted(localId)) {
+                runDeleteLifecycle(localId);
+                return;
+            }
             CloudInstanceView view = eciProvider.describe(cloudId);
             applyCloudStatus(localId, view);
-            if (view.isRunning()) {
+            if (view.isRunning() || view.isSucceeded()) {
+                // 短任务可能 Pending → Succeeded 未见 Running；创建成功路径仍 markRunning
+                if (isCreateAborted(localId)) {
+                    runDeleteLifecycle(localId);
+                    return;
+                }
                 markRunning(localId, view.status());
                 return;
             }
@@ -173,6 +202,7 @@ public class AsyncLifecycleWorker {
 
     @Transactional
     protected void markRunning(UUID localId, String cloudStatus) {
+        UUID[] taskIdHolder = new UUID[1];
         repository.findById(localId).ifPresent(entity -> {
             if (entity.getStatus() == InstanceStatus.CREATING || entity.getStatus() == InstanceStatus.FAILED) {
                 entity.setStatus(InstanceStatus.RUNNING);
@@ -180,8 +210,12 @@ public class AsyncLifecycleWorker {
                 entity.setFailureReason(null);
                 entity.setUpdatedAt(Instant.now());
                 repository.save(entity);
+                taskIdHolder[0] = entity.getTaskId();
             }
         });
+        if (taskIdHolder[0] != null && taskService != null) {
+            taskService.onInstanceRunning(taskIdHolder[0]);
+        }
     }
 
     @Transactional
@@ -197,15 +231,23 @@ public class AsyncLifecycleWorker {
 
     @Transactional
     protected void markFailed(UUID localId, String reason) {
+        UUID[] taskIdHolder = new UUID[1];
+        String[] reasonHolder = new String[1];
         repository.findById(localId).ifPresent(entity -> {
-            if (entity.getStatus() == InstanceStatus.TERMINATED) {
+            if (entity.getStatus() == InstanceStatus.TERMINATED
+                    || entity.getStatus() == InstanceStatus.STOPPING) {
                 return;
             }
             entity.setStatus(InstanceStatus.FAILED);
             entity.setFailureReason(truncate(reason));
             entity.setUpdatedAt(Instant.now());
             repository.save(entity);
+            taskIdHolder[0] = entity.getTaskId();
+            reasonHolder[0] = entity.getFailureReason();
         });
+        if (taskIdHolder[0] != null && taskService != null) {
+            taskService.onInstanceFailed(taskIdHolder[0], reasonHolder[0]);
+        }
     }
 
     private static String truncate(String reason) {

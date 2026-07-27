@@ -60,6 +60,7 @@ class EciInstanceServiceCompensationTest {
                 lifecycleWorker,
                 new ObjectMapper(),
                 transactionManager,
+                null,
                 refreshTarget);
     }
 

@@ -11,6 +11,7 @@ import com.xjicloud.eci.lifecycle.AsyncLifecycleWorker;
 import com.xjicloud.eci.provider.CloudInstanceView;
 import com.xjicloud.eci.provider.CreateSpec;
 import com.xjicloud.eci.provider.EciProvider;
+import com.xjicloud.eci.task.EciTaskService;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,8 @@ public class EciInstanceService {
     private final AsyncLifecycleWorker lifecycleWorker;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    /** 任务状态回写；单测可传 null。 */
+    private final EciTaskService taskService;
     /** 经 Spring 代理调用，使 {@link #refresh} 的 {@code @Transactional} 在补偿路径生效。 */
     private final EciInstanceService self;
 
@@ -57,6 +60,7 @@ public class EciInstanceService {
             AsyncLifecycleWorker lifecycleWorker,
             ObjectMapper objectMapper,
             PlatformTransactionManager transactionManager,
+            @Lazy EciTaskService taskService,
             @Lazy EciInstanceService self) {
         this.repository = repository;
         this.properties = properties;
@@ -64,6 +68,7 @@ public class EciInstanceService {
         this.lifecycleWorker = lifecycleWorker;
         this.objectMapper = objectMapper;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.taskService = taskService;
         this.self = self;
     }
 
@@ -73,6 +78,18 @@ public class EciInstanceService {
      * 先 {@code save} 再调度异步，避免事务未提交时异步线程读不到记录。
      */
     public InstanceResponse create(CreateInstanceRequest request) {
+        return createInternal(request, null);
+    }
+
+    /** 任务驱动创建：绑定 {@code taskId}。 */
+    public InstanceResponse createForTask(CreateInstanceRequest request, UUID taskId) {
+        if (taskId == null) {
+            throw new BusinessException("taskId 不能为空");
+        }
+        return createInternal(request, taskId);
+    }
+
+    private InstanceResponse createInternal(CreateInstanceRequest request, UUID taskId) {
         Instant now = Instant.now();
         UUID id = UUID.randomUUID();
 
@@ -91,6 +108,7 @@ public class EciInstanceService {
 
         EciInstanceEntity entity = new EciInstanceEntity();
         entity.setId(id);
+        entity.setTaskId(taskId);
         entity.setName(name);
         entity.setImage(image);
         entity.setCpu(cpu);
@@ -150,6 +168,36 @@ public class EciInstanceService {
         return toResponse(entity);
     }
 
+    /**
+     * 任务取消专用删除：允许 CREATING；无 cloudId 时本地 TERMINATED，有则 STOPPING + 异步删。
+     */
+    public InstanceResponse deleteForTaskCancel(UUID id) {
+        EciInstanceEntity entity = findEntity(id);
+
+        if (entity.getStatus() == InstanceStatus.TERMINATED
+                || entity.getStatus() == InstanceStatus.STOPPING) {
+            return toResponse(entity);
+        }
+
+        if (entity.getStatus() == InstanceStatus.CREATING
+                && !StringUtils.hasText(entity.getCloudInstanceId())) {
+            entity.setStatus(InstanceStatus.TERMINATED);
+            entity.setCloudStatus("Deleted");
+            entity.setFailureReason(null);
+            entity.setUpdatedAt(Instant.now());
+            repository.save(entity);
+            return toResponse(entity);
+        }
+
+        entity.setStatus(InstanceStatus.STOPPING);
+        entity.setFailureReason(null);
+        entity.setUpdatedAt(Instant.now());
+        repository.save(entity);
+
+        lifecycleWorker.scheduleDelete(id);
+        return toResponse(entity);
+    }
+
     @Transactional(readOnly = true)
     public List<InstanceResponse> list(InstanceStatus status) {
         List<EciInstanceEntity> entities = status != null
@@ -180,7 +228,9 @@ public class EciInstanceService {
         entity.setCloudStatus(view.status());
         entity.setUpdatedAt(Instant.now());
 
-        if (view.isRunning() && entity.getStatus() == InstanceStatus.CREATING) {
+        InstanceStatus previous = entity.getStatus();
+        if ((view.isRunning() || view.isSucceeded()) && entity.getStatus() == InstanceStatus.CREATING) {
+            // Succeeded 可能跳过 Running（短任务）；本地先对齐 RUNNING，终态清理留给任务轮询器
             entity.setStatus(InstanceStatus.RUNNING);
             entity.setFailureReason(null);
         } else if (view.isFailed() && entity.getStatus() != InstanceStatus.TERMINATED) {
@@ -197,6 +247,7 @@ public class EciInstanceService {
         }
 
         repository.save(entity);
+        notifyTaskOnStatusChange(entity, previous);
         return toResponse(entity);
     }
 
@@ -264,6 +315,7 @@ public class EciInstanceService {
     }
 
     private void markInterruptedCreating(UUID id) {
+        final UUID[] taskIdHolder = new UUID[1];
         transactionTemplate.executeWithoutResult(status -> repository.findById(id).ifPresent(entity -> {
             if (entity.getStatus() != InstanceStatus.CREATING) {
                 return;
@@ -272,7 +324,11 @@ public class EciInstanceService {
             entity.setFailureReason(INTERRUPTED_CREATE_REASON);
             entity.setUpdatedAt(Instant.now());
             repository.save(entity);
+            taskIdHolder[0] = entity.getTaskId();
         }));
+        if (taskIdHolder[0] != null && taskService != null) {
+            taskService.onInstanceFailed(taskIdHolder[0], INTERRUPTED_CREATE_REASON);
+        }
     }
 
     private void markTerminatedLocal(UUID id) {
@@ -285,6 +341,17 @@ public class EciInstanceService {
         }));
     }
 
+    private void notifyTaskOnStatusChange(EciInstanceEntity entity, InstanceStatus previous) {
+        if (taskService == null || entity.getTaskId() == null || entity.getStatus() == previous) {
+            return;
+        }
+        if (entity.getStatus() == InstanceStatus.RUNNING) {
+            taskService.onInstanceRunning(entity.getTaskId());
+        } else if (entity.getStatus() == InstanceStatus.FAILED) {
+            taskService.onInstanceFailed(entity.getTaskId(), entity.getFailureReason());
+        }
+    }
+
     private EciInstanceEntity findEntity(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new BusinessException("实例不存在: " + id, HttpStatus.NOT_FOUND));
@@ -293,6 +360,7 @@ public class EciInstanceService {
     private InstanceResponse toResponse(EciInstanceEntity entity) {
         return new InstanceResponse(
                 entity.getId(),
+                entity.getTaskId(),
                 entity.getName(),
                 entity.getImage(),
                 entity.getCpu(),

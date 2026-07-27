@@ -10,12 +10,14 @@ import java.util.UUID;
  * 实例详情/列表项响应。
  *
  * @param id               本地 UUID
+ * @param taskId           关联任务 UUID；手动创建的实例为空
  * @param cloudInstanceId  云侧容器组 ID（或 mock-eci-...）
  * @param cloudStatus      最近一次云侧状态字符串
  * @param failureReason    失败原因（仅 FAILED 等场景）
  */
 public record InstanceResponse(
         UUID id,
+        UUID taskId,
         String name,
         String image,
         double cpu,

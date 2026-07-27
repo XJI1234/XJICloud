@@ -48,6 +48,7 @@ class EciInstanceServiceRefreshTest {
                 lifecycleWorker,
                 new ObjectMapper(),
                 transactionManager,
+                null,
                 null);
     }
 
@@ -59,6 +60,32 @@ class EciInstanceServiceRefreshTest {
     @Test
     void refreshTransitionsFailedToTerminatedWhenCloudMissing() {
         assertRefreshToTerminated(InstanceStatus.FAILED);
+    }
+
+    @Test
+    void refreshTransitionsCreatingToRunningWhenCloudSucceeded() {
+        UUID id = UUID.randomUUID();
+        EciInstanceEntity entity = new EciInstanceEntity();
+        entity.setId(id);
+        entity.setName("demo");
+        entity.setImage("nginx:alpine");
+        entity.setCpu(1);
+        entity.setMemory(2);
+        entity.setStatus(InstanceStatus.CREATING);
+        entity.setCloudInstanceId("eci-short");
+        entity.setEnvJson("{}");
+        entity.setCreatedAt(Instant.now());
+        entity.setUpdatedAt(Instant.now());
+
+        when(repository.findById(id)).thenReturn(Optional.of(entity));
+        when(eciProvider.describe("eci-short"))
+                .thenReturn(new CloudInstanceView("eci-short", "Succeeded", null));
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.refresh(id);
+
+        assertThat(response.status()).isEqualTo(InstanceStatus.RUNNING);
+        assertThat(response.cloudStatus()).isEqualTo("Succeeded");
     }
 
     private void assertRefreshToTerminated(InstanceStatus localStatus) {
