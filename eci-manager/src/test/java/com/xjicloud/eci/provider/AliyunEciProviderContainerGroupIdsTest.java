@@ -27,4 +27,22 @@ class AliyunEciProviderContainerGroupIdsTest {
         assertThatThrownBy(() -> AliyunEciProvider.toContainerGroupIdsJson("  "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void sanitizeNameCollapsesNonAlphanumericToValidPrefix() {
+        String name = AliyunEciProvider.sanitizeName("!!!");
+        assertThat(name).matches("^eci-demo-[0-9a-f]{8}$");
+    }
+
+    @Test
+    void sanitizeNameStartsWithLetterAndKeepsAlnumDash() {
+        String name = AliyunEciProvider.sanitizeName("My_Task--01");
+        assertThat(name).matches("^my-task-01-[0-9a-f]{8}$");
+    }
+
+    @Test
+    void sanitizeNameUsesDefaultWhenBlank() {
+        String name = AliyunEciProvider.sanitizeName("   ");
+        assertThat(name).matches("^eci-demo-[0-9a-f]{8}$");
+    }
 }

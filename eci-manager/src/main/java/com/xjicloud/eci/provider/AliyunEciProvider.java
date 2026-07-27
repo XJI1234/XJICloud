@@ -143,6 +143,9 @@ public class AliyunEciProvider implements EciProvider {
                 return new CloudInstanceView(cloudInstanceId, "NotFound", null);
             }
             DescribeContainerGroupsResponse.ContainerGroup group = response.getContainerGroups().get(0);
+            if (group == null || group.getStatus() == null) {
+                return new CloudInstanceView(cloudInstanceId, "NotFound", "empty container group");
+            }
             return new CloudInstanceView(cloudInstanceId, group.getStatus(), null);
         } catch (ClientException e) {
             if ("InvalidParameter.NotFound".equalsIgnoreCase(e.getErrCode())
@@ -197,11 +200,19 @@ public class AliyunEciProvider implements EciProvider {
      * 将显示名规范为 ECI 可接受的名称（小写、数字、连字符），并附加短随机后缀保证唯一。
      * 同一 create 调用内应对返回值只使用一次，勿重复调用以免后缀不同。
      */
-    private static String sanitizeName(String name) {
+    static String sanitizeName(String name) {
         String base = StringUtils.hasText(name) ? name : "eci-demo";
         String sanitized = base.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+        sanitized = sanitized.replaceAll("-{2,}", "-");
+        sanitized = sanitized.replaceAll("^-+|-+$", "");
+        if (sanitized.isEmpty()) {
+            sanitized = "eci-demo";
+        }
         if (sanitized.length() > 40) {
-            sanitized = sanitized.substring(0, 40);
+            sanitized = sanitized.substring(0, 40).replaceAll("-+$", "");
+            if (sanitized.isEmpty()) {
+                sanitized = "eci-demo";
+            }
         }
         if (!sanitized.matches("^[a-z].*")) {
             sanitized = "e" + sanitized;

@@ -36,13 +36,18 @@ public class ProviderConfig {
         return new AliyunEciProvider(properties);
     }
 
-    /** 启动失败快：api-key 未配置则直接拒绝启动。 */
+    /** 启动失败快：api-key 与轮询/超时配置合法性。 */
     @Bean
     public ApplicationRunner apiKeyStartupCheck(EciProperties properties) {
         return args -> {
             if (!StringUtils.hasText(properties.getApiKey())) {
                 throw new IllegalStateException("eci.api-key 不能为空，请通过配置或环境变量 ECI_API_KEY 设置");
             }
+            requirePositive(properties.getPollIntervalMs(), "eci.poll-interval-ms");
+            requirePositive(properties.getTaskPollIntervalSec(), "eci.task-poll-interval-sec");
+            requirePositive(properties.getCreateTimeoutSec(), "eci.create-timeout-sec");
+            requirePositive(properties.getDeleteTimeoutSec(), "eci.delete-timeout-sec");
+            requirePositive(properties.getDefaultMaxRuntimeSec(), "eci.default-max-runtime-sec");
         };
     }
 
@@ -56,6 +61,12 @@ public class ProviderConfig {
     private static void require(String value, String key) {
         if (!StringUtils.hasText(value)) {
             throw new IllegalStateException(key + " 在 eci.mock=false 时必填");
+        }
+    }
+
+    private static void requirePositive(long value, String key) {
+        if (value <= 0) {
+            throw new IllegalStateException(key + " 必须为正数，当前=" + value);
         }
     }
 }
