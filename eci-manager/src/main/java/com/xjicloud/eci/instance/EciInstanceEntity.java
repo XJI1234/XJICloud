@@ -50,6 +50,22 @@ public class EciInstanceEntity {
     @Column
     private String envJson;
 
+    /** 关联任务 UUID；手动创建的实例为空。 */
+    @Column
+    private UUID taskId;
+
+    /** 重启策略：Never / OnFailure / Always。 */
+    @Column(length = 32)
+    private String restartPolicy;
+
+    /** 可选 ECS 规格。 */
+    @Column(length = 128)
+    private String instanceType;
+
+    /** 可选 GPU 个数。 */
+    @Column
+    private Integer gpu;
+
     @Column(length = 1024)
     private String failureReason;
 
@@ -129,6 +145,38 @@ public class EciInstanceEntity {
 
     public void setEnvJson(String envJson) {
         this.envJson = envJson;
+    }
+
+    public UUID getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(UUID taskId) {
+        this.taskId = taskId;
+    }
+
+    public String getRestartPolicy() {
+        return restartPolicy;
+    }
+
+    public void setRestartPolicy(String restartPolicy) {
+        this.restartPolicy = restartPolicy;
+    }
+
+    public String getInstanceType() {
+        return instanceType;
+    }
+
+    public void setInstanceType(String instanceType) {
+        this.instanceType = instanceType;
+    }
+
+    public Integer getGpu() {
+        return gpu;
+    }
+
+    public void setGpu(Integer gpu) {
+        this.gpu = gpu;
     }
 
     public String getFailureReason() {

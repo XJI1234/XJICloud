@@ -47,6 +47,9 @@ eci:
   create-timeout-sec: 300
   delete-timeout-sec: 300
   poll-interval-ms: 3000
+  default-restart-policy: Never
+  default-max-runtime-sec: 14400
+  task-poll-interval-sec: 10
 
 logging:
   level:

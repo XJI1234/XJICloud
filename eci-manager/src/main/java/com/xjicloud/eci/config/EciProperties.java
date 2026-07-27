@@ -42,6 +42,12 @@ public class EciProperties {
     private int deleteTimeoutSec = 300;
     /** 后台轮询云状态的间隔毫秒。 */
     private long pollIntervalMs = 3000L;
+    /** 默认重启策略；任务/实例未指定时使用（Never / OnFailure / Always）。 */
+    private String defaultRestartPolicy = "Never";
+    /** 任务未指定 maxRuntimeSec 时的最大运行时长（秒）。 */
+    private int defaultMaxRuntimeSec = 14400;
+    /** 运行中任务轮询云终态的周期（秒）。 */
+    private int taskPollIntervalSec = 10;
 
     public boolean isMock() {
         return mock;
@@ -161,5 +167,29 @@ public class EciProperties {
 
     public void setPollIntervalMs(long pollIntervalMs) {
         this.pollIntervalMs = pollIntervalMs;
+    }
+
+    public String getDefaultRestartPolicy() {
+        return defaultRestartPolicy;
+    }
+
+    public void setDefaultRestartPolicy(String defaultRestartPolicy) {
+        this.defaultRestartPolicy = defaultRestartPolicy;
+    }
+
+    public int getDefaultMaxRuntimeSec() {
+        return defaultMaxRuntimeSec;
+    }
+
+    public void setDefaultMaxRuntimeSec(int defaultMaxRuntimeSec) {
+        this.defaultMaxRuntimeSec = defaultMaxRuntimeSec;
+    }
+
+    public int getTaskPollIntervalSec() {
+        return taskPollIntervalSec;
+    }
+
+    public void setTaskPollIntervalSec(int taskPollIntervalSec) {
+        this.taskPollIntervalSec = taskPollIntervalSec;
     }
 }

@@ -12,6 +12,8 @@ public record CreateSpec(
         /** 可选；ECI 指定 ECS 规格，如 GPU：{@code ecs.gn7i-c32g1.8xlarge}。 */
         String instanceType,
         /** 可选；容器占用的 GPU 个数（指定 GPU 规格时通常必填）。 */
-        Integer gpu
+        Integer gpu,
+        /** 重启策略：Never / OnFailure / Always；由调用方与配置默认值合并后传入。 */
+        String restartPolicy
 ) {
 }

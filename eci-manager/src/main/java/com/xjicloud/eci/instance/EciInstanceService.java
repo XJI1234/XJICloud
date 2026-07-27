@@ -81,6 +81,9 @@ public class EciInstanceService {
         double cpu = request.getCpu() != null ? request.getCpu() : properties.getDefaultCpu();
         double memory = request.getMemory() != null ? request.getMemory() : properties.getDefaultMemory();
         Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
+        String instanceType = StringUtils.hasText(request.getInstanceType()) ? request.getInstanceType() : null;
+        Integer gpu = request.getGpu();
+        String restartPolicy = properties.getDefaultRestartPolicy();
 
         EciInstanceEntity entity = new EciInstanceEntity();
         entity.setId(id);
@@ -90,6 +93,9 @@ public class EciInstanceService {
         entity.setMemory(memory);
         entity.setStatus(InstanceStatus.CREATING);
         entity.setEnvJson(toJson(env));
+        entity.setInstanceType(instanceType);
+        entity.setGpu(gpu);
+        entity.setRestartPolicy(restartPolicy);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
         // 单独提交后再触发异步，避免 CREATING 记录尚未可见
@@ -101,8 +107,9 @@ public class EciInstanceService {
                 cpu,
                 memory,
                 env,
-                StringUtils.hasText(request.getInstanceType()) ? request.getInstanceType() : null,
-                request.getGpu());
+                instanceType,
+                gpu,
+                restartPolicy);
         lifecycleWorker.scheduleCreate(id, spec);
 
         return toResponse(entity);
