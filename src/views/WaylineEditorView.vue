@@ -3,6 +3,8 @@ import { onMounted, ref } from 'vue'
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const loading = ref(true)
+/** Bust browser/iframe cache so Wayline always picks up latest /route/index.html → hashed JS. */
+const waylineSrc = `/route/index.html?v=${Date.now()}`
 
 onMounted(() => {
   const iframe = iframeRef.value
@@ -22,7 +24,7 @@ onMounted(() => {
     <iframe
       ref="iframeRef"
       class="wayline-iframe"
-      src="/route/index.html"
+      :src="waylineSrc"
       title="航线规划"
       allow="fullscreen"
     />

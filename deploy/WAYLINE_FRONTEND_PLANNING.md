@@ -8,6 +8,16 @@ XJICloud「航线规划」通过 iframe 加载 VM 上的静态前端（`/route/`
 - WASM 在**前端构建时**由 Vite 打包进 `/route/assets/`，访问网站的用户**无需**安装 Node、也无需本机编译 WASM。
 - 用户只需打开云平台 →「航线规划」，即可使用。
 
+## 底图（在线天地图 + 离线可选）
+
+Wayline（仓库：`../Wayline`）侧栏支持三种地图模式：
+
+1. **天地图（推荐上云）**：配置 `VITE_TIANDITU_MAP_KEY` 后默认使用在线底图，无需部署 `Data.gmdb`
+2. **离线瓦片**：保留 GMDB/`sql.js` 方案，专网或无外网时可切回
+3. **腾讯地图 GL**：独立容器，白模碰撞分析不可用
+
+构建 Wayline 前请在其 `.env.production` 写入天地图 Key；产物同步到 `dist/route/`。
+
 ## 不要做的事
 
 - 不要要求访客在本机运行 `start-wayline-server.bat` / 8787 端口服务。
