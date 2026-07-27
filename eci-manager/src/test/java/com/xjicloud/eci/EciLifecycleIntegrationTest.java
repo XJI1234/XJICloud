@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -61,6 +62,8 @@ class EciLifecycleIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("CREATING"))
+                .andExpect(jsonPath("$.data.taskId").value(nullValue()))
+                .andExpect(jsonPath("$.data.image").value("nginx:alpine"))
                 .andReturn();
 
         String id = objectMapper.readTree(createResult.getResponse().getContentAsString())
@@ -75,6 +78,7 @@ class EciLifecycleIntegrationTest {
                     objectMapper.readTree(getResult.getResponse().getContentAsString()).path("data"),
                     InstanceResponse.class);
             assertThat(body.status()).isEqualTo(InstanceStatus.RUNNING);
+            assertThat(body.taskId()).isNull();
             assertThat(body.cloudInstanceId()).startsWith("mock-eci-");
         });
 

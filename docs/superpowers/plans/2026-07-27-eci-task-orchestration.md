@@ -41,7 +41,7 @@
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | **T0** | PRD 评审定稿 + 本计划批准 | ✅ 已完成（2026-07-27） |
-| **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | 进行中：Task 1–3 ✅；**待 Task 4**（手动 `/instances` 兼容确认） |
+| **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | ✅ Task 1–4 完成 |
 | **T2** | Running 轮询、Succeeded/Failed 自动删、`maxRuntimeSec`、任务恢复 | 待做 |
 | **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | 部分提前：Mock `simulateStatus` ✅；其余待做 |
 | **T4 / I1** | 镜像注册表等 / 主仓联调与生产选型 | 本期不做 |
@@ -53,8 +53,9 @@
 | Task 0 | 评审批准已记录 |
 | Task 1（T1.1） | 配置三键、`eci_task` 实体/仓库、实例扩展字段、`CreateSpec.restartPolicy`；本地提交 `62db50b` |
 | Task 2（T1.2） | Aliyun/Mock 透传 `restartPolicy`；`EciProviderRestartPolicyTest`；代码完成，**待用户要求再 commit** |
-| Task 3（T1.3） | `/tasks` 提交/查询/取消；实例 `taskId`；Running/失败回写；`EciTaskApiTest` PASS；**待用户要求再 commit** |
-| **下一刀** | Task 4：手动 `/instances` 兼容确认 |
+| Task 3（T1.3） | `/tasks` 提交/查询/取消；实例 `taskId`；Running/失败回写；本地提交 `7b172e6`（未 push） |
+| Task 4（T1.4） | 手动 `/instances` 兼容：默认 image、`taskId=null`；`EciLifecycleIntegrationTest` 断言；**本地提交见本 Task Step 3** |
+| **下一刀** | Task 5：任务终态轮询、自动删除、超时 |
 
 ```mermaid
 flowchart TD
@@ -280,14 +281,18 @@ Expected: `success=true`，可查到 `instanceId`；cancel 后任务 `CANCELLED`
 - 手动实例不建任务记录；`taskId` 为空
 - 原有列表/详情/refresh/删除行为不变
 
-- [ ] **Step 1: 回归现有实例集成测试**
+- [x] **Step 1: 回归现有实例集成测试**
 
 Run: `cd eci-manager && mvn -q test`  
 Expected: 既有 `EciLifecycleIntegrationTest` 等 PASS。
 
-- [ ] **Step 2: 补一条「手动实例 taskId 为空」断言（若尚无）**
+- [x] **Step 2: 补一条「手动实例 taskId 为空」断言（若尚无）**
 
-- [ ] **Step 3: Commit（用户要求时）**
+`EciLifecycleIntegrationTest` + `EciTaskApiTest.manualInstanceHasNullTaskId`。
+
+- [x] **Step 3: Commit（用户要求时）**
+
+本地提交：`test(eci-manager): assert manual instances expose null taskId`（未 push）。
 
 ---
 
@@ -465,8 +470,8 @@ EOF
 
 **下次开聊示例：**
 
-> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 **Task 4**（手动 `/instances` 兼容确认）开始。
+> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 **Task 5**（任务终态轮询、自动删除、超时）开始。
 
 ---
 
-*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–3 已完成；下一刀 Task 4。*
+*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–4 已完成；下一刀 Task 5。*
