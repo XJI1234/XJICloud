@@ -43,7 +43,7 @@
 | **T0** | PRD 评审定稿 + 本计划批准 | ✅ 已完成（2026-07-27） |
 | **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | ✅ Task 1–4 完成 |
 | **T2** | Running 轮询、Succeeded/Failed 自动删、`maxRuntimeSec`、任务恢复 | ✅ Task 5 完成 |
-| **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | 部分提前：Mock `simulateStatus` ✅；其余待做 |
+| **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | ✅ Task 6–7 完成（mock 验收；cloud 联调待凭证） |
 | **T4 / I1** | 镜像注册表等 / 主仓联调与生产选型 | 本期不做 |
 
 ### 进度日志（2026-07-27）
@@ -56,7 +56,9 @@
 | Task 3（T1.3） | `/tasks` 提交/查询/取消；实例 `taskId`；Running/失败回写；本地提交 `7b172e6`（未 push） |
 | Task 4（T1.4） | 手动 `/instances` 兼容：默认 image、`taskId=null`；`EciLifecycleIntegrationTest` 断言；**本地提交见本 Task Step 3** |
 | Task 5（T2） | `TaskLifecycleWatcher`、Succeeded/Failed 自动删、`maxRuntimeSec`→TIMEOUT、启动任务补偿；`TaskLifecycleWatcherTest` PASS；**待用户要求再 commit** |
-| **下一刀** | Task 6：Mock 自动生命周期（时间触发）+ 端到端链路 |
+| Task 6（T3.1） | Mock `mock-auto-complete-sec` 时间触发；`EciTaskLifecycleMockIT`；**待用户要求再 commit** |
+| Task 7（T3.2–3.3） | README/API/设计说明/AGENT/example yml；一期 mock 验收清单已勾；**待用户要求再 commit** |
+| **下一刀** | 可选：cloud 联调 / T4·I1（本期不做） |
 
 ```mermaid
 flowchart TD
@@ -369,9 +371,11 @@ EOF
 
 - [x] **Step 1: Mock 支持任务完成后的云状态迁移**（可时间触发或测试钩子）
 
-已提供测试钩子 `MockEciProvider.simulateStatus(cloudId, Succeeded|Failed|...)`（2026-07-27）。自动时间触发与端到端任务链路仍待 Task 5/6 其余步骤。
+已提供测试钩子 `MockEciProvider.simulateStatus`；时间触发 `mock-auto-complete-sec` / `mock-auto-complete-status`（2026-07-28）。
 
-- [ ] **Step 2: 端到端 Mock：提交 → Running → 终态 → 实例 TERMINATED → 任务 SUCCEEDED/FAILED**
+- [x] **Step 2: 端到端 Mock：提交 → Running → 终态 → 实例 TERMINATED → 任务 SUCCEEDED/FAILED**
+
+`EciTaskLifecycleMockIT` / `EciTaskLifecycleMockFailedIT`。
 
 - [ ] **Step 3: Commit（用户要求时）**
 
@@ -404,20 +408,22 @@ EOF
 
 **验收清单（PRD §1.4）— 全部勾选才算一期完成:**
 
-- [ ] 服务可在 Linux 用 `mvn spring-boot:run` 或 `java -jar` 启动
-- [ ] 正确 Api-Key 可提交任务（镜像、command、args、CPU/内存/规格/GPU、重启、超时）
-- [ ] 可查询任务与实例，本地 ID 可关联
-- [ ] `restartPolicy=Never` 时终态后自动删除实例
-- [ ] 超过 `maxRuntimeSec` → 强制删 + 任务 `FAILED`/`TIMEOUT`
-- [ ] `/instances` 手动能力仍可用
-- [ ] 错误/缺失 Api-Key → 401/403 且不建云资源
-- [ ] `mock=true` 全流程不调云可演练
+- [x] 服务可在 Linux 用 `mvn spring-boot:run` 或 `java -jar` 启动
+- [x] 正确 Api-Key 可提交任务（镜像、command、args、CPU/内存/规格/GPU、重启、超时）
+- [x] 可查询任务与实例，本地 ID 可关联
+- [x] `restartPolicy=Never` 时终态后自动删除实例
+- [x] 超过 `maxRuntimeSec` → 强制删 + 任务 `FAILED`/`TIMEOUT`
+- [x] `/instances` 手动能力仍可用
+- [x] 错误/缺失 Api-Key → 401/403 且不建云资源
+- [x] `mock=true` 全流程不调云可演练
 
-- [ ] **Step 1: 更新 README / example yml / 示例**
+- [x] **Step 1: 更新 README / example yml / 示例**
 
-- [ ] **Step 2: 按验收清单在 mock 下走通；cloud 仅在有凭证与批准时联调**
+- [x] **Step 2: 按验收清单在 mock 下走通；cloud 仅在有凭证与批准时联调**
 
-- [ ] **Step 3: 更新 `AGENT.md` 将「规划中」改为「T1–T3 已交付」并链到本计划**
+mock 以 `mvn test` + README curl 为准；cloud 本刀不做。
+
+- [x] **Step 3: 更新 `AGENT.md` 将「规划中」改为「T1–T3 已交付」并链到本计划**
 
 - [ ] **Step 4: Commit（用户要求时）**
 
@@ -474,4 +480,4 @@ EOF
 
 ---
 
-*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–5 已完成；下一刀 Task 6。*
+*记录日期：2026-07-28。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–7 已完成（一期 mock）；下一刀可选 cloud / T4·I1。*

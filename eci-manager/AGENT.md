@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-07-27（PRD v2.0；**T1–T2 / Task 1–5 已交付**；下一刀 Task 6 Mock 自动生命周期；测试说明已落盘）
+**最后更新：** 2026-07-28（PRD v2.0；**T1–T3 / Task 1–7 已交付**；一期 mock 验收完成）
 
 ---
 
@@ -13,13 +13,11 @@
 独立 **Spring Boot 3.3.5 / Java 17** 服务，目录在主仓 Monorepo 的 `eci-manager/`：
 
 - **已交付（Demo 基座 D0–D3）：** REST + 阿里云 **ECI** OpenAPI 做容器实例 **创建 / 查询 / 删除**（关闭 = 删除，非 Stop）
-- **已交付（PRD v2.0 T1）：**
-  - ✅ Task 1：任务实体/仓库、运行时配置、实例 `taskId` / 规格字段、`CreateSpec.restartPolicy`
-  - ✅ Task 2：Provider 透传 `restartPolicy`；`command`/`args` 全链路；Mock `simulateStatus`
-  - ✅ Task 3：`/api/v1/eci/tasks` 提交 / 查询 / 取消；实例绑定；Running/创建失败回写任务
-  - ✅ Task 4：手动 `/instances` 兼容（默认 image、`taskId=null`）
-  - ✅ Task 5：`TaskLifecycleWatcher`、云终态自动删、`maxRuntimeSec`→TIMEOUT、任务 SUCCEEDED、启动任务补偿
-- **未做（T3 / Task 6–7）：** Mock 时间触发终态、文档与验收清单
+- **已交付（PRD v2.0 T1–T3）：**
+  - ✅ Task 1–4：任务模型、Provider、`/tasks` API、手动实例兼容
+  - ✅ Task 5：`TaskLifecycleWatcher`、云终态自动删、`maxRuntimeSec`→TIMEOUT
+  - ✅ Task 6：Mock `mock-auto-complete-sec` 时间触发终态 + 端到端 IT
+  - ✅ Task 7：README / API / 设计说明 / example yml / 验收清单
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**
 - **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
@@ -55,7 +53,7 @@ eci-manager/
 
 | 文件 | 作用 |
 |------|------|
-| `application.yml` | 端口 8081、默认 mock、H2、`default-restart-policy` / `default-max-runtime-sec` / `task-poll-interval-sec` |
+| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`mock-auto-complete-sec` / `status` |
 | `application-dev.yml` | `mock=true` |
 | `application-cloud.yml` | `mock=false` + 推荐阿里云镜像 |
 | `application-local.yml.example` | 真实模式模板；复制为 `application-local.yml`（**gitignore，勿提交**） |

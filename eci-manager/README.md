@@ -1,26 +1,27 @@
 # eci-manager
 
-独立 Spring Boot 服务：通过 REST API 管理阿里云 **ECI** 容器实例生命周期（创建 / 查询 / **删除**），并按 PRD v2.0 演进为任务驱动编排（进行中）。
+独立 Spring Boot 服务：任务驱动的阿里云 **ECI** 容器编排（提交任务 → 创建实例 → 轮询终态 → 自动删除），并保留手动 `/instances` 运维能力。
 
-> **API 文档（业务导读 / 接口字段 / 联调速查）：** [docs/API文档.md](docs/API文档.md)  
-> **详细文档（结构 / 配置 / 用法）：** [docs/设计与使用说明.md](docs/设计与使用说明.md)  
-> **逐步测试说明（Mock / 真云，含每条命令）：** [docs/测试说明.md](docs/测试说明.md)  
-> **Agent 上下文（架构 / 决策 / 联调记忆）：** [AGENT.md](AGENT.md)  
-> **实现计划：** [docs/superpowers/plans/2026-07-27-eci-task-orchestration.md](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
+> **API 文档：** [docs/API文档.md](docs/API文档.md)  
+> **设计与使用：** [docs/设计与使用说明.md](docs/设计与使用说明.md)  
+> **逐步测试：** [docs/测试说明.md](docs/测试说明.md)  
+> **Agent 上下文：** [AGENT.md](AGENT.md)  
+> **实现计划：** [docs/superpowers/plans/2026-07-27-eci-task-orchestration.md](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)  
+> **产品需求：** [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**
 
-> **费用警告：** `eci.mock=false`（cloud profile）会创建真实云资源并产生账单。演示结束后务必调用 `DELETE` 删除实例。
+> **费用警告：** `eci.mock=false`（cloud profile）会创建真实云资源并产生账单。任务路径在终态后会自动删；仍请到控制台确认无残留。手动实例测完务必 `DELETE`。
 
-对应 PRD：[`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**（前身 Demo PRD v1.1 已被取代）。本工程不修改主仓 `backend/`。
+本工程不修改主仓 `backend/`。生产最终用 ECI 还是 CCI **仍待定**（不阻塞本期）。
 
-### 实现进度（2026-07-27）
+### 实现进度（2026-07-28）
 
 | 范围 | 状态 |
 |------|------|
-| 实例 `/api/v1/eci/instances`（含 restartPolicy / command / args） | ✅ 可用 |
-| 任务领域模型与配置（`eci_task`、默认超时/轮询键） | ✅ 已落地 |
-| Provider 透传 restartPolicy；Mock `simulateStatus` | ✅ 已落地 |
-| 任务 HTTP `/api/v1/eci/tasks`（提交 / 查询 / 取消）与手动实例兼容 | ✅ 可用（T1） |
-| 终态自动删、`maxRuntimeSec` 超时保护 | ⏳ 未做（计划 Task 5） |
+| 实例 `/api/v1/eci/instances`（含 restartPolicy / command / args） | ✅ |
+| 任务 `/api/v1/eci/tasks` 提交 / 查询 / 取消 | ✅ T1 |
+| 终态自动删、`maxRuntimeSec` 超时、`TaskLifecycleWatcher` | ✅ T2 |
+| Mock 时间触发终态（`mock-auto-complete-sec`） | ✅ T3 |
+| 文档与一期验收（mock） | ✅ T3 |
 
 ## 环境要求（Linux）
 
@@ -32,79 +33,119 @@ java -version   # 须为 17.x
 mvn -v          # 3.9+
 ```
 
-### 若出现 `JAVA_HOME is not defined` / apt 找不到 `maven`
-
-本仓已提供便携工具链（目录 `.tools/`，已 gitignore）。在项目根或本目录执行：
+### 若出现 `JAVA_HOME is not defined`
 
 ```bash
 source ../.tools/env.sh    # 在 eci-manager/ 下
-# 或：source /path/to/XJICloud/.tools/env.sh
 ```
 
-会设置 `JAVA_HOME` 并把 JDK/Maven 加入 `PATH`。之后即可正常 `mvn`。
-
-（可选）写入 shell 配置永久生效：把上面的 `source .../env.sh` 加到 `~/.bashrc`。
-
-系统 apt 若报 `Unable to locate package maven`，可先跑 `sudo apt update`；WSL/精简镜像上更推荐直接用上面的 `.tools`。
-
-## 快速开始（Mock，推荐本地联调）
+## 快速开始（Mock，推荐）
 
 ```bash
 cd eci-manager
-source ../.tools/env.sh                    # 本机未装 JDK/Maven 时需要
+source ../.tools/env.sh
 export ECI_API_KEY=dev-eci-api-key-change-me   # 可选；默认见 application.yml
 mvn spring-boot:run
 # 或
 mvn -DskipTests package && java -jar target/eci-manager-1.0.0.jar
 ```
 
-默认：`server.port=8081`，`eci.mock=true`，H2 文件库 `./data/eci-manager`。
+默认：`server.port=8081`，`eci.mock=true`，创建约 `mock-auto-complete-sec`（默认 3）秒后 Mock 云状态变为 `Succeeded`，watcher 自动删实例并将任务置 `SUCCEEDED`。
 
-### 验收 curl
+### 任务全流程 curl（Mock）
 
 ```bash
-# 健康检查（无需 Api-Key）
+export ECI_API_KEY=dev-eci-api-key-change-me
+
 curl -s http://127.0.0.1:8081/actuator/health
 
-# 缺少 Api-Key → 401
-curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8081/api/v1/eci/instances \
-  -H "Content-Type: application/json" -d '{}'
+# 缺 Api-Key → 401
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
+  -H "Content-Type: application/json" -d '{"image":"nginx:alpine"}'
 
-# 创建（异步：立刻返回 CREATING，稍后变为 RUNNING）
-curl -s -X POST http://127.0.0.1:8081/api/v1/eci/instances \
+# 提交任务
+TASK=$(curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: $ECI_API_KEY" \
   -d '{
-    "name": "demo-1",
-    "env": {
-      "XJICLOUD_BACKEND_URL": "http://10.0.1.20:8080",
-      "WORKER_SECRET": "change-me",
-      "WORKER_NAME": "demo-1"
-    }
-  }'
+    "name": "demo-task",
+    "image": "nginx:alpine",
+    "restartPolicy": "Never",
+    "maxRuntimeSec": 60,
+    "cpu": 1.0,
+    "memory": 2.0
+  }')
+echo "$TASK"
+TASK_ID=$(echo "$TASK" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
+INSTANCE_ID=$(echo "$TASK" | sed -n 's/.*"instanceId":"\([^"]*\)".*/\1/p' | head -1)
 
-# 列表 / 详情（将 {id} 换成返回的 UUID）
-curl -s "http://127.0.0.1:8081/api/v1/eci/instances" -H "X-Api-Key: $ECI_API_KEY"
-curl -s "http://127.0.0.1:8081/api/v1/eci/instances/{id}" -H "X-Api-Key: $ECI_API_KEY"
-curl -s -X POST "http://127.0.0.1:8081/api/v1/eci/instances/{id}/refresh" -H "X-Api-Key: $ECI_API_KEY"
+# 查询任务 / 关联实例
+curl -s "http://127.0.0.1:8081/api/v1/eci/tasks/$TASK_ID" -H "X-Api-Key: $ECI_API_KEY"
+curl -s "http://127.0.0.1:8081/api/v1/eci/instances/$INSTANCE_ID" -H "X-Api-Key: $ECI_API_KEY"
 
-# 删除（关闭 = 删除云资源；mock 下本地变为 TERMINATED）
-curl -s -X DELETE "http://127.0.0.1:8081/api/v1/eci/instances/{id}" -H "X-Api-Key: $ECI_API_KEY"
+# 等待若干秒后任务应变 SUCCEEDED，实例 TERMINATED（Mock 自动终态）
+sleep 8
+curl -s "http://127.0.0.1:8081/api/v1/eci/tasks/$TASK_ID" -H "X-Api-Key: $ECI_API_KEY"
 ```
 
-未传 `image` 时默认 `nginx:alpine`。
+取消（非终态）：
+
+```bash
+curl -s -X POST "http://127.0.0.1:8081/api/v1/eci/tasks/$TASK_ID/cancel" \
+  -H "X-Api-Key: $ECI_API_KEY"
+```
+
+### 手动实例 curl
+
+```bash
+curl -s -X POST http://127.0.0.1:8081/api/v1/eci/instances \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $ECI_API_KEY" \
+  -d '{"name":"manual-1"}'
+
+curl -s -X DELETE "http://127.0.0.1:8081/api/v1/eci/instances/{id}" \
+  -H "X-Api-Key: $ECI_API_KEY"
+```
+
+手动实例**不会**因 Mock 云终态自动删本地记录；需人工 `DELETE`。
+
+## 重启策略与成本
+
+| `restartPolicy` | 行为 | 成本风险 |
+|-----------------|------|----------|
+| `Never`（默认） | 进程结束 → Succeeded/Failed → **自动删** | 最低；适合一次性任务 |
+| `OnFailure` | 失败可能重启；成功终态或超时结束 | 失败重试会拉长计费 |
+| `Always` | 通常仅超时 / cancel / 人工删结束 | **最高**；慎用 GPU |
+
+## 3DGS 类一次性任务示例
+
+```bash
+curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $ECI_API_KEY" \
+  -d '{
+    "name": "3dgs-job",
+    "image": "registry-vpc.cn-hangzhou.aliyuncs.com/your-ns/3dgs:latest",
+    "command": ["python", "train.py"],
+    "args": ["--source_path", "/data/scene", "--iterations", "30000"],
+    "cpu": 8,
+    "memory": 32,
+    "instanceType": "ecs.gn7i-c32g1.8xlarge",
+    "gpu": 1,
+    "restartPolicy": "Never",
+    "maxRuntimeSec": 14400,
+    "env": {
+      "CUDA_VISIBLE_DEVICES": "0"
+    }
+  }'
+```
+
+真云下请用 VPC 可达镜像；测完确认任务已 `SUCCEEDED`/`FAILED`/`CANCELLED`，控制台无残留容器组。
 
 ## 真实 ECI 模式
 
-详细分场景配置（Mock / 本机环境变量 / ECS 角色）见 **[docs/设计与使用说明.md](docs/设计与使用说明.md) §4.2、§6**。
-
-摘要：
-
 1. `cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml`  
-   填写 `api-key`、region、vswitch、security-group；**不要**指望 yml 里的 AccessKey 建客户端。  
-2. 云身份：  
-   - **有 ECS：** 绑 RAM 角色，可选 `eci.ecs-ram-role-name`  
-   - **本机 WSL：** `export ALIBABA_CLOUD_ACCESS_KEY_ID` / `ALIBABA_CLOUD_ACCESS_KEY_SECRET`（STS 加 `SECURITY_TOKEN`）  
+2. 填写网络与 `api-key`；云身份用 ECS RAM 角色或本机 `ALIBABA_CLOUD_*` 环境变量（yml AK 不建客户端）  
 3. 启动：
 
 ```bash
@@ -113,43 +154,42 @@ export ECI_API_KEY='<与 yml 中 api-key 一致>'
 mvn spring-boot:run
 ```
 
-常用环境变量：
-
-| 变量 | 说明 |
-|------|------|
-| `ECI_API_KEY` | 请求头 `X-Api-Key` |
-| `ECI_ECS_RAM_ROLE_NAME` | 可选，实例角色名 |
-| `ECI_REGION_ID` | 如 `cn-hangzhou` |
-| `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 网络（必填） |
-| `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | 本机云凭证（非 yml） |
-| `ALIBABA_CLOUD_SECURITY_TOKEN` | STS 时需要 |
-
-创建可带 GPU：`instanceType`（如 `ecs.gn7i-c32g1.8xlarge`）+ `gpu: 1`。测完务必 **DELETE**（GPU 费用高；库存不足会 `NoStock`）。
-
-默认镜像建议：`registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2`
+详解见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4.2、§6。
 
 ## API 摘要
 
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/eci/tasks` | 提交任务（`image` 必填） |
+| GET | `/api/v1/eci/tasks` / `/{id}` | 列表 / 详情 |
+| POST | `/api/v1/eci/tasks/{id}/cancel` | 取消（幂等） |
+| POST | `/api/v1/eci/instances` | 手动创建（可选默认 image） |
+| DELETE | `/api/v1/eci/instances/{id}` | 删除（幂等） |
+| GET | `/api/v1/eci/instances` / `/{id}` | 列表 / 详情 |
+| POST | `/api/v1/eci/instances/{id}/refresh` | 拉云状态 |
+| GET | `/actuator/health` | 健康检查（无 Api-Key） |
 
-| 方法     | 路径                                   | 说明                          |
-| ------ | ------------------------------------ | --------------------------- |
-| POST   | `/api/v1/eci/instances`              | 异步创建，返回 `CREATING`          |
-| DELETE | `/api/v1/eci/instances/{id}`         | 删除实例（幂等：已 `TERMINATED` 仍成功） |
-| GET    | `/api/v1/eci/instances?status=`      | 列表                          |
-| GET    | `/api/v1/eci/instances/{id}`         | 详情                          |
-| POST   | `/api/v1/eci/instances/{id}/refresh` | 拉取云状态并回写                    |
-| GET    | `/actuator/health`                   | 健康检查（无 Api-Key）             |
+响应：`{ "success", "message", "data" }`。
 
+## 后续如何被 XJICloud 调用
 
-响应形态：`{ "success", "message", "data" }`。
+一期保持**独立进程**（8081）。主仓后续可通过 HTTP（`X-Api-Key`）提交 `/tasks`、查询状态；或再评估将编排迁入 `backend` / 切换 CCI Provider。本期**不改**主仓业务代码；生产 ECI vs CCI **待定**。
 
-## 与 XJICloud 的关系
+## 一期验收清单（mock）
 
-本服务只负责云实例生命周期。后续可由主后端 HTTP 调用本服务，或迁入代码并替换为 CCI Provider（生产选型待定）。容器内业务通过 `env` 透传 `XJICLOUD_BACKEND_URL` / `WORKER_SECRET` / `WORKER_NAME` 等变量预留对接。
+- [x] Linux 下 `mvn spring-boot:run` / `java -jar` 可启动  
+- [x] 正确 Api-Key 可提交任务（镜像、command、args、规格、GPU、重启、超时）  
+- [x] 可查询任务与实例，本地 ID 可关联  
+- [x] `restartPolicy=Never` 时终态后自动删除实例  
+- [x] 超过 `maxRuntimeSec` → 强制删 + 任务 `FAILED`/`TIMEOUT`  
+- [x] `/instances` 手动能力仍可用  
+- [x] 错误/缺失 Api-Key → 401 且不建云资源  
+- [x] `mock=true` 全流程不调云可演练（自动化测试 + 上文 curl）
 
 ## 构建
 
 ```bash
 mvn -DskipTests package
+# 或全量测试
+mvn test
 ```
-

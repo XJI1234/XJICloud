@@ -65,6 +65,47 @@ class EciProviderRestartPolicyTest {
     }
 
     @Test
+    void mockAutoCompleteTransitionsAfterDelay() throws InterruptedException {
+        MockEciProvider provider = new MockEciProvider(1, "Succeeded");
+        String cloudId = provider.create(new CreateSpec(
+                "auto",
+                "nginx:alpine",
+                1.0,
+                2.0,
+                Map.of(),
+                null,
+                null,
+                "Never",
+                null,
+                null));
+
+        assertThat(provider.describe(cloudId).isRunning()).isTrue();
+        Thread.sleep(1100);
+        assertThat(provider.describe(cloudId).isSucceeded()).isTrue();
+    }
+
+    @Test
+    void mockSimulateStatusOverridesAutoComplete() throws InterruptedException {
+        MockEciProvider provider = new MockEciProvider(1, "Succeeded");
+        String cloudId = provider.create(new CreateSpec(
+                "override",
+                "nginx:alpine",
+                1.0,
+                2.0,
+                Map.of(),
+                null,
+                null,
+                "Never",
+                null,
+                null));
+
+        provider.simulateStatus(cloudId, "Failed");
+        Thread.sleep(1100);
+        assertThat(provider.describe(cloudId).isFailed()).isTrue();
+        assertThat(provider.describe(cloudId).isSucceeded()).isFalse();
+    }
+
+    @Test
     void mockSimulateStatusRejectsUnknownId() {
         MockEciProvider provider = new MockEciProvider();
         assertThatThrownBy(() -> provider.simulateStatus("mock-eci-missing", "Succeeded"))

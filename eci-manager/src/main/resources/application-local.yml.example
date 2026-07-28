@@ -4,6 +4,7 @@
 # Full config guide: docs/设计与使用说明.md §4.2
 #
 # WARNING: real ECI instances incur cost (GPU much higher). Always DELETE when done.
+# Task path auto-deletes on Succeeded/Failed/TIMEOUT; still confirm in console.
 #
 # Cloud identity (yml AccessKey is IGNORED for the Aliyun client):
 #   Production ECS: bind instance RAM role; set ecs-ram-role-name (or ALIBABA_CLOUD_ECS_METADATA).
@@ -26,6 +27,12 @@ eci:
   default-image: registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2
   default-cpu: 1.0
   default-memory: 2.0
+  default-restart-policy: Never
+  default-max-runtime-sec: 14400
+  task-poll-interval-sec: 10
   create-timeout-sec: 300
   delete-timeout-sec: 300
   poll-interval-ms: 3000
+  # Mock-only (ignored when mock=false); kept here for local mock overrides
+  mock-auto-complete-sec: 3
+  mock-auto-complete-status: Succeeded

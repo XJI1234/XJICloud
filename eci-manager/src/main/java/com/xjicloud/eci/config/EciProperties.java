@@ -48,6 +48,12 @@ public class EciProperties {
     private int defaultMaxRuntimeSec = 14400;
     /** 运行中任务轮询云终态的周期（秒）。 */
     private int taskPollIntervalSec = 10;
+    /**
+     * Mock 专用：创建后多少秒自动迁到终态；{@code <=0} 关闭（仅 {@code simulateStatus} 钩子）。
+     */
+    private int mockAutoCompleteSec = 3;
+    /** Mock 自动终态：Succeeded 或 Failed。 */
+    private String mockAutoCompleteStatus = "Succeeded";
 
     public boolean isMock() {
         return mock;
@@ -191,5 +197,21 @@ public class EciProperties {
 
     public void setTaskPollIntervalSec(int taskPollIntervalSec) {
         this.taskPollIntervalSec = taskPollIntervalSec;
+    }
+
+    public int getMockAutoCompleteSec() {
+        return mockAutoCompleteSec;
+    }
+
+    public void setMockAutoCompleteSec(int mockAutoCompleteSec) {
+        this.mockAutoCompleteSec = mockAutoCompleteSec;
+    }
+
+    public String getMockAutoCompleteStatus() {
+        return mockAutoCompleteStatus;
+    }
+
+    public void setMockAutoCompleteStatus(String mockAutoCompleteStatus) {
+        this.mockAutoCompleteStatus = mockAutoCompleteStatus;
     }
 }

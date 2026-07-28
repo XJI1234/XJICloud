@@ -24,8 +24,11 @@ public class ProviderConfig {
     @Bean
     public EciProvider eciProvider(EciProperties properties) {
         if (properties.isMock()) {
-            log.info("ECI provider mode: MOCK");
-            return new MockEciProvider();
+            log.info("ECI provider mode: MOCK autoCompleteSec={} status={}",
+                    properties.getMockAutoCompleteSec(), properties.getMockAutoCompleteStatus());
+            return new MockEciProvider(
+                    properties.getMockAutoCompleteSec(),
+                    properties.getMockAutoCompleteStatus());
         }
         validateCloudConfig(properties);
         String credentialHint = StringUtils.hasText(properties.getEcsRamRoleName())

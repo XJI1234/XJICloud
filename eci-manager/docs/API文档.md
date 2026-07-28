@@ -3,7 +3,7 @@
 > **服务：** `eci-manager`（默认 `http://127.0.0.1:8081`）  
 > **API 前缀：** `/api/v1/eci`  
 > **对应 PRD：** [ECI任务驱动容器编排服务产品需求文档(PRD).md](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) v2.0  
-> **更新日期：** 2026-07-27  
+> **更新日期：** 2026-07-28  
 
 本文面向三类读者：
 
@@ -18,9 +18,8 @@
 | 标记 | 含义 |
 |------|------|
 | **已实现** | 当前版本可调用、可验收 |
-| **规划中** | PRD 目标能力，接口字段可能已落库，但行为尚未生效 |
 
-**费用提醒：** 真云模式（`eci.mock=false`）会产生阿里云账单。当前版本**不会**在任务跑完后自动删容器；测完必须 `cancel` 任务或 `DELETE` 实例，并到控制台确认无残留。
+**费用提醒：** 真云模式（`eci.mock=false`）会产生阿里云账单。任务在云侧 Succeeded/Failed 或超时后会**自动删除**实例；仍请到控制台确认无残留。手动实例须人工 `DELETE`。
 
 ---
 
@@ -28,7 +27,7 @@
 
 ### 1.1 这个服务做什么
 
-调用方提交一个**任务**后，服务会在阿里云上创建一个**弹性容器实例（ECI）**来跑指定镜像（以及可选的启动命令）。理想情况下：容器跑完 → 服务识别结果 → 自动删掉云资源并结束任务。
+调用方提交一个**任务**后，服务会在阿里云上创建一个**弹性容器实例（ECI）**来跑指定镜像（以及可选的启动命令）。容器跑完 → 服务识别结果 → 自动删掉云资源并结束任务。
 
 ### 1.2 任务 vs 手动实例
 
@@ -36,33 +35,27 @@
 |--|---------------------|----------------------|
 | 入口 | 「提交任务」 | 「直接创建容器」 |
 | 关系 | 一个任务对应一个容器 | 没有关联任务 |
-| 谁负责收尾 | 目标：服务自动删；**现状：需人手动取消** | 始终需人手动删除 |
+| 谁负责收尾 | 服务自动删（终态 / 超时 / 取消） | 始终需人手动删除 |
 | 镜像 | **必须**指定 | 可不传，用默认镜像 |
 
-### 1.3 当前能验收什么 / 还差什么
+### 1.3 当前能验收什么
 
 **已实现（可以测）：**
 
 1. 提交任务 → 自动创建关联容器  
-2. 查询任务 / 实例状态（创建中 → 运行中）  
+2. 查询任务 / 实例状态（创建中 → 运行中 → 成功/失败）  
 3. 取消任务 → 删除关联容器  
-4. 手动创建 / 删除 / 刷新实例  
+4. 云侧 Succeeded/Failed 或 `maxRuntimeSec` 超时后自动删并回写任务  
+5. Mock 下时间触发终态（`mock-auto-complete-sec`）全流程不调云  
+6. 手动创建 / 删除 / 刷新实例  
 
-**规划中（现在测不了「自动关」）：**
-
-1. 容器进程成功/失败结束后，服务自动删除实例，任务变为「成功」或「失败」  
-2. 超过最长运行时间后强制删除，并标记超时失败  
-
-因此：**今天验收「任务能否在云上把容器拉起来」即可；「跑完脚本自动关闭」等后续版本再验。**
-
-### 1.4 推荐业务心智模型（目标态）
+### 1.4 推荐业务心智模型
 
 ```text
 提交任务 → 创建中 → 运行中 →（脚本结束）→ 成功/失败 → 云资源已清理
                 ↘ 任意时刻可取消 → 已取消 → 云资源已清理
+                ↘ 超时 → 失败(TIMEOUT) → 云资源已清理
 ```
-
-**现状（T1）：** 通常停在「运行中」，需要调用取消来清理。
 
 ---
 
@@ -122,11 +115,11 @@
 | `PENDING` | 已受理，尚未进入创建 | **已实现**（通常极短） |
 | `STARTING` | 正在创建实例或等待 Running | **已实现** |
 | `RUNNING` | 实例已 Running，任务执行中 | **已实现** |
-| `SUCCEEDED` | 云侧成功结束且自动清理完成 | **规划中**（枚举已有，自动流转未上） |
-| `FAILED` | 创建失败、进程失败、超时等 | 部分：**创建失败会 FAILED**；进程终态/超时 **规划中** |
+| `SUCCEEDED` | 云侧成功结束且自动清理完成 | **已实现** |
+| `FAILED` | 创建失败、进程失败、超时等 | **已实现**（含 `failureReason=TIMEOUT`） |
 | `CANCELLED` | 调用方取消 | **已实现** |
 
-流转（目标）：
+流转：
 
 ```text
 PENDING → STARTING → RUNNING → SUCCEEDED | FAILED
@@ -158,7 +151,10 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `eci.default-cpu` | `1.0` | |
 | `eci.default-memory` | `2.0` | |
 | `eci.default-restart-policy` | `Never` | |
-| `eci.default-max-runtime-sec` | `14400`（4 小时） | 字段会落库；**超时强制删为规划中** |
+| `eci.default-max-runtime-sec` | `14400`（4 小时） | 未传 `maxRuntimeSec` 时写入任务；超时强制删 |
+| `eci.task-poll-interval-sec` | `10` | 运行中任务轮询云终态周期 |
+| `eci.mock-auto-complete-sec` | `3` | Mock：创建后 N 秒自动迁终态；`<=0` 关闭 |
+| `eci.mock-auto-complete-status` | `Succeeded` | Mock 自动终态：`Succeeded` / `Failed` |
 | `eci.create-timeout-sec` | `300` | 创建等待上限 |
 | `eci.delete-timeout-sec` | `300` | 删除等待上限 |
 
@@ -190,7 +186,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `instanceType` | string | 否 | ECS 规格，如 GPU：`ecs.gn7i-c32g1.8xlarge` |
 | `gpu` | integer | 否 | 容器 GPU 个数；GPU 规格时通常传 `1` |
 | `restartPolicy` | string | 否 | `Never` / `OnFailure` / `Always`；默认 `Never` |
-| `maxRuntimeSec` | integer | 否 | 正整数；默认 `14400`。**超时删实例：规划中** |
+| `maxRuntimeSec` | integer | 否 | 正整数；默认 `14400`。超时强制删 + `FAILED`/`TIMEOUT` |
 | `env` | object | 否 | 透传到容器的环境变量 |
 
 #### 请求示例
@@ -275,18 +271,18 @@ RUNNING → STOPPING → TERMINATED | FAILED
 
 ---
 
-### 3.5 规划中的任务行为（无新 HTTP，行为待上）
+### 3.5 后台任务行为（无新 HTTP）
 
-以下**不新增路径**，由后台轮询驱动（PRD / Task 5+）：
+以下**不新增路径**，由 `TaskLifecycleWatcher` 按 `eci.task-poll-interval-sec` 驱动：
 
 | 行为 | 说明 | 状态 |
 |------|------|------|
-| 云侧 `Succeeded` → 删实例 → 任务 `SUCCEEDED` | 进程正常结束且清理完成 | **规划中** |
-| 云侧 `Failed` → 删实例 → 任务 `FAILED` | 进程失败退出 | **规划中** |
-| 超过 `maxRuntimeSec` 强制删 | `failureReason` 记为超时类原因 | **规划中** |
-| 仅删实例不 cancel | 任务可能仍停在 `RUNNING` | **已知 T1 行为**，非回归 |
+| 云侧 `Succeeded` → 删实例 → 任务 `SUCCEEDED` | 仅实例已 `TERMINATED` 后落成功 | **已实现** |
+| 云侧 `Failed` → 删实例 → 任务 `FAILED` | `Never`；`OnFailure`/`Always` 见策略 | **已实现** |
+| 超过 `maxRuntimeSec` 强制删 | `failureReason=TIMEOUT` | **已实现** |
+| Mock 时间触发终态 | `mock-auto-complete-sec` / `status` | **已实现** |
 
-调用方对接时：以轮询 `GET /tasks/{id}` 的 `status` 为准；当前请依赖 `cancel` 收尾。
+调用方对接：轮询 `GET /tasks/{id}` 的 `status` 直至终态。
 
 ---
 
@@ -484,9 +480,9 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | 一任务一实例绑定 | `taskId` ↔ `instanceId` | **已实现** |
 | 创建失败 → 任务 `FAILED` | 回写 | **已实现** |
 | 实例 Running → 任务 `RUNNING` | 回写 | **已实现** |
-| 云侧 Succeeded/Failed 后自动删 + 任务终态 | 后台轮询 | **规划中** |
-| `maxRuntimeSec` 超时强制删 | 后台 | **规划中** |
-| Mock 模拟终态自动删 | Mock 生命周期 | 部分钩子已有；完整自动链路 **规划中** |
+| 云侧 Succeeded/Failed 后自动删 + 任务终态 | 后台轮询 | **已实现** |
+| `maxRuntimeSec` 超时强制删 | 后台 | **已实现** |
+| Mock 时间触发终态自动删 | `mock-auto-complete-sec` | **已实现** |
 
 ---
 
