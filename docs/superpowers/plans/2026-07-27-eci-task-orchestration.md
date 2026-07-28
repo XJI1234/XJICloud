@@ -42,7 +42,7 @@
 |------|------|------|
 | **T0** | PRD 评审定稿 + 本计划批准 | ✅ 已完成（2026-07-27） |
 | **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | ✅ Task 1–4 完成 |
-| **T2** | Running 轮询、Succeeded/Failed 自动删、`maxRuntimeSec`、任务恢复 | 待做 |
+| **T2** | Running 轮询、Succeeded/Failed 自动删、`maxRuntimeSec`、任务恢复 | ✅ Task 5 完成 |
 | **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | 部分提前：Mock `simulateStatus` ✅；其余待做 |
 | **T4 / I1** | 镜像注册表等 / 主仓联调与生产选型 | 本期不做 |
 
@@ -55,7 +55,8 @@
 | Task 2（T1.2） | Aliyun/Mock 透传 `restartPolicy`；`EciProviderRestartPolicyTest`；代码完成，**待用户要求再 commit** |
 | Task 3（T1.3） | `/tasks` 提交/查询/取消；实例 `taskId`；Running/失败回写；本地提交 `7b172e6`（未 push） |
 | Task 4（T1.4） | 手动 `/instances` 兼容：默认 image、`taskId=null`；`EciLifecycleIntegrationTest` 断言；**本地提交见本 Task Step 3** |
-| **下一刀** | Task 5：任务终态轮询、自动删除、超时 |
+| Task 5（T2） | `TaskLifecycleWatcher`、Succeeded/Failed 自动删、`maxRuntimeSec`→TIMEOUT、启动任务补偿；`TaskLifecycleWatcherTest` PASS；**待用户要求再 commit** |
+| **下一刀** | Task 6：Mock 自动生命周期（时间触发）+ 端到端链路 |
 
 ```mermaid
 flowchart TD
@@ -328,19 +329,19 @@ Expected: 既有 `EciLifecycleIntegrationTest` 等 PASS。
 
 **短任务:** 允许 `STARTING → SUCCEEDED|FAILED`（未见 Running）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Mock：Succeeded 自动清、Failed 自动清、TIMEOUT、cancel 与自动删竞态。
 
-- [ ] **Step 2: 实现 `TaskLifecycleWatcher`（定时或循环）**
+- [x] **Step 2: 实现 `TaskLifecycleWatcher`（定时或循环）**
 
 按 `task-poll-interval-sec` 扫描；日志带 `taskId`、本地 `instanceId`、`cloudInstanceId`。
 
-- [ ] **Step 3: 扩展启动补偿**
+- [x] **Step 3: 扩展启动补偿**
 
 启动扫描任务 `PENDING|STARTING|RUNNING`，按关联实例与云状态续跑轮询或标记失败；策略写死并注释：有明确失败 → `FAILED`，否则续建/续轮询。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `cd eci-manager && mvn -q test`  
 Expected: PASS。
@@ -354,7 +355,6 @@ feat(eci-manager): poll task terminal state, timeout, and auto-delete
 EOF
 )"
 ```
-
 ---
 
 ### Task 6: Mock 自动生命周期（T3.1）
@@ -474,4 +474,4 @@ EOF
 
 ---
 
-*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–4 已完成；下一刀 Task 5。*
+*记录日期：2026-07-27。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–5 已完成；下一刀 Task 6。*

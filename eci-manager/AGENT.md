@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-07-27（PRD v2.0；**T1 / Task 1–4 已交付**；下一刀 Task 5 终态轮询/自动删/超时；测试说明已落盘）
+**最后更新：** 2026-07-27（PRD v2.0；**T1–T2 / Task 1–5 已交付**；下一刀 Task 6 Mock 自动生命周期；测试说明已落盘）
 
 ---
 
@@ -18,7 +18,8 @@
   - ✅ Task 2：Provider 透传 `restartPolicy`；`command`/`args` 全链路；Mock `simulateStatus`
   - ✅ Task 3：`/api/v1/eci/tasks` 提交 / 查询 / 取消；实例绑定；Running/创建失败回写任务
   - ✅ Task 4：手动 `/instances` 兼容（默认 image、`taskId=null`）
-- **未做（T2 / Task 5+）：** `TaskLifecycleWatcher`、云侧 Succeeded/Failed 自动删、`maxRuntimeSec`→TIMEOUT、任务 SUCCEEDED 闭环、文档验收 Task 7
+  - ✅ Task 5：`TaskLifecycleWatcher`、云终态自动删、`maxRuntimeSec`→TIMEOUT、任务 SUCCEEDED、启动任务补偿
+- **未做（T3 / Task 6–7）：** Mock 时间触发终态、文档与验收清单
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**
 - **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
@@ -43,12 +44,11 @@ eci-manager/
     ├── EciManagerApplication.java
     ├── common/          # ApiResponse、BusinessException、GlobalExceptionHandler
     ├── auth/            # ApiKeyAuthFilter（X-Api-Key）
-    ├── config/          # EciProperties、Security、Async、ProviderConfig（含轮询间隔正数校验）
+    ├── config/          # EciProperties、Security、Async（含 Scheduling）、ProviderConfig
     ├── instance/        # Controller、Service、Entity、DTO；含 createForTask / deleteForTaskCancel
     ├── task/            # TaskStatus、Entity、Repository、EciTaskService、EciTaskController、dto/
     ├── provider/        # EciProvider、Mock、Aliyun、CreateSpec、CloudInstanceView
-    └── lifecycle/       # AsyncLifecycleWorker、StartupCompensationRunner
-                         # （TaskLifecycleWatcher 尚未创建）
+    └── lifecycle/       # AsyncLifecycleWorker、TaskLifecycleWatcher、StartupCompensationRunner
 ```
 
 配置：
@@ -91,11 +91,12 @@ flowchart LR
 |----|------|
 | Instance Controller | 手动实例 HTTP |
 | Task Controller | 任务提交/查询/取消 |
-| EciTaskService | 任务落库（实际规格可追溯）、驱动 `createForTask`、cancel、`onInstanceRunning`/`onInstanceFailed` |
+| EciTaskService | 任务落库、驱动 `createForTask`、cancel、`onInstanceRunning`/`onInstanceFailed`/`markSucceeded` |
 | EciInstanceService | **本地实例状态权威**；`createForTask` 写 `taskId`；`deleteForTaskCancel`（允许 CREATING）；refresh 钩子通知任务 |
 | EciProvider | 仅云侧 Create / Describe / Delete |
 | AsyncLifecycleWorker | 创建/删除轮询；Succeeded 视为创建成功路径 markRunning；cancel 竞态 abort→删；回调任务状态 |
-| StartupCompensationRunner | 启动扫 CREATING/STOPPING/RUNNING |
+| TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；云终态自动删；TIMEOUT；SUCCEEDED 门闩 |
+| StartupCompensationRunner | 启动扫实例 CREATING/STOPPING/RUNNING + 非终态任务对齐 |
 | ApiKeyAuthFilter | `/api/v1/eci/**`；`/actuator/health` 公开 |
 
 ### 实例状态机（本地权威）
@@ -106,19 +107,18 @@ RUNNING  → STOPPING → TERMINATED | FAILED
 CREATING|RUNNING|STOPPING|FAILED + 云侧已删/NotFound → TERMINATED（refresh）
 ```
 
-短任务云侧可能 Pending→Succeeded（未见 Running）：`refresh` / `pollUntilRunning` 将 Succeeded 对齐为本地 `RUNNING`（终态清理仍归 Task 5）。
+短任务云侧可能 Pending→Succeeded（未见 Running）：`pollUntilRunning` 将 Succeeded 对齐为本地 `RUNNING`，再由 `TaskLifecycleWatcher` 删实例并 `SUCCEEDED`。
 
-### 任务状态机（T1 已实现部分）
+### 任务状态机（T1–T2）
 
 ```
-PENDING → STARTING → RUNNING
-STARTING|PENDING → FAILED（创建失败）
+PENDING → STARTING → RUNNING → SUCCEEDED | FAILED
+STARTING → SUCCEEDED | FAILED（短任务可跳过 Running）
 PENDING|STARTING|RUNNING → CANCELLED（cancel）
+任意非终态 → FAILED（创建失败、云 Failed、TIMEOUT、资源已清）
 ```
 
-**未实现：** `RUNNING → SUCCEEDED`、超时 `FAILED(TIMEOUT)`、云 Failed 自动清后任务 FAILED（Task 5 watcher）。
-
-因此：人工 `DELETE` 关联实例后，任务可能仍停在 `RUNNING`——**已知 T1 缺口，不是 bug**；不要用 `TERMINATED` 回调去猜 SUCCEEDED。
+`SUCCEEDED` 仅在云侧 Succeeded **且** 本地实例已 `TERMINATED` 后落库。人工 `DELETE` 关联实例不会猜成功（任务 → `FAILED`「进程中断或资源已清理」）。
 
 ### 创建语义（已锁定：**异步**）
 
@@ -196,7 +196,7 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | 生产选型 ECI/CCI | 待定，不阻塞 |
 | 云凭证 | ECS RAM / `ALIBABA_CLOUD_*`；**yml AK 不建客户端** |
 | T1 范围 | Task 1–4 完成；Task 5 终态自动删未做 |
-| `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 Task 5 watcher 在 Describe=Succeeded 后删实例再写任务，禁止用 TERMINATED 猜成功 |
+| `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 `TaskLifecycleWatcher` 在 Describe=Succeeded 且实例 TERMINATED 后写入 |
 | 测试文档 | `docs/测试说明.md`；README 已链入并更正进度表 |
 
 ### 本地提交（对话中，未要求则勿 push）

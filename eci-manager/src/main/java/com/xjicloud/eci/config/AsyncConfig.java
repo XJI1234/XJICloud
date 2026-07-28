@@ -3,15 +3,18 @@ package com.xjicloud.eci.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
 
 /**
  * 异步任务线程池：供创建后轮询、删除确认等生命周期任务使用。
+ * 同时启用 {@code @Scheduled}，供任务终态轮询器使用。
  */
 @Configuration
 @EnableAsync
+@EnableScheduling
 public class AsyncConfig {
 
     /**

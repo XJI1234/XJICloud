@@ -17,6 +17,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,6 +187,40 @@ public class EciTaskService {
             entity.setUpdatedAt(now);
             repository.save(entity);
         });
+    }
+
+    /**
+     * 云侧 Succeeded 且本地实例已 TERMINATED 后回写任务成功（不覆盖已终态）。
+     */
+    @Transactional
+    public void markSucceeded(UUID taskId) {
+        if (taskId == null) {
+            return;
+        }
+        repository.findById(taskId).ifPresent(entity -> {
+            if (isTerminal(entity.getStatus())) {
+                return;
+            }
+            Instant now = Instant.now();
+            entity.setStatus(TaskStatus.SUCCEEDED);
+            entity.setFailureReason(null);
+            entity.setEndedAt(now);
+            entity.setUpdatedAt(now);
+            repository.save(entity);
+        });
+    }
+
+    /** 终态轮询：STARTING / RUNNING。 */
+    @Transactional(readOnly = true)
+    public List<EciTaskEntity> findActiveForWatch() {
+        return repository.findByStatusIn(EnumSet.of(TaskStatus.STARTING, TaskStatus.RUNNING));
+    }
+
+    /** 启动补偿：PENDING / STARTING / RUNNING。 */
+    @Transactional(readOnly = true)
+    public List<EciTaskEntity> findNonTerminalForCompensation() {
+        return repository.findByStatusIn(
+                EnumSet.of(TaskStatus.PENDING, TaskStatus.STARTING, TaskStatus.RUNNING));
     }
 
     private static boolean isTerminal(TaskStatus status) {
