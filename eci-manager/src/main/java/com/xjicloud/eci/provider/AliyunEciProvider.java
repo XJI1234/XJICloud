@@ -82,6 +82,9 @@ public class AliyunEciProvider implements EciProvider {
         if (StringUtils.hasText(spec.restartPolicy())) {
             request.setRestartPolicy(spec.restartPolicy().trim());
         }
+        if (StringUtils.hasText(spec.imageSnapshotId())) {
+            request.setImageSnapshotId(spec.imageSnapshotId().trim());
+        }
         // 容器组名与容器名共用同一规范化名称，避免两次随机后缀不一致
         String resourceName = sanitizeName(spec.name());
         request.setContainerGroupName(resourceName);
@@ -118,11 +121,12 @@ public class AliyunEciProvider implements EciProvider {
         try {
             long start = System.currentTimeMillis();
             CreateContainerGroupResponse response = client.getAcsResponse(request);
-            log.info("ECI create ok cloudInstanceId={} instanceType={} gpu={} restartPolicy={} elapsedMs={}",
+            log.info("ECI create ok cloudInstanceId={} instanceType={} gpu={} restartPolicy={} imageSnapshotId={} elapsedMs={}",
                     response.getContainerGroupId(),
                     spec.instanceType(),
                     spec.gpu(),
                     spec.restartPolicy(),
+                    spec.imageSnapshotId(),
                     System.currentTimeMillis() - start);
             return response.getContainerGroupId();
         } catch (ClientException e) {

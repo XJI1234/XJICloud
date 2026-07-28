@@ -19,6 +19,8 @@ public record CreateSpec(
         /** 可选；覆盖镜像 ENTRYPOINT（ECI Container.Commands）。 */
         List<String> command,
         /** 可选；覆盖镜像 CMD（ECI Container.Args）。 */
-        List<String> args
+        List<String> args,
+        /** 可选；镜像缓存 ID，透传 ECI ImageSnapshotId。 */
+        String imageSnapshotId
 ) {
 }

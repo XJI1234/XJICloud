@@ -164,7 +164,7 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | GET | `/instances/{id}` | 详情（含 `taskId`） |
 | POST | `/instances/{id}/refresh` | Describe 回写；可推进任务 Running/Failed |
 
-创建可选：`name`、`image`、`cpu`、`memory`、`env`、`instanceType`、`gpu`、`restartPolicy`、`command`、`args`。
+创建可选：`name`、`image`、`cpu`、`memory`、`env`、`instanceType`、`gpu`、`imageSnapshotId`、`restartPolicy`、`command`、`args`。
 
 ### 任务
 

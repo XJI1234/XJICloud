@@ -74,6 +74,10 @@ public class EciInstanceEntity {
     @Column
     private Integer gpu;
 
+    /** 可选；镜像缓存 ID（透传 ECI ImageSnapshotId）。 */
+    @Column(length = 128)
+    private String imageSnapshotId;
+
     @Column(length = 1024)
     private String failureReason;
 
@@ -201,6 +205,14 @@ public class EciInstanceEntity {
 
     public void setGpu(Integer gpu) {
         this.gpu = gpu;
+    }
+
+    public String getImageSnapshotId() {
+        return imageSnapshotId;
+    }
+
+    public void setImageSnapshotId(String imageSnapshotId) {
+        this.imageSnapshotId = imageSnapshotId;
     }
 
     public String getFailureReason() {

@@ -20,6 +20,8 @@ public class CreateInstanceRequest {
     private String instanceType;
     /** 可选；容器 GPU 个数；指定 GPU 规格时建议传 1。 */
     private Integer gpu;
+    /** 可选；镜像缓存 ID（如 imc-xxx），透传阿里云 ImageSnapshotId。 */
+    private String imageSnapshotId;
     /** 可选；Never / OnFailure / Always；未传则用 {@code eci.default-restart-policy}。 */
     private String restartPolicy;
     /** 可选；覆盖镜像 ENTRYPOINT。 */
@@ -81,6 +83,14 @@ public class CreateInstanceRequest {
 
     public void setGpu(Integer gpu) {
         this.gpu = gpu;
+    }
+
+    public String getImageSnapshotId() {
+        return imageSnapshotId;
+    }
+
+    public void setImageSnapshotId(String imageSnapshotId) {
+        this.imageSnapshotId = imageSnapshotId;
     }
 
     public String getRestartPolicy() {

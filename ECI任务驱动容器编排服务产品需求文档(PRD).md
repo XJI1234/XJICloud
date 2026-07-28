@@ -289,6 +289,7 @@ RUNNING  → STOPPING → TERMINATED | FAILED
 | `image` | 必填；值为完整托管镜像地址。 |
 | `command` / `args` | 可选；未传入时，服务使用镜像自身的 `ENTRYPOINT/CMD`；传入时，服务覆盖镜像默认入口。 |
 | `cpu` / `memory` / `instanceType` / `gpu` | 可选；未传入的字段使用配置默认值。 |
+| `imageSnapshotId` | 可选；镜像缓存 ID（如 `imc-xxx`），透传阿里云 `ImageSnapshotId` 以加速镜像拉取；须为 Ready 状态。 |
 | `restartPolicy` | 可选；取值为 `Never`、`OnFailure` 或 `Always`，默认值为 `Never`。 |
 | `maxRuntimeSec` | 可选；必须为正整数；未传入时，服务使用全局默认值。 |
 | `env` / `name` | 可选。 |
@@ -311,6 +312,7 @@ RUNNING  → STOPPING → TERMINATED | FAILED
 {
   "name": "demo-1",
   "image": "nginx:alpine",
+  "imageSnapshotId": "imc-2zebxkiifuyzzlhl",
   "cpu": 1.0,
   "memory": 2.0,
   "restartPolicy": "Never",
@@ -320,7 +322,7 @@ RUNNING  → STOPPING → TERMINATED | FAILED
 }
 ```
 
-当请求未传入 `image` 时，服务使用 `eci.default-image`。当请求未传入 `command` 与 `args` 时，服务使用镜像默认入口。
+当请求未传入 `image` 时，服务使用 `eci.default-image`。当请求未传入 `command` 与 `args` 时，服务使用镜像默认入口。`imageSnapshotId` 为可选字段，用于指定已有镜像缓存以加速创建。
 
 ### 4.5 删除实例
 

@@ -17,7 +17,7 @@
 
 | 范围 | 状态 |
 |------|------|
-| 实例 `/api/v1/eci/instances`（含 restartPolicy / command / args） | ✅ |
+| 实例 `/api/v1/eci/instances`（含 restartPolicy / command / args / imageSnapshotId） | ✅ |
 | 任务 `/api/v1/eci/tasks` 提交 / 查询 / 取消 | ✅ T1 |
 | 终态自动删、`maxRuntimeSec` 超时、`TaskLifecycleWatcher` | ✅ T2 |
 | Mock 时间触发终态（`mock-auto-complete-sec`） | ✅ T3 |

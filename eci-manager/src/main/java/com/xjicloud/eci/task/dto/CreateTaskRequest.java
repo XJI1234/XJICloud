@@ -17,6 +17,8 @@ public class CreateTaskRequest {
     private Double memory;
     private String instanceType;
     private Integer gpu;
+    /** 可选；镜像缓存 ID（如 imc-xxx），透传阿里云 ImageSnapshotId。 */
+    private String imageSnapshotId;
     /** Never / OnFailure / Always。 */
     private String restartPolicy;
     /** 正整数；未传则用 {@code eci.default-max-runtime-sec}。 */
@@ -85,6 +87,14 @@ public class CreateTaskRequest {
 
     public void setGpu(Integer gpu) {
         this.gpu = gpu;
+    }
+
+    public String getImageSnapshotId() {
+        return imageSnapshotId;
+    }
+
+    public void setImageSnapshotId(String imageSnapshotId) {
+        this.imageSnapshotId = imageSnapshotId;
     }
 
     public String getRestartPolicy() {

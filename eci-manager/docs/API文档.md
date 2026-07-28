@@ -106,7 +106,7 @@
 | 401 | 缺少或错误的 `X-Api-Key` |
 | 404 | 任务/实例不存在 |
 | 409 | 冲突（如创建中禁止删实例；任务已终态无法取消） |
-| 500 | 未预期服务器错误 |
+| 500 | 未预期服务器错误；真云创建时镜像缓存不存在或未就绪（`ImageSnapshot.NotFound` / `ImageSnapshot.IncorrectStatus`）会经此路径回写 `failureReason` |
 
 ### 2.4 任务状态（`TaskStatus`）
 
@@ -185,6 +185,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `memory` | number | 否 | 默认 `eci.default-memory` |
 | `instanceType` | string | 否 | ECS 规格，如 GPU：`ecs.gn7i-c32g1.8xlarge` |
 | `gpu` | integer | 否 | 容器 GPU 个数；GPU 规格时通常传 `1` |
+| `imageSnapshotId` | string | 否 | 镜像缓存 ID（如 `imc-xxx`）；透传阿里云 `ImageSnapshotId`，加速镜像拉取 |
 | `restartPolicy` | string | 否 | `Never` / `OnFailure` / `Always`；默认 `Never` |
 | `maxRuntimeSec` | integer | 否 | 正整数；默认 `14400`。超时强制删 + `FAILED`/`TIMEOUT` |
 | `env` | object | 否 | 透传到容器的环境变量 |
@@ -195,6 +196,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
 {
   "name": "cloud-task-1",
   "image": "registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2",
+  "imageSnapshotId": "imc-2zebxkiifuyzzlhl",
   "restartPolicy": "Never",
   "maxRuntimeSec": 600,
   "cpu": 1.0,
@@ -220,6 +222,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `cpu` / `memory` | number | 实际规格 |
 | `instanceType` | string \| null | |
 | `gpu` | integer \| null | |
+| `imageSnapshotId` | string \| null | 镜像缓存 ID；未使用时为 `null` |
 | `restartPolicy` | string | |
 | `maxRuntimeSec` | integer | |
 | `env` | object | |
@@ -309,10 +312,11 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `env` | object | 透传环境变量 |
 | `instanceType` | string | 可选 ECS 规格 |
 | `gpu` | integer | 可选 GPU 个数 |
+| `imageSnapshotId` | string | 可选镜像缓存 ID（如 `imc-xxx`） |
 | `restartPolicy` | string | 默认 `Never` |
 | `command` / `args` | string[] | 覆盖 ENTRYPOINT / CMD |
 
-> 创建时可传 `restartPolicy` / `command` / `args` / `instanceType` / `gpu`，会落库并调云；**当前 `InstanceResponse` 响应体不含这些字段**（以任务详情或后续版本为准）。
+> 创建时可传 `restartPolicy` / `command` / `args` / `instanceType` / `gpu` / `imageSnapshotId`，会落库并调云；**当前 `InstanceResponse` 响应体不含这些字段**（以任务详情或后续版本为准）。
 
 #### 请求示例（真云推荐 VPC 镜像）
 
@@ -474,6 +478,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | 健康检查 | `GET /actuator/health` | **已实现** |
 | 手动实例 CRUD / refresh | `/api/v1/eci/instances` | **已实现** |
 | `restartPolicy` / `command` / `args` 透传创建 | 创建请求体 | **已实现** |
+| `imageSnapshotId` 镜像缓存加速 | 创建请求体；透传 `CreateContainerGroup.ImageSnapshotId` | **已实现** |
 | 任务提交（`image` 必填） | `POST /tasks` | **已实现** |
 | 任务列表 / 详情 | `GET /tasks`、`GET /tasks/{id}` | **已实现** |
 | 任务取消（幂等） | `POST /tasks/{id}/cancel` | **已实现** |

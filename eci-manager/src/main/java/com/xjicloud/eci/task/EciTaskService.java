@@ -85,6 +85,7 @@ public class EciTaskService {
         entity.setMemory(memory);
         entity.setInstanceType(StringUtils.hasText(request.getInstanceType()) ? request.getInstanceType().trim() : null);
         entity.setGpu(request.getGpu());
+        entity.setImageSnapshotId(resolveImageSnapshotId(request.getImageSnapshotId()));
         entity.setRestartPolicy(restartPolicy);
         entity.setMaxRuntimeSec(maxRuntimeSec);
         entity.setEnvJson(toJson(env));
@@ -100,6 +101,7 @@ public class EciTaskService {
         instanceRequest.setEnv(env);
         instanceRequest.setInstanceType(entity.getInstanceType());
         instanceRequest.setGpu(entity.getGpu());
+        instanceRequest.setImageSnapshotId(entity.getImageSnapshotId());
         instanceRequest.setRestartPolicy(restartPolicy);
         instanceRequest.setCommand(request.getCommand());
         instanceRequest.setArgs(request.getArgs());
@@ -242,6 +244,10 @@ public class EciTaskService {
         return raw;
     }
 
+    private static String resolveImageSnapshotId(String raw) {
+        return StringUtils.hasText(raw) ? raw.trim() : null;
+    }
+
     private EciTaskEntity findEntity(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new BusinessException("任务不存在: " + id, HttpStatus.NOT_FOUND));
@@ -260,6 +266,7 @@ public class EciTaskService {
                 entity.getMemory(),
                 entity.getInstanceType(),
                 entity.getGpu(),
+                entity.getImageSnapshotId(),
                 entity.getRestartPolicy(),
                 entity.getMaxRuntimeSec(),
                 parseEnv(entity.getEnvJson()),

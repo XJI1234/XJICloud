@@ -100,6 +100,17 @@ class EciTaskApiTest {
     }
 
     @Test
+    void submitTaskWithImageSnapshotId() throws Exception {
+        mockMvc.perform(post("/api/v1/eci/tasks")
+                        .header("X-Api-Key", "test-api-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"nginx:alpine\",\"imageSnapshotId\":\"imc-test-snapshot-id\",\"restartPolicy\":\"Never\",\"maxRuntimeSec\":60}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.imageSnapshotId").value("imc-test-snapshot-id"));
+    }
+
+    @Test
     void cancelIsIdempotent() throws Exception {
         MvcResult createResult = mockMvc.perform(post("/api/v1/eci/tasks")
                         .header("X-Api-Key", "test-api-key")

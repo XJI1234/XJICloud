@@ -22,6 +22,7 @@ public record TaskResponse(
         double memory,
         String instanceType,
         Integer gpu,
+        String imageSnapshotId,
         String restartPolicy,
         int maxRuntimeSec,
         Map<String, String> env,

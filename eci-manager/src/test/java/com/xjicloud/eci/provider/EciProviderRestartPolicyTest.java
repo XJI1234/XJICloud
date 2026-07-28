@@ -25,6 +25,7 @@ class EciProviderRestartPolicyTest {
                 null,
                 restartPolicy,
                 null,
+                null,
                 null);
     }
 
@@ -41,7 +42,8 @@ class EciProviderRestartPolicyTest {
                 null,
                 "OnFailure",
                 List.of("python", "train.py"),
-                List.of("--mode", "3dgs"));
+                List.of("--mode", "3dgs"),
+                null);
 
         String cloudId = provider.create(spec);
 
@@ -51,6 +53,27 @@ class EciProviderRestartPolicyTest {
         assertThat(provider.getLastCreateSpec().command()).containsExactly("python", "train.py");
         assertThat(provider.getLastCreateSpec().args()).containsExactly("--mode", "3dgs");
         assertThat(provider.describe(cloudId).isRunning()).isTrue();
+    }
+
+    @Test
+    void mockCreateRecordsImageSnapshotId() {
+        MockEciProvider provider = new MockEciProvider();
+        CreateSpec spec = new CreateSpec(
+                "cache-demo",
+                "nginx:alpine",
+                1.0,
+                2.0,
+                Map.of(),
+                null,
+                null,
+                "Never",
+                null,
+                null,
+                "imc-test-snapshot-id");
+
+        String cloudId = provider.create(spec);
+
+        assertThat(provider.getCreateSpec(cloudId).imageSnapshotId()).isEqualTo("imc-test-snapshot-id");
     }
 
     @Test

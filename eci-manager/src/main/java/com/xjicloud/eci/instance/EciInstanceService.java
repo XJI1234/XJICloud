@@ -102,6 +102,9 @@ public class EciInstanceService {
         Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
         String instanceType = StringUtils.hasText(request.getInstanceType()) ? request.getInstanceType() : null;
         Integer gpu = request.getGpu();
+        String imageSnapshotId = StringUtils.hasText(request.getImageSnapshotId())
+                ? request.getImageSnapshotId().trim()
+                : null;
         String restartPolicy = StringUtils.hasText(request.getRestartPolicy())
                 ? request.getRestartPolicy().trim()
                 : properties.getDefaultRestartPolicy();
@@ -121,6 +124,7 @@ public class EciInstanceService {
         entity.setArgsJson(toJson(args));
         entity.setInstanceType(instanceType);
         entity.setGpu(gpu);
+        entity.setImageSnapshotId(imageSnapshotId);
         entity.setRestartPolicy(restartPolicy);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -137,7 +141,8 @@ public class EciInstanceService {
                 gpu,
                 restartPolicy,
                 command,
-                args);
+                args,
+                imageSnapshotId);
         scheduleCreateAfterCommit(id, spec);
 
         return toResponse(entity);

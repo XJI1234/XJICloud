@@ -51,6 +51,8 @@ class EciTaskEntityMappingTest {
         task.setImage("nginx:alpine");
         task.setCpu(1.0);
         task.setMemory(2.0);
+        task.setGpu(1);
+        task.setImageSnapshotId("imc-mapping-test");
         task.setRestartPolicy("Never");
         task.setMaxRuntimeSec(60);
         task.setCreatedAt(now);
@@ -62,6 +64,7 @@ class EciTaskEntityMappingTest {
         assertThat(loaded.getStatus()).isEqualTo(TaskStatus.PENDING);
         assertThat(loaded.getImage()).isEqualTo("nginx:alpine");
         assertThat(loaded.getRestartPolicy()).isEqualTo("Never");
+        assertThat(loaded.getImageSnapshotId()).isEqualTo("imc-mapping-test");
         assertThat(loaded.getMaxRuntimeSec()).isEqualTo(60);
         assertThat(loaded.getInstanceId()).isNull();
     }

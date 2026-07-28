@@ -56,6 +56,10 @@ public class EciTaskEntity {
     @Column
     private Integer gpu;
 
+    /** 可选；镜像缓存 ID（透传 ECI ImageSnapshotId）。 */
+    @Column(length = 128)
+    private String imageSnapshotId;
+
     @Column(nullable = false, length = 32)
     private String restartPolicy;
 
@@ -169,6 +173,14 @@ public class EciTaskEntity {
 
     public void setGpu(Integer gpu) {
         this.gpu = gpu;
+    }
+
+    public String getImageSnapshotId() {
+        return imageSnapshotId;
+    }
+
+    public void setImageSnapshotId(String imageSnapshotId) {
+        this.imageSnapshotId = imageSnapshotId;
     }
 
     public String getRestartPolicy() {
