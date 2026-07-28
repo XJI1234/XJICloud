@@ -42,12 +42,30 @@ class StartupCompensationRunnerTest {
         when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(
-                instance(instanceId, taskId, InstanceStatus.TERMINATED, null));
+                instance(instanceId, taskId, InstanceStatus.TERMINATED, "Deleted", null));
 
         new StartupCompensationRunner(instanceService, taskService)
                 .run(new DefaultApplicationArguments(new String[0]));
 
         verify(taskService).onInstanceFailed(taskId, "进程中断或资源已清理");
+    }
+
+    @Test
+    void terminatedAfterCloudSucceededMarksTaskSucceeded() {
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        EciTaskEntity task = runningTask(taskId, instanceId);
+
+        when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
+        when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(
+                instance(instanceId, taskId, InstanceStatus.TERMINATED, "Succeeded", null));
+
+        new StartupCompensationRunner(instanceService, taskService)
+                .run(new DefaultApplicationArguments(new String[0]));
+
+        verify(taskService).markSucceeded(taskId);
+        verify(taskService, never()).onInstanceFailed(any(), any());
     }
 
     @Test
@@ -59,7 +77,7 @@ class StartupCompensationRunnerTest {
         when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(
-                instance(instanceId, taskId, InstanceStatus.FAILED, "create boom"));
+                instance(instanceId, taskId, InstanceStatus.FAILED, "Failed", "create boom"));
 
         new StartupCompensationRunner(instanceService, taskService)
                 .run(new DefaultApplicationArguments(new String[0]));
@@ -76,7 +94,7 @@ class StartupCompensationRunnerTest {
         when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(
-                instance(instanceId, taskId, InstanceStatus.RUNNING, null));
+                instance(instanceId, taskId, InstanceStatus.RUNNING, "Running", null));
 
         new StartupCompensationRunner(instanceService, taskService)
                 .run(new DefaultApplicationArguments(new String[0]));
@@ -109,7 +127,7 @@ class StartupCompensationRunnerTest {
     }
 
     private static InstanceResponse instance(
-            UUID id, UUID taskId, InstanceStatus status, String failureReason) {
+            UUID id, UUID taskId, InstanceStatus status, String cloudStatus, String failureReason) {
         Instant now = Instant.now();
         return new InstanceResponse(
                 id,
@@ -120,7 +138,7 @@ class StartupCompensationRunnerTest {
                 2.0,
                 status,
                 "mock-eci-x",
-                status.name(),
+                cloudStatus,
                 Collections.emptyMap(),
                 failureReason,
                 now,

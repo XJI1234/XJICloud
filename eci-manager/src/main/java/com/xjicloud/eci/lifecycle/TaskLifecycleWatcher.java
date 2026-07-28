@@ -115,7 +115,7 @@ public class TaskLifecycleWatcher {
         }
 
         if (instance.status() == InstanceStatus.TERMINATED) {
-            if (pendingSucceeded.remove(taskId)) {
+            if (pendingSucceeded.remove(taskId) || isCloudSucceeded(instance.cloudStatus())) {
                 taskService.markSucceeded(taskId);
             } else {
                 taskService.onInstanceFailed(taskId, ORPHAN_TERMINATED_REASON);
@@ -148,12 +148,12 @@ public class TaskLifecycleWatcher {
                 || "OnFailure".equalsIgnoreCase(restartPolicy);
 
         if (view.isSucceeded() && !ignoreCloudTerminal) {
+            // 同事务落库 Succeeded 证据并受理删除；SUCCEEDED 仅在见 TERMINATED 后落库
             pendingSucceeded.add(taskId);
-            ensureDelete(instance);
-            InstanceResponse after = safeGet(instanceId);
-            if (after != null && after.status() == InstanceStatus.TERMINATED) {
-                pendingSucceeded.remove(taskId);
-                taskService.markSucceeded(taskId);
+            try {
+                instanceService.recordCloudSucceededAndDeleteForTask(instanceId);
+            } catch (Exception e) {
+                log.warn("succeeded cleanup failed taskId={} instanceId={}", taskId, instanceId, e);
             }
             return;
         }
@@ -177,13 +177,24 @@ public class TaskLifecycleWatcher {
         }
     }
 
+    /**
+     * maxRuntimeSec 从实际开始运行（startedAt）起算；STARTING/排队等待不计超时。
+     */
     private static boolean isTimedOut(EciTaskEntity task) {
-        Instant anchor = task.getStartedAt() != null ? task.getStartedAt() : task.getCreatedAt();
-        if (anchor == null) {
+        Instant startedAt = task.getStartedAt();
+        if (startedAt == null) {
             return false;
         }
-        long elapsedSec = Instant.now().getEpochSecond() - anchor.getEpochSecond();
-        return elapsedSec > task.getMaxRuntimeSec();
+        int maxRuntimeSec = task.getMaxRuntimeSec();
+        if (maxRuntimeSec <= 0) {
+            return false;
+        }
+        long elapsedSec = Instant.now().getEpochSecond() - startedAt.getEpochSecond();
+        return elapsedSec > maxRuntimeSec;
+    }
+
+    private static boolean isCloudSucceeded(String cloudStatus) {
+        return cloudStatus != null && "Succeeded".equalsIgnoreCase(cloudStatus);
     }
 
     private void ensureDelete(InstanceResponse instance) {
@@ -196,14 +207,6 @@ public class TaskLifecycleWatcher {
         } catch (Exception e) {
             log.warn("ensure delete failed instanceId={} taskId={}",
                     instance.id(), instance.taskId(), e);
-        }
-    }
-
-    private InstanceResponse safeGet(UUID instanceId) {
-        try {
-            return instanceService.get(instanceId);
-        } catch (Exception e) {
-            return null;
         }
     }
 }

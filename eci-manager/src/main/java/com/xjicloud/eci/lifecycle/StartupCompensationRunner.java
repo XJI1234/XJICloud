@@ -139,7 +139,11 @@ public class StartupCompensationRunner implements ApplicationRunner {
         }
 
         if (instance.status() == InstanceStatus.TERMINATED) {
-            taskService.onInstanceFailed(taskId, ORPHAN_TERMINATED_REASON);
+            if (instance.cloudStatus() != null && "Succeeded".equalsIgnoreCase(instance.cloudStatus())) {
+                taskService.markSucceeded(taskId);
+            } else {
+                taskService.onInstanceFailed(taskId, ORPHAN_TERMINATED_REASON);
+            }
             return true;
         }
 

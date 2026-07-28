@@ -1,5 +1,6 @@
 package com.xjicloud.eci.instance;
 
+import com.xjicloud.eci.common.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.lifecycle.AsyncLifecycleWorker;
@@ -18,7 +19,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -86,6 +89,30 @@ class EciInstanceServiceRefreshTest {
 
         assertThat(response.status()).isEqualTo(InstanceStatus.RUNNING);
         assertThat(response.cloudStatus()).isEqualTo("Succeeded");
+    }
+
+    @Test
+    void recordCloudSucceededRejectsTerminatedInstance() {
+        UUID id = UUID.randomUUID();
+        EciInstanceEntity entity = new EciInstanceEntity();
+        entity.setId(id);
+        entity.setName("demo");
+        entity.setImage("nginx:alpine");
+        entity.setCpu(1);
+        entity.setMemory(2);
+        entity.setStatus(InstanceStatus.TERMINATED);
+        entity.setCloudStatus("Deleted");
+        entity.setCloudInstanceId("eci-x");
+        entity.setEnvJson("{}");
+        entity.setCreatedAt(Instant.now());
+        entity.setUpdatedAt(Instant.now());
+
+        when(repository.findById(id)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.recordCloudSucceeded(id))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不允许记录云侧 Succeeded");
+        verify(repository, never()).save(any());
     }
 
     private void assertRefreshToTerminated(InstanceStatus localStatus) {

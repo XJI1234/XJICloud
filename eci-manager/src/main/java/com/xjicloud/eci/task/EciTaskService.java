@@ -32,6 +32,9 @@ public class EciTaskService {
 
     private static final Set<String> ALLOWED_RESTART_POLICIES = Set.of("Never", "OnFailure", "Always");
 
+    private static final EnumSet<TaskStatus> ACTIVE_STATUSES =
+            EnumSet.of(TaskStatus.PENDING, TaskStatus.STARTING, TaskStatus.RUNNING);
+
     private final EciTaskRepository repository;
     private final EciInstanceService instanceService;
     private final EciProperties properties;
@@ -50,7 +53,10 @@ public class EciTaskService {
 
     /**
      * 受理任务：落库实际规格 → 创建关联实例 → 状态 STARTING，立即返回。
+     * <p>
+     * 同一事务内完成；实例创建失败则回滚，避免留下无 instanceId 的 PENDING。
      */
+    @Transactional
     public TaskResponse create(CreateTaskRequest request) {
         if (request == null || !StringUtils.hasText(request.getImage())) {
             throw new BusinessException("image 为必填项");
@@ -123,7 +129,10 @@ public class EciTaskService {
 
     /**
      * 取消任务：幂等 CANCELLED；SUCCEEDED/FAILED 拒绝；否则删关联实例。
+     * <p>
+     * 条件更新避免与超时 FAILED 竞态互相覆盖；删除失败则回滚。
      */
+    @Transactional
     public TaskResponse cancel(UUID id) {
         EciTaskEntity entity = findEntity(id);
 
@@ -135,16 +144,21 @@ public class EciTaskService {
         }
 
         Instant now = Instant.now();
-        entity.setStatus(TaskStatus.CANCELLED);
-        entity.setEndedAt(now);
-        entity.setUpdatedAt(now);
-        repository.save(entity);
+        int updated = repository.markCancelledIfActive(
+                id, TaskStatus.CANCELLED, now, ACTIVE_STATUSES);
+        if (updated == 0) {
+            EciTaskEntity latest = findEntity(id);
+            if (latest.getStatus() == TaskStatus.CANCELLED) {
+                return toResponse(latest);
+            }
+            throw new BusinessException("任务已终态，无法取消: " + latest.getStatus(), HttpStatus.CONFLICT);
+        }
 
         if (entity.getInstanceId() != null) {
             instanceService.deleteForTaskCancel(entity.getInstanceId());
         }
 
-        return toResponse(entity);
+        return toResponse(findEntity(id));
     }
 
     /**
@@ -170,23 +184,16 @@ public class EciTaskService {
 
     /**
      * 实例创建/运行失败时回写任务（不覆盖已终态，含 CANCELLED）。
+     * <p>
+     * 使用条件 UPDATE，避免与 cancel 的丢失更新竞态。
      */
     @Transactional
     public void onInstanceFailed(UUID taskId, String reason) {
         if (taskId == null) {
             return;
         }
-        repository.findById(taskId).ifPresent(entity -> {
-            if (isTerminal(entity.getStatus())) {
-                return;
-            }
-            Instant now = Instant.now();
-            entity.setStatus(TaskStatus.FAILED);
-            entity.setFailureReason(truncate(reason));
-            entity.setEndedAt(now);
-            entity.setUpdatedAt(now);
-            repository.save(entity);
-        });
+        repository.markFailedIfActive(
+                taskId, TaskStatus.FAILED, truncate(reason), Instant.now(), ACTIVE_STATUSES);
     }
 
     /**
@@ -197,17 +204,8 @@ public class EciTaskService {
         if (taskId == null) {
             return;
         }
-        repository.findById(taskId).ifPresent(entity -> {
-            if (isTerminal(entity.getStatus())) {
-                return;
-            }
-            Instant now = Instant.now();
-            entity.setStatus(TaskStatus.SUCCEEDED);
-            entity.setFailureReason(null);
-            entity.setEndedAt(now);
-            entity.setUpdatedAt(now);
-            repository.save(entity);
-        });
+        repository.markSucceededIfActive(
+                taskId, TaskStatus.SUCCEEDED, Instant.now(), ACTIVE_STATUSES);
     }
 
     /** 终态轮询：STARTING / RUNNING。 */
@@ -221,12 +219,6 @@ public class EciTaskService {
     public List<EciTaskEntity> findNonTerminalForCompensation() {
         return repository.findByStatusIn(
                 EnumSet.of(TaskStatus.PENDING, TaskStatus.STARTING, TaskStatus.RUNNING));
-    }
-
-    private static boolean isTerminal(TaskStatus status) {
-        return status == TaskStatus.SUCCEEDED
-                || status == TaskStatus.FAILED
-                || status == TaskStatus.CANCELLED;
     }
 
     private String resolveRestartPolicy(String raw) {

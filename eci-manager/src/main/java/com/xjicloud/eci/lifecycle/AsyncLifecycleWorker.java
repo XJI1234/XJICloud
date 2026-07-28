@@ -194,7 +194,12 @@ public class AsyncLifecycleWorker {
     @Transactional
     protected void applyCloudStatus(UUID localId, CloudInstanceView view) {
         repository.findById(localId).ifPresent(entity -> {
-            entity.setCloudStatus(view.status());
+            // STOPPING 且已记录 Succeeded：保留成功证据，供 TaskLifecycleWatcher / 启动补偿判定
+            if (!(entity.getStatus() == InstanceStatus.STOPPING
+                    && entity.getCloudStatus() != null
+                    && "Succeeded".equalsIgnoreCase(entity.getCloudStatus()))) {
+                entity.setCloudStatus(view.status());
+            }
             entity.setUpdatedAt(Instant.now());
             repository.save(entity);
         });
@@ -222,7 +227,11 @@ public class AsyncLifecycleWorker {
     protected void markTerminated(UUID localId) {
         repository.findById(localId).ifPresent(entity -> {
             entity.setStatus(InstanceStatus.TERMINATED);
-            entity.setCloudStatus("Deleted");
+            // 保留 Succeeded 证据；其余对齐为 Deleted
+            if (entity.getCloudStatus() == null
+                    || !"Succeeded".equalsIgnoreCase(entity.getCloudStatus())) {
+                entity.setCloudStatus("Deleted");
+            }
             entity.setFailureReason(null);
             entity.setUpdatedAt(Instant.now());
             repository.save(entity);

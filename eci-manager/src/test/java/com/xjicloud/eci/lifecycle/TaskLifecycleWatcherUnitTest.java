@@ -56,16 +56,14 @@ class TaskLifecycleWatcherUnitTest {
 
         EciTaskEntity task = activeTask(taskId, instanceId, "Never", 60, Instant.now());
         InstanceResponse running = instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running");
-        InstanceResponse stopping = instance(instanceId, taskId, cloudId, InstanceStatus.STOPPING, "Succeeded");
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
-        when(instanceService.get(instanceId)).thenReturn(running, stopping);
+        when(instanceService.get(instanceId)).thenReturn(running);
         when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
-        when(instanceService.deleteForTaskCancel(instanceId)).thenReturn(stopping);
 
         watcher.pollOnce();
 
-        verify(instanceService).deleteForTaskCancel(instanceId);
+        verify(instanceService).recordCloudSucceededAndDeleteForTask(instanceId);
         verify(taskService, never()).markSucceeded(any());
         verify(taskService, never()).onInstanceFailed(any(), any());
     }
@@ -78,20 +76,61 @@ class TaskLifecycleWatcherUnitTest {
 
         EciTaskEntity task = activeTask(taskId, instanceId, "Never", 60, Instant.now());
         InstanceResponse running = instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running");
-        InstanceResponse stopping = instance(instanceId, taskId, cloudId, InstanceStatus.STOPPING, "Succeeded");
-        InstanceResponse terminated = instance(instanceId, taskId, cloudId, InstanceStatus.TERMINATED, "Deleted");
+        InstanceResponse terminated = instance(instanceId, taskId, cloudId, InstanceStatus.TERMINATED, "Succeeded");
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
-        // poll1: get=running, safeGet=stopping; poll2: get=terminated
-        when(instanceService.get(instanceId)).thenReturn(running, stopping, terminated);
+        // poll1: get=running → cleanup; poll2: get=terminated → markSucceeded
+        when(instanceService.get(instanceId)).thenReturn(running, terminated);
         when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
-        when(instanceService.deleteForTaskCancel(instanceId)).thenReturn(stopping);
 
         watcher.pollOnce();
+        verify(instanceService).recordCloudSucceededAndDeleteForTask(instanceId);
         verify(taskService, never()).markSucceeded(any());
 
         watcher.pollOnce();
         verify(taskService).markSucceeded(taskId);
+    }
+
+    @Test
+    void neverSucceededDoesNotMarkSucceededFromInlineCheckEvenIfDeleteLooksTerminated() {
+        // ensureDelete is async; an immediate re-get must not be treated as reliable TERMINATED
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        String cloudId = "mock-eci-2b";
+
+        EciTaskEntity task = activeTask(taskId, instanceId, "Never", 60, Instant.now());
+        InstanceResponse running = instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running");
+        InstanceResponse terminated = instance(instanceId, taskId, cloudId, InstanceStatus.TERMINATED, "Deleted");
+
+        when(taskService.findActiveForWatch()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(running, terminated);
+        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+
+        watcher.pollOnce();
+
+        verify(instanceService).recordCloudSucceededAndDeleteForTask(instanceId);
+        verify(taskService, never()).markSucceeded(any());
+    }
+
+    @Test
+    void startingWithoutStartedAtDoesNotTimeoutFromCreatedAt() {
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        String cloudId = "mock-eci-6b";
+
+        EciTaskEntity task = activeTask(taskId, instanceId, "Never", 1, null);
+        task.setStatus(TaskStatus.STARTING);
+        task.setCreatedAt(Instant.now().minusSeconds(120));
+        InstanceResponse creating = instance(instanceId, taskId, cloudId, InstanceStatus.CREATING, "Pending");
+
+        when(taskService.findActiveForWatch()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(creating);
+        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Pending", null));
+
+        watcher.pollOnce();
+
+        verify(taskService, never()).onInstanceFailed(any(), any());
+        verify(instanceService, never()).deleteForTaskCancel(any());
     }
 
     @Test
@@ -217,6 +256,63 @@ class TaskLifecycleWatcherUnitTest {
 
         verify(taskService).onInstanceFailed(taskId, "进程中断或资源已清理");
         verify(taskService, never()).markSucceeded(any());
+    }
+
+    @Test
+    void terminatedWithPersistedSucceededMarksSucceededWithoutInMemoryLatch() {
+        // pendingSucceeded 仅存内存；宕机/多轮后可能丢失。落库的 cloudStatus=Succeeded 须足够判定成功。
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        String cloudId = "mock-eci-7b";
+
+        EciTaskEntity task = activeTask(taskId, instanceId, "Never", 60, Instant.now());
+        InstanceResponse terminated = instance(instanceId, taskId, cloudId, InstanceStatus.TERMINATED, "Succeeded");
+
+        when(taskService.findActiveForWatch()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(terminated);
+
+        watcher.pollOnce();
+
+        verify(taskService).markSucceeded(taskId);
+        verify(taskService, never()).onInstanceFailed(any(), any());
+    }
+
+    @Test
+    void neverSucceededPersistsCloudSucceededBeforeDelete() {
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        String cloudId = "mock-eci-2c";
+
+        EciTaskEntity task = activeTask(taskId, instanceId, "Never", 60, Instant.now());
+        InstanceResponse running = instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running");
+
+        when(taskService.findActiveForWatch()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(running);
+        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+
+        watcher.pollOnce();
+
+        verify(instanceService).recordCloudSucceededAndDeleteForTask(instanceId);
+        verify(taskService, never()).markSucceeded(any());
+    }
+
+    @Test
+    void invalidMaxRuntimeSecDoesNotTimeout() {
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        String cloudId = "mock-eci-6c";
+
+        EciTaskEntity task = activeTask(taskId, instanceId, "Never", 0, Instant.now().minusSeconds(120));
+        InstanceResponse running = instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running");
+
+        when(taskService.findActiveForWatch()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(running);
+        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Running", null));
+
+        watcher.pollOnce();
+
+        verify(taskService, never()).onInstanceFailed(any(), any());
+        verify(instanceService, never()).deleteForTaskCancel(any());
     }
 
     @Test

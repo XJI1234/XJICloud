@@ -17,6 +17,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
@@ -122,7 +124,7 @@ public class EciInstanceService {
         entity.setRestartPolicy(restartPolicy);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
-        // 单独提交后再触发异步，避免 CREATING 记录尚未可见
+        // 先 save；异步须在事务提交后调度，避免外层 @Transactional（如任务 create）未提交时读不到 CREATING
         repository.save(entity);
 
         CreateSpec spec = new CreateSpec(
@@ -136,9 +138,22 @@ public class EciInstanceService {
                 restartPolicy,
                 command,
                 args);
-        lifecycleWorker.scheduleCreate(id, spec);
+        scheduleCreateAfterCommit(id, spec);
 
         return toResponse(entity);
+    }
+
+    private void scheduleCreateAfterCommit(UUID localId, CreateSpec spec) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    lifecycleWorker.scheduleCreate(localId, spec);
+                }
+            });
+        } else {
+            lifecycleWorker.scheduleCreate(localId, spec);
+        }
     }
 
     /**
@@ -164,7 +179,7 @@ public class EciInstanceService {
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
 
-        lifecycleWorker.scheduleDelete(id);
+        scheduleDeleteAfterCommit(id);
         return toResponse(entity);
     }
 
@@ -194,8 +209,71 @@ public class EciInstanceService {
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
 
-        lifecycleWorker.scheduleDelete(id);
+        scheduleDeleteAfterCommit(id);
         return toResponse(entity);
+    }
+
+    /**
+     * 任务轮询见云侧 Succeeded：落库证据并受理删除（同事务）。
+     * <p>
+     * 仅 CREATING/RUNNING 可写入 Succeeded 并删；STOPPING 仅补齐证据；TERMINATED/FAILED 不改写。
+     * 删除抛错时整段回滚，避免「已记 Succeeded 但未删」的半截状态。
+     */
+    @Transactional
+    public void recordCloudSucceededAndDeleteForTask(UUID id) {
+        EciInstanceEntity entity = findEntity(id);
+        InstanceStatus status = entity.getStatus();
+
+        if (status == InstanceStatus.TERMINATED || status == InstanceStatus.FAILED) {
+            return;
+        }
+
+        if (status == InstanceStatus.STOPPING) {
+            if (!"Succeeded".equalsIgnoreCase(entity.getCloudStatus())) {
+                entity.setCloudStatus("Succeeded");
+                entity.setUpdatedAt(Instant.now());
+                repository.save(entity);
+            }
+            return;
+        }
+
+        if (status != InstanceStatus.CREATING && status != InstanceStatus.RUNNING) {
+            throw new BusinessException(
+                    "实例状态不允许记录云侧 Succeeded: " + status, HttpStatus.CONFLICT);
+        }
+
+        entity.setCloudStatus("Succeeded");
+        entity.setUpdatedAt(Instant.now());
+        repository.save(entity);
+        deleteForTaskCancel(id);
+    }
+
+    /**
+     * 仅落库云侧 Succeeded 证据（不做删除）。守卫：仅 CREATING/RUNNING。
+     */
+    public void recordCloudSucceeded(UUID id) {
+        EciInstanceEntity entity = findEntity(id);
+        InstanceStatus status = entity.getStatus();
+        if (status != InstanceStatus.CREATING && status != InstanceStatus.RUNNING) {
+            throw new BusinessException(
+                    "实例状态不允许记录云侧 Succeeded: " + status, HttpStatus.CONFLICT);
+        }
+        entity.setCloudStatus("Succeeded");
+        entity.setUpdatedAt(Instant.now());
+        repository.save(entity);
+    }
+
+    private void scheduleDeleteAfterCommit(UUID localId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    lifecycleWorker.scheduleDelete(localId);
+                }
+            });
+        } else {
+            lifecycleWorker.scheduleDelete(localId);
+        }
     }
 
     @Transactional(readOnly = true)
