@@ -158,17 +158,21 @@ public class TaskLifecycleWatcher {
             return;
         }
 
-        if (view.isFailed() && !ignoreCloudFailed) {
-            String reason = StringUtils.hasText(view.statusDetail())
-                    ? view.statusDetail()
-                    : "云侧状态: " + view.status();
-            taskService.onInstanceFailed(taskId, reason);
-            pendingSucceeded.remove(taskId);
-            ensureDelete(instance);
+        if (view.isFailed()) {
+            if (!ignoreCloudFailed) {
+                String reason = StringUtils.hasText(view.statusDetail())
+                        ? view.statusDetail()
+                        : "云侧状态: " + view.status();
+                taskService.onInstanceFailed(taskId, reason);
+                pendingSucceeded.remove(taskId);
+                ensureDelete(instance);
+            }
+            // OnFailure/Always：云侧 Failed 可能随后重启，等待 Succeeded / 超时 / cancel，勿标 RUNNING
             return;
         }
 
-        if (view.isRunning() || (view.isFailed() && ignoreCloudFailed) || ignoreCloudTerminal) {
+        // 仅云侧 Running 才推进 STARTING→RUNNING；Always 下的 Succeeded 等终态不假装 Running
+        if (view.isRunning()) {
             taskService.onInstanceRunning(taskId);
         }
     }

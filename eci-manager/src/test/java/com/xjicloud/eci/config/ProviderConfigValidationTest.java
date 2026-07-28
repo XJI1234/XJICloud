@@ -1,13 +1,16 @@
 package com.xjicloud.eci.config;
 
+import com.xjicloud.eci.provider.EciProvider;
+import com.xjicloud.eci.provider.MockEciProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.ApplicationRunner;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 启动配置校验：轮询/超时间隔必须为正数。
+ * 启动配置校验：轮询/超时间隔必须为正数；Mock 装配透传自动终态配置。
  */
 class ProviderConfigValidationTest {
 
@@ -35,6 +38,21 @@ class ProviderConfigValidationTest {
     void acceptsPositiveIntervals() {
         ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(validProperties());
         assertThatCode(() -> runner.run(null)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void mockProviderReceivesAutoCompleteConfig() {
+        EciProperties properties = validProperties();
+        properties.setMock(true);
+        properties.setMockAutoCompleteSec(5);
+        properties.setMockAutoCompleteStatus("Failed");
+
+        EciProvider provider = new ProviderConfig().eciProvider(properties);
+
+        assertThat(provider).isInstanceOf(MockEciProvider.class);
+        MockEciProvider mock = (MockEciProvider) provider;
+        assertThat(mock.getMockAutoCompleteSec()).isEqualTo(5);
+        assertThat(mock.getMockAutoCompleteStatus()).isEqualTo("Failed");
     }
 
     private static EciProperties validProperties() {

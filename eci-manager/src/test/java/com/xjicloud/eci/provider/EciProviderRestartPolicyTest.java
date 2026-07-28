@@ -4,14 +4,29 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Mock Provider：restartPolicy / command / args 记录，以及终态模拟钩子。
+ * Mock Provider：restartPolicy / command / args、终态钩子、时间触发自动终态。
  */
 class EciProviderRestartPolicyTest {
+
+    private static CreateSpec simpleSpec(String name, String restartPolicy) {
+        return new CreateSpec(
+                name,
+                "nginx:alpine",
+                1.0,
+                2.0,
+                Map.of(),
+                null,
+                null,
+                restartPolicy,
+                null,
+                null);
+    }
 
     @Test
     void mockCreateRecordsRestartPolicyAndCommandArgs() {
@@ -41,17 +56,7 @@ class EciProviderRestartPolicyTest {
     @Test
     void mockSimulateStatusTransitionsToSucceededAndFailed() {
         MockEciProvider provider = new MockEciProvider();
-        String cloudId = provider.create(new CreateSpec(
-                "term",
-                "nginx:alpine",
-                1.0,
-                2.0,
-                Map.of(),
-                null,
-                null,
-                "Never",
-                null,
-                null));
+        String cloudId = provider.create(simpleSpec("term", "Never"));
 
         provider.simulateStatus(cloudId, "Succeeded");
         CloudInstanceView succeeded = provider.describe(cloudId);
@@ -65,44 +70,66 @@ class EciProviderRestartPolicyTest {
     }
 
     @Test
-    void mockAutoCompleteTransitionsAfterDelay() throws InterruptedException {
-        MockEciProvider provider = new MockEciProvider(1, "Succeeded");
-        String cloudId = provider.create(new CreateSpec(
-                "auto",
-                "nginx:alpine",
-                1.0,
-                2.0,
-                Map.of(),
-                null,
-                null,
-                "Never",
-                null,
-                null));
+    void mockAutoCompleteTransitionsAfterDelay() {
+        AtomicLong now = new AtomicLong(1_000_000L);
+        MockEciProvider provider = new MockEciProvider(1, "Succeeded", now::get);
+        String cloudId = provider.create(simpleSpec("auto", "Never"));
 
         assertThat(provider.describe(cloudId).isRunning()).isTrue();
-        Thread.sleep(1100);
+        now.addAndGet(1_100);
         assertThat(provider.describe(cloudId).isSucceeded()).isTrue();
     }
 
     @Test
-    void mockSimulateStatusOverridesAutoComplete() throws InterruptedException {
-        MockEciProvider provider = new MockEciProvider(1, "Succeeded");
-        String cloudId = provider.create(new CreateSpec(
-                "override",
-                "nginx:alpine",
-                1.0,
-                2.0,
-                Map.of(),
-                null,
-                null,
-                "Never",
-                null,
-                null));
+    void mockSimulateStatusOverridesAutoComplete() {
+        AtomicLong now = new AtomicLong(1_000_000L);
+        MockEciProvider provider = new MockEciProvider(1, "Succeeded", now::get);
+        String cloudId = provider.create(simpleSpec("override", "Never"));
 
         provider.simulateStatus(cloudId, "Failed");
-        Thread.sleep(1100);
+        now.addAndGet(1_100);
         assertThat(provider.describe(cloudId).isFailed()).isTrue();
         assertThat(provider.describe(cloudId).isSucceeded()).isFalse();
+    }
+
+    @Test
+    void mockAutoCompleteDisabledWhenSecZero() {
+        AtomicLong now = new AtomicLong(1_000_000L);
+        MockEciProvider provider = new MockEciProvider(0, "Succeeded", now::get);
+        String cloudId = provider.create(simpleSpec("no-auto", "Never"));
+
+        now.addAndGet(60_000);
+        assertThat(provider.describe(cloudId).isRunning()).isTrue();
+    }
+
+    @Test
+    void mockAutoCompleteCanTargetFailed() {
+        AtomicLong now = new AtomicLong(1_000_000L);
+        MockEciProvider provider = new MockEciProvider(1, "Failed", now::get);
+        String cloudId = provider.create(simpleSpec("auto-fail", "Never"));
+
+        now.addAndGet(1_100);
+        assertThat(provider.describe(cloudId).isFailed()).isTrue();
+    }
+
+    @Test
+    void mockDeletePreventsAutoCompleteOverwrite() {
+        AtomicLong now = new AtomicLong(1_000_000L);
+        MockEciProvider provider = new MockEciProvider(1, "Succeeded", now::get);
+        String cloudId = provider.create(simpleSpec("deleted", "Never"));
+
+        provider.delete(cloudId);
+        now.addAndGet(1_100);
+        CloudInstanceView view = provider.describe(cloudId);
+        assertThat(view.isTerminatedOrMissing()).isTrue();
+        assertThat(view.isSucceeded()).isFalse();
+    }
+
+    @Test
+    void mockConstructorRejectsUnsupportedStatus() {
+        assertThatThrownBy(() -> new MockEciProvider(1, "BogusStatus"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unsupported");
     }
 
     @Test

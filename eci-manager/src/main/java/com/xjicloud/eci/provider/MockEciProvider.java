@@ -4,6 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.LongSupplier;
 
 /**
  * 本地 Mock：不调用阿里云。创建后状态视为 Running，ID 前缀 {@code mock-eci-}。
@@ -22,6 +23,7 @@ public class MockEciProvider implements EciProvider {
 
     private final int mockAutoCompleteSec;
     private final String mockAutoCompleteStatus;
+    private final LongSupplier nowMillis;
 
     private final ConcurrentHashMap<String, String> statuses = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> completeAtEpochMs = new ConcurrentHashMap<>();
@@ -35,11 +37,24 @@ public class MockEciProvider implements EciProvider {
     }
 
     public MockEciProvider(int mockAutoCompleteSec, String mockAutoCompleteStatus) {
+        this(mockAutoCompleteSec, mockAutoCompleteStatus, System::currentTimeMillis);
+    }
+
+    public MockEciProvider(int mockAutoCompleteSec, String mockAutoCompleteStatus, LongSupplier nowMillis) {
         this.mockAutoCompleteSec = mockAutoCompleteSec;
         this.mockAutoCompleteStatus = canonicalizeStatus(
                 mockAutoCompleteStatus != null && !mockAutoCompleteStatus.isBlank()
                         ? mockAutoCompleteStatus
                         : "Succeeded");
+        this.nowMillis = nowMillis != null ? nowMillis : System::currentTimeMillis;
+    }
+
+    public int getMockAutoCompleteSec() {
+        return mockAutoCompleteSec;
+    }
+
+    public String getMockAutoCompleteStatus() {
+        return mockAutoCompleteStatus;
     }
 
     @Override
@@ -50,7 +65,7 @@ public class MockEciProvider implements EciProvider {
         lastCreateSpec.set(spec);
         manualOverride.remove(id);
         if (mockAutoCompleteSec > 0) {
-            completeAtEpochMs.put(id, System.currentTimeMillis() + mockAutoCompleteSec * 1000L);
+            completeAtEpochMs.put(id, nowMillis.getAsLong() + mockAutoCompleteSec * 1000L);
         } else {
             completeAtEpochMs.remove(id);
         }
@@ -104,7 +119,7 @@ public class MockEciProvider implements EciProvider {
             return;
         }
         Long due = completeAtEpochMs.get(cloudInstanceId);
-        if (due == null || System.currentTimeMillis() < due) {
+        if (due == null || nowMillis.getAsLong() < due) {
             return;
         }
         String current = statuses.get(cloudInstanceId);
