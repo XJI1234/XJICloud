@@ -1,0 +1,714 @@
+diff --git a/server/index.mjs b/server/index.mjs
+index d966efa..ee84c92 100644
+--- a/server/index.mjs
++++ b/server/index.mjs
+@@ -1,5 +1,6 @@
+ import http from 'node:http'
+ import { planBuildingFootprintMission, planSinglePointOrbitMission } from '../src/utils/routePlanner.js'
++import { appendInformationGainReshoot } from '../src/utils/informationGainReshootPlanner.js'
+ import { normalizeDroneCount, planMultiUavFromBasePlan } from '../src/utils/multiUavPlanner.js'
+ 
+ const DEFAULT_PORT = 8787
+@@ -13,6 +14,14 @@ const parseNumber = (value, fallback = 0) => {
+ 
+ const roundNumber = (value, digits = 2) => Number(Number(value || 0).toFixed(digits))
+ 
++const clampFormRatio = (value, fallback = 0.55) => {
++  const parsed = Number(value)
++  if (!Number.isFinite(parsed)) {
++    return fallback
++  }
++  return Math.min(Math.max(parsed, 0), 1)
++}
++
+ const normalizePoint = (point, label) => {
+   if (!point || typeof point !== 'object') {
+     throw new Error(`${label}不能为空`)
+@@ -62,6 +71,10 @@ const normalizeCommonForm = (payload = {}) => ({
+   pitchDeg: parseNumber(payload.pitchDeg, -10),
+   photosPerLoop: Math.max(parseNumber(payload.photosPerLoop, 24), 4),
+   verticalOverlapPercent: parseNumber(payload.verticalOverlapPercent, 70),
++  horizontalOverlapPercent: parseNumber(payload.horizontalOverlapPercent, 70),
++  autoPhotosPerLoop: Boolean(payload.autoPhotosPerLoop),
++  igReshootEnabled: payload.igReshootEnabled !== false,
++  igQualitySpeedBalance: clampFormRatio(payload.igQualitySpeedBalance, 0.55),
+   droneCount: normalizeDroneCount(payload.droneCount ?? 1),
+ })
+ 
+@@ -93,11 +106,15 @@ const buildOrbitMission = (payload) => {
+   const edgePoint = normalizePoint(payload.edgePoint, '边缘点')
+ 
+   const form = normalizeCommonForm(payload)
+-  const basePlan = planSinglePointOrbitMission({
++  const seedPlan = planSinglePointOrbitMission({
+       ...form,
+       centerPoint,
+       edgePoint,
+     })
++  const basePlan = appendInformationGainReshoot(seedPlan, {
++    enabled: form.igReshootEnabled,
++    qualitySpeedBalance: form.igQualitySpeedBalance,
++  })
+ 
+   return withDisabledObstacleAnalysis(withMultiUavPlan(basePlan, form))
+ }
+@@ -111,10 +128,15 @@ const buildBuildingMission = (payload) => {
+     throw new Error('建筑采样至少需要 3 个轮廓点')
+   }
+ 
+-  const basePlan = planBuildingFootprintMission({
+-    ...normalizeCommonForm(payload),
++  const form = normalizeCommonForm(payload)
++  const seedPlan = planBuildingFootprintMission({
++    ...form,
+     footprintPoints,
+   })
++  const basePlan = appendInformationGainReshoot(seedPlan, {
++    enabled: form.igReshootEnabled,
++    qualitySpeedBalance: form.igQualitySpeedBalance,
++  })
+ 
+   return withDisabledObstacleAnalysis(withMultiUavPlan({
+     ...basePlan,
+@@ -126,7 +148,7 @@ const buildBuildingMission = (payload) => {
+       targetName: typeof payload.targetName === 'string' ? payload.targetName : '',
+       roofHeight: roundNumber(parseNumber(payload.roofHeight, 0), 2),
+     },
+-  }, normalizeCommonForm(payload)))
++  }, form))
+ }
+ 
+ const routes = new Map([
+diff --git a/src/algorithm/core/missionPlanner.js b/src/algorithm/core/missionPlanner.js
+index 8ab59fe..2f2db50 100644
+--- a/src/algorithm/core/missionPlanner.js
++++ b/src/algorithm/core/missionPlanner.js
+@@ -1,5 +1,6 @@
+ import { planBuildingFootprintMission, planSinglePointOrbitMission } from '@/utils/routePlanner'
+ import { buildObstacleAwareMission } from '@/utils/routeCollisionPlanner'
++import { appendInformationGainReshoot } from '@/utils/informationGainReshootPlanner'
+ import {
+   assembleMultiUavPlan,
+   normalizeDroneCount,
+@@ -135,7 +136,7 @@ export const planMissionWithObstacleAnalysis = async (
+   } = {},
+ ) => {
+   const droneCount = resolveDroneCount(form)
+-  const basePlan = await buildBaseMissionPlanAsync({
++  const seedPlan = await buildBaseMissionPlanAsync({
+     plannerType,
+     form,
+     centerPoint,
+@@ -143,6 +144,11 @@ export const planMissionWithObstacleAnalysis = async (
+     selectedModelTarget,
+   })
+ 
++  const basePlan = appendInformationGainReshoot(seedPlan, {
++    enabled: form?.igReshootEnabled !== false,
++    qualitySpeedBalance: form?.igQualitySpeedBalance,
++  })
++
+   const partitioned = planMultiUavFromBasePlan(basePlan, droneCount)
+ 
+   if (!partitioned.multiUav || !partitioned.missions?.length) {
+@@ -153,7 +159,10 @@ export const planMissionWithObstacleAnalysis = async (
+     })
+ 
+     if (!partitioned.missions?.length) {
+-      return analyzed
++      return {
++        ...analyzed,
++        informationGainReshoot: basePlan.informationGainReshoot,
++      }
+     }
+ 
+     return assembleMultiUavPlan(
+@@ -161,6 +170,7 @@ export const planMissionWithObstacleAnalysis = async (
+         ...basePlan,
+         ...analyzed,
+         rings: analyzed.rings || partitioned.rings,
++        informationGainReshoot: basePlan.informationGainReshoot,
+       },
+       [{
+         ...partitioned.missions[0],
+diff --git a/src/components/mapContainer.vue b/src/components/mapContainer.vue
+index d82c568..11339fd 100644
+--- a/src/components/mapContainer.vue
++++ b/src/components/mapContainer.vue
+@@ -388,6 +388,7 @@
+     const arrowLengthMeters = resolveArrowLengthMeters()
+     const droneId = mission.droneId || `UAV-${(mission.droneIndex || 0) + 1}`
+     const pointEntities = waypoints.map((waypoint, index) => {
++      const isIgReshoot = waypoint.kind === 'ig-reshoot'
+       const isLabeled = !waypoint.closeLoop && waypoint.kind !== 'connector'
+       if (isLabeled) {
+         labelCounter += 1
+@@ -399,16 +400,19 @@
+       const labelText = isLabeled
+         ? (multi
+           ? `${droneId}-${labelCounter}${headingSuffix}`
+-          : `WP${labelCounter}${headingSuffix}`)
++          : `${isIgReshoot ? 'IG' : 'WP'}${labelCounter}${headingSuffix}`)
+         : ''
++      const pointColor = isIgReshoot
++        ? Color.fromCssColorString('#12b886')
++        : remainColor
+       const baseSize = index === 0 ? (multi ? 13 : 14) : isLabeled ? (multi ? 9 : 10) : 7
+       const entity = createPointEntity({
+         longitude: waypoint.longitude,
+         latitude: waypoint.latitude,
+         height: waypoint.altitude,
+-        color: remainColor,
++        color: pointColor,
+         text: labelText || '·',
+-        pixelSize: baseSize,
++        pixelSize: isIgReshoot ? baseSize + 2 : baseSize,
+       })
+ 
+       if (!labelText && entity.label) {
+diff --git a/src/components/plannerPanel.vue b/src/components/plannerPanel.vue
+index ff079ea..f8a5afc 100644
+--- a/src/components/plannerPanel.vue
++++ b/src/components/plannerPanel.vue
+@@ -288,7 +288,7 @@
+             <button class="secondary-button smart-recommend-toggle" @click="smartRecommendExpanded = !smartRecommendExpanded">
+               {{ smartRecommendExpanded ? '收起' : '展开' }}
+             </button>
+-            <button class="secondary-button smart-recommend-apply" @click="applySmartPreset(smartParameterPresets[1])">应用均衡</button>
++            <button class="secondary-button smart-recommend-apply" @click="applySmartPreset(smartParameterPresets.find((item) => item.key === 'gs3d') || smartParameterPresets[1])">应用 3DGS</button>
+           </div>
+         </div>
+         <div class="smart-recommend-summary">
+@@ -310,7 +310,7 @@
+             v-for="preset in visibleSmartParameterPresets"
+             :key="preset.key"
+             class="smart-preset-card"
+-            :class="{ featured: preset.key === 'balanced' }"
++            :class="{ featured: preset.key === 'gs3d' }"
+           >
+             <div class="smart-preset-head">
+               <div>
+@@ -323,7 +323,7 @@
+               <span>GSD {{ preset.values.gsdMm.toFixed(1) }}</span>
+               <span>高度 {{ preset.values.lowElevationM }}-{{ preset.values.highElevationM }}m</span>
+               <span>俯角 {{ preset.values.pitchDeg }}°</span>
+-              <span>重叠 {{ preset.values.verticalOverlapPercent }}%</span>
++              <span>重叠 V{{ preset.values.verticalOverlapPercent }}% / H{{ preset.values.horizontalOverlapPercent }}%</span>
+               <span v-if="smartRecommendExpanded && preset.values.photosPerLoop != null">张数 {{ preset.values.photosPerLoop }}</span>
+             </div>
+             <button class="action-button smart-preset-apply" @click="applySmartPreset(preset)">应用</button>
+@@ -345,6 +345,18 @@
+           <el-input-number v-model="form.highElevationM" :min="0" :max="10000" :step="1" controls-position="right" />
+         </label>
+       </div>
++      <div class="form-grid two-columns ig-reshoot-block">
++        <label class="field full-width auto-photos-row">
++          <span>信息增益补拍（3DGS）</span>
++          <el-switch v-model="form.igReshootEnabled" inline-prompt active-text="开" inactive-text="关" />
++        </label>
++        <label class="field full-width" v-if="form.igReshootEnabled">
++          <span>速度 ← → 质量（β 补拍预算）</span>
++          <el-slider v-model="igQualitySpeedPercent" :min="0" :max="100" :step="5" show-input />
++        </label>
++        <p class="hint" v-if="form.igReshootEnabled">{{ igBalanceHint }}</p>
++        <p class="hint" v-else>关闭后只生成种子航线，不追加 IG 补拍点。</p>
++      </div>
+       </div>
+     </div>
+ 
+@@ -364,12 +376,30 @@
+           </label>
+           <label class="field">
+             <span>单圈张数</span>
+-            <el-input-number v-model="form.photosPerLoop" :min="4" :max="200" :step="1" controls-position="right" />
++            <el-input-number
++              v-model="form.photosPerLoop"
++              :min="4"
++              :max="200"
++              :step="1"
++              controls-position="right"
++              :disabled="form.autoPhotosPerLoop || isBuildingPlanner"
++            />
+           </label>
+           <label class="field full-width">
+             <span>垂直重叠率 %</span>
+             <el-slider v-model="form.verticalOverlapPercent" :min="10" :max="95" :step="1" show-input />
+           </label>
++          <label class="field full-width">
++            <span>水平重叠率 %（3DGS / SfM）</span>
++            <el-slider v-model="form.horizontalOverlapPercent" :min="40" :max="90" :step="1" show-input />
++          </label>
++          <label class="field full-width auto-photos-row" v-if="!isBuildingPlanner">
++            <span>按水平重叠自动计算单圈张数</span>
++            <el-switch v-model="form.autoPhotosPerLoop" inline-prompt active-text="开" inactive-text="关" />
++          </label>
++          <p class="hint" v-if="!isBuildingPlanner && form.autoPhotosPerLoop">
++            建议单圈约 {{ recommendedOrbitPhotosPerLoop }} 张（HFOV × 水平重叠）
++          </p>
+         </div>
+       </div>
+     </div>
+@@ -489,6 +519,14 @@
+         </div>
+       </div>
+       <div class="detail-grid">
++        <div class="stat-card" v-if="routePlan.informationGainReshoot?.enabled">
++          <span>IG 补拍点</span>
++          <strong>{{ routePlan.informationGainReshoot.selectedCount }}</strong>
++        </div>
++        <div class="stat-card" v-if="routePlan.informationGainReshoot?.coverageImprovementRatio != null">
++          <span>覆盖缺口改善</span>
++          <strong>{{ Math.round((routePlan.informationGainReshoot.coverageImprovementRatio || 0) * 100) }}%</strong>
++        </div>
+         <div class="detail-item">
+           <span>目标半径</span>
+           <strong>{{ formatMeters(routePlan.targetRadiusMeters) }}</strong>
+@@ -543,6 +581,11 @@
+           class="hint"
+         >{{ message }}</p>
+       </div>
++      <div class="obstacle-analysis" v-if="routePlan.informationGainReshoot?.messages?.length">
++        <p v-for="message in routePlan.informationGainReshoot.messages" :key="message" class="analysis-message">
++          {{ message }}
++        </p>
++      </div>
+       <div class="obstacle-analysis" v-if="routePlan.obstacleAnalysis">
+         <p v-for="message in routePlan.obstacleAnalysis.messages" :key="message" class="analysis-message">
+           {{ message }}
+@@ -612,6 +655,7 @@
+   import { useMapStore } from '@/stores/map'
+   import { createSceneObstacleAnalysisOptions } from '@/algorithm/adapters/sceneObstacleAdapter'
+   import { planMissionWithObstacleAnalysis } from '@/algorithm/core/missionPlanner'
++  import { recommendOrbitPhotosPerLoop } from '@/utils/routePlanner'
+   import {
+     haversineDistance,
+     toWpmlHeadingAngle,
+@@ -672,9 +716,13 @@
+     gsdMm: 5,
+     lowElevationM: 0,
+     highElevationM: 60,
+-    pitchDeg: -10,
+-    photosPerLoop: 24,
+-    verticalOverlapPercent: 70,
++    pitchDeg: -15,
++    photosPerLoop: 36,
++    verticalOverlapPercent: 75,
++    horizontalOverlapPercent: 70,
++    autoPhotosPerLoop: true,
++    igReshootEnabled: true,
++    igQualitySpeedBalance: 0.55,
+     droneCount: normalizeDroneCount(droneCount.value),
+   })
+ 
+@@ -958,14 +1006,39 @@
+     const baseLowElevation = roundToStep(Math.max(context.lowElevationM, 0), 5)
+     const baseHighElevation = roundToStep(Math.max(context.highElevationM, baseLowElevation + 10), 5)
+ 
+-    const createValues = ({ gsdFactor, pitchOffset, overlapOffset, lowOffset, highOffset, photosOffset }) => ({
+-      gsdMm: clampNumber(roundToStep(baseGsdMm * gsdFactor, 0.5), 1.5, 20),
+-      lowElevationM: Math.max(0, roundToStep(baseLowElevation + lowOffset, 5)),
+-      highElevationM: Math.max(roundToStep(baseHighElevation + highOffset, 5), roundToStep(baseLowElevation + lowOffset + 10, 5)),
+-      pitchDeg: clampNumber(roundToStep(basePitchDeg + pitchOffset, 1), -35, -6),
+-      verticalOverlapPercent: clampNumber(roundToStep(baseOverlap + overlapOffset, 1), 55, 85),
+-      photosPerLoop: isBuildingMode ? null : clampNumber(roundToEven(basePhotosPerLoop + photosOffset), 12, 72),
+-    })
++    const createValues = ({
++      gsdFactor,
++      pitchOffset,
++      overlapOffset,
++      horizontalOverlap,
++      lowOffset,
++      highOffset,
++      photosOffset,
++      autoPhotosPerLoop = false,
++    }) => {
++      const verticalOverlapPercent = clampNumber(roundToStep(baseOverlap + overlapOffset, 1), 55, 85)
++      const horizontalOverlapPercent = clampNumber(roundToStep(horizontalOverlap, 1), 40, 90)
++      const recommendedPhotos = recommendOrbitPhotosPerLoop({
++        focalLengthMm: form.focalLengthMm,
++        horizontalOverlapPercent,
++      })
++      const heuristicPhotos = clampNumber(roundToEven(basePhotosPerLoop + photosOffset), 12, 96)
++
++      return {
++        gsdMm: clampNumber(roundToStep(baseGsdMm * gsdFactor, 0.5), 1.5, 20),
++        lowElevationM: Math.max(0, roundToStep(baseLowElevation + lowOffset, 5)),
++        highElevationM: Math.max(roundToStep(baseHighElevation + highOffset, 5), roundToStep(baseLowElevation + lowOffset + 10, 5)),
++        pitchDeg: clampNumber(roundToStep(basePitchDeg + pitchOffset, 1), -35, -6),
++        verticalOverlapPercent,
++        horizontalOverlapPercent,
++        autoPhotosPerLoop: Boolean(autoPhotosPerLoop),
++        photosPerLoop: isBuildingMode
++          ? null
++          : autoPhotosPerLoop
++            ? recommendedPhotos
++            : Math.max(heuristicPhotos, autoPhotosPerLoop ? recommendedPhotos : 0),
++      }
++    }
+ 
+     return [
+       {
+@@ -977,10 +1050,14 @@
+           gsdFactor: 1.35,
+           pitchOffset: 3,
+           overlapOffset: -6,
++          horizontalOverlap: 55,
+           lowOffset: 0,
+           highOffset: 0,
+           photosOffset: -6,
++          autoPhotosPerLoop: false,
+         }),
++        igReshootEnabled: true,
++        igQualitySpeedBalance: 0.25,
+       },
+       {
+         key: 'balanced',
+@@ -991,10 +1068,32 @@
+           gsdFactor: 1,
+           pitchOffset: 0,
+           overlapOffset: 0,
++          horizontalOverlap: 70,
+           lowOffset: 0,
+           highOffset: 5,
+           photosOffset: 0,
++          autoPhotosPerLoop: true,
+         }),
++        igReshootEnabled: true,
++        igQualitySpeedBalance: 0.55,
++      },
++      {
++        key: 'gs3d',
++        label: '3DGS 素材',
++        tagline: '推荐',
++        description: '高重叠密采样，适合后续 3D 高斯重建。',
++        values: createValues({
++          gsdFactor: 0.85,
++          pitchOffset: -3,
++          overlapOffset: 8,
++          horizontalOverlap: 75,
++          lowOffset: -5,
++          highOffset: 10,
++          photosOffset: 12,
++          autoPhotosPerLoop: true,
++        }),
++        igReshootEnabled: true,
++        igQualitySpeedBalance: 0.72,
+       },
+       {
+         key: 'detail',
+@@ -1005,20 +1104,65 @@
+           gsdFactor: 0.8,
+           pitchOffset: -4,
+           overlapOffset: 8,
++          horizontalOverlap: 80,
+           lowOffset: -5,
+           highOffset: 10,
+           photosOffset: 8,
++          autoPhotosPerLoop: true,
+         }),
++        igReshootEnabled: true,
++        igQualitySpeedBalance: 0.85,
+       },
+     ]
+   })
+ 
++  const recommendedOrbitPhotosPerLoop = computed(() => {
++    const radiusHint = smartRecommendationContext.value?.radiusMeters
++    const gsdMm = Number(form.gsdMm) || 5
++    const megapixelsWan = Number(form.megapixelsWan) || 4800
++    const totalPixels = Math.max(megapixelsWan * 10000, 1)
++    const widthPx = Math.sqrt(totalPixels * (4 / 3))
++    const coverageWidthMeters = (widthPx * gsdMm) / 1000
++    // Approximate orbit radius ≈ target radius + standoff; standoff ≈ coverage/(2tan(hfov/2))
++    const focal = Math.max(Number(form.focalLengthMm) || 24, 1)
++    const hfovRad = 2 * Math.atan(36 / (2 * focal))
++    const standOff = coverageWidthMeters / (2 * Math.tan(hfovRad / 2))
++    const orbitRadiusMeters = Number.isFinite(radiusHint)
++      ? Math.max(radiusHint + standOff, standOff)
++      : undefined
++
++    return recommendOrbitPhotosPerLoop({
++      focalLengthMm: form.focalLengthMm,
++      horizontalOverlapPercent: form.horizontalOverlapPercent,
++      orbitRadiusMeters,
++      imageCoverageWidthMeters: coverageWidthMeters,
++    })
++  })
++
++  const igQualitySpeedPercent = computed({
++    get: () => Math.round(clampNumber(Number(form.igQualitySpeedBalance) * 100, 0, 100)),
++    set: (value) => {
++      form.igQualitySpeedBalance = clampNumber(Number(value) / 100, 0, 1)
++    },
++  })
++
++  const igBalanceHint = computed(() => {
++    const beta = Number(form.igQualitySpeedBalance) || 0
++    if (beta < 0.34) {
++      return '速度优先：少量补拍，只填最大覆盖空洞。'
++    }
++    if (beta > 0.66) {
++      return '质量优先：更多补拍 + 次外圈视差，利于 3DGS。'
++    }
++    return '均衡：在航时与重建完整性之间折中。'
++  })
++
+   const visibleSmartParameterPresets = computed(() => {
+     if (smartRecommendExpanded.value) {
+       return smartParameterPresets.value
+     }
+ 
+-    return smartParameterPresets.value.filter((preset) => preset.key === 'balanced')
++    return smartParameterPresets.value.filter((preset) => preset.key === 'gs3d' || preset.key === 'balanced')
+   })
+ 
+   watch(
+@@ -1051,14 +1195,46 @@
+     form.highElevationM = preset.values.highElevationM
+     form.pitchDeg = preset.values.pitchDeg
+     form.verticalOverlapPercent = preset.values.verticalOverlapPercent
++    form.horizontalOverlapPercent = preset.values.horizontalOverlapPercent ?? form.horizontalOverlapPercent
++    form.autoPhotosPerLoop = Boolean(preset.values.autoPhotosPerLoop)
++
++    if (preset.igReshootEnabled != null) {
++      form.igReshootEnabled = Boolean(preset.igReshootEnabled)
++    }
++    if (preset.igQualitySpeedBalance != null) {
++      form.igQualitySpeedBalance = Number(preset.igQualitySpeedBalance)
++    }
+ 
+     if (preset.values.photosPerLoop != null) {
+       form.photosPerLoop = preset.values.photosPerLoop
++    } else if (form.autoPhotosPerLoop) {
++      form.photosPerLoop = recommendOrbitPhotosPerLoop({
++        focalLengthMm: form.focalLengthMm,
++        horizontalOverlapPercent: form.horizontalOverlapPercent,
++      })
+     }
+ 
+     ElMessage.success(`已应用${preset.label}参数推荐`)
+   }
+ 
++  watch(
++    [
++      () => form.autoPhotosPerLoop,
++      () => form.focalLengthMm,
++      () => form.horizontalOverlapPercent,
++    ],
++    () => {
++      if (!form.autoPhotosPerLoop || isBuildingPlanner.value) {
++        return
++      }
++
++      form.photosPerLoop = recommendOrbitPhotosPerLoop({
++        focalLengthMm: form.focalLengthMm,
++        horizontalOverlapPercent: form.horizontalOverlapPercent,
++      })
++    },
++  )
++
+   watch(
+     centerPoint,
+     (point) => {
+@@ -1618,6 +1794,10 @@
+       () => form.pitchDeg,
+       () => form.photosPerLoop,
+       () => form.verticalOverlapPercent,
++      () => form.horizontalOverlapPercent,
++      () => form.autoPhotosPerLoop,
++      () => form.igReshootEnabled,
++      () => form.igQualitySpeedBalance,
+       () => form.droneCount,
+     ],
+     () => {
+diff --git a/src/utils/routePlanner.js b/src/utils/routePlanner.js
+index ef677e4..eb02f85 100644
+--- a/src/utils/routePlanner.js
++++ b/src/utils/routePlanner.js
+@@ -4,11 +4,13 @@ const RADIAN_TO_DEGREE = 180 / Math.PI
+ const DEFAULT_ASPECT_RATIO = { width: 4, height: 3 }
+ const DEFAULT_SENSOR = { widthMm: 36, heightMm: 24 }
+ const DEFAULT_CRUISE_SPEED = 5
+-const DEFAULT_BUILDING_HORIZONTAL_OVERLAP_RATIO = 0.12
++// 3DGS / COLMAP need dense horizontal overlap; legacy 0.12 was coverage-only and too sparse.
++const DEFAULT_BUILDING_HORIZONTAL_OVERLAP_RATIO = 0.7
++const DEFAULT_ORBIT_HORIZONTAL_OVERLAP_RATIO = 0.7
+ const DEFAULT_BUILDING_MIN_EDGE_LENGTH_METERS = 6
+ const DEFAULT_BUILDING_TURN_TOLERANCE_DEG = 18
+-const DEFAULT_BUILDING_MAX_SEGMENTS_PER_FACADE = 4
+-const DEFAULT_BUILDING_MAX_BANDS = 4
++const DEFAULT_BUILDING_MAX_SEGMENTS_PER_FACADE = 24
++const DEFAULT_BUILDING_MAX_BANDS = 6
+ 
+ const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
+ 
+@@ -428,9 +430,10 @@ const generateOffsetFacadeSamples = (offsetPolygon, sourcePolygon, desiredStepMe
+     const facadeStart = sourcePolygon[edgeIndex]
+     const facadeEnd = sourcePolygon[(edgeIndex + 1) % edgeCount]
+     const facadeLength = distanceBetweenLocalPoints(facadeStart, facadeEnd)
++    // Prefer denser ends for SfM matching across adjacent facades / corners.
+     const segmentCount = clamp(
+       Math.ceil(facadeLength / safeStep),
+-      1,
++      facadeLength >= safeStep * 0.6 ? 2 : 1,
+       DEFAULT_BUILDING_MAX_SEGMENTS_PER_FACADE,
+     )
+ 
+@@ -474,6 +477,56 @@ const calculateFieldOfView = (focalLengthMm, sensor = DEFAULT_SENSOR) => {
+   }
+ }
+ 
++/**
++ * Recommend orbit shot count for 3DGS / SfM.
++ * Uses the denser of: (1) HFOV×overlap angular step, (2) arc-length step from GSD coverage.
++ */
++export const recommendOrbitPhotosPerLoop = ({
++  focalLengthMm,
++  horizontalOverlapPercent = DEFAULT_ORBIT_HORIZONTAL_OVERLAP_RATIO * 100,
++  orbitRadiusMeters,
++  imageCoverageWidthMeters,
++}) => {
++  const fieldOfView = calculateFieldOfView(focalLengthMm)
++  const overlapRatio = clamp(Number(horizontalOverlapPercent) / 100, 0.1, 0.95)
++  const angularStepDeg = Math.max(fieldOfView.horizontalFovDeg * (1 - overlapRatio), 2)
++  const fromFov = Math.ceil(360 / angularStepDeg)
++
++  let fromCoverage = 0
++  const radius = Number(orbitRadiusMeters)
++  const coverageWidth = Number(imageCoverageWidthMeters)
++  if (Number.isFinite(radius) && radius > 1 && Number.isFinite(coverageWidth) && coverageWidth > 0.5) {
++    const arcStepMeters = Math.max(coverageWidth * (1 - overlapRatio), 1)
++    fromCoverage = Math.ceil((2 * Math.PI * radius) / arcStepMeters)
++  }
++
++  return clamp(Math.max(fromFov, fromCoverage), 12, 180)
++}
++
++export const resolveOrbitPhotosPerLoop = ({
++  photosPerLoop,
++  focalLengthMm,
++  horizontalOverlapPercent,
++  autoPhotosPerLoop = false,
++  orbitRadiusMeters,
++  imageCoverageWidthMeters,
++}) => {
++  const recommended = recommendOrbitPhotosPerLoop({
++    focalLengthMm,
++    horizontalOverlapPercent,
++    orbitRadiusMeters,
++    imageCoverageWidthMeters,
++  })
++  const requested = Math.round(Number(photosPerLoop) || 0)
++
++  if (autoPhotosPerLoop || requested <= 0) {
++    return recommended
++  }
++
++  // Never undersample below the overlap-driven minimum when user sets a count.
++  return Math.max(requested, 4)
++}
++
+ export const haversineDistance = (from, to) => {
+   const latitude1 = toRadians(from.latitude)
+   const latitude2 = toRadians(to.latitude)
+@@ -615,6 +668,14 @@ const computeAdaptiveBuildingBandLimit = (objectHeightMeters, coverageHeightMete
+     return 3
+   }
+ 
++  if (ratio <= 4.5) {
++    return 4
++  }
++
++  if (ratio <= 6.0) {
++    return 5
++  }
++
+   return DEFAULT_BUILDING_MAX_BANDS
+ }
+ 
+@@ -678,10 +739,16 @@ export const planSinglePointOrbitMission = ({
+   pitchDeg,
+   photosPerLoop,
+   verticalOverlapPercent,
++  horizontalOverlapPercent,
++  autoPhotosPerLoop = false,
+   centerPoint,
+   edgePoint,
+ }) => {
+-  const safePhotosPerLoop = Math.max(Math.round(Number(photosPerLoop) || 24), 4)
++  const horizontalOverlapRatio = clamp(
++    Number(horizontalOverlapPercent ?? DEFAULT_ORBIT_HORIZONTAL_OVERLAP_RATIO * 100) / 100,
++    0.1,
++    0.95,
++  )
+   const overlapRatio = clamp(Number(verticalOverlapPercent || 70) / 100, 0.1, 0.95)
+   const safePitchDeg = clamp(Number(pitchDeg || -10), -60, 60)
+   const safeGsdMm = Math.max(Number(gsdMm) || 5, 0.1)
+@@ -704,6 +771,21 @@ export const planSinglePointOrbitMission = ({
+   const orbitRadiusMeters = Math.max(targetRadiusMeters + cameraStandOffMeters, cameraStandOffMeters)
+   const verticalCoverageMeters = 2 * orbitRadiusMeters * Math.tan(toRadians(fieldOfView.verticalFovDeg / 2))
+ 
++  const safePhotosPerLoop = resolveOrbitPhotosPerLoop({
++    photosPerLoop,
++    focalLengthMm,
++    horizontalOverlapPercent: horizontalOverlapRatio * 100,
++    autoPhotosPerLoop,
++    orbitRadiusMeters,
++    imageCoverageWidthMeters,
++  })
++  const recommendedPhotosPerLoop = recommendOrbitPhotosPerLoop({
++    focalLengthMm,
++    horizontalOverlapPercent: horizontalOverlapRatio * 100,
++    orbitRadiusMeters,
++    imageCoverageWidthMeters,
++  })
++
+   const bandCenters = compressBandCenters(buildBandCenters({
+     lowElevationM: safeLowElevation,
+     highElevationM: safeHighElevation,
+@@ -794,6 +876,7 @@ export const planSinglePointOrbitMission = ({
+     verticalCoverageMeters: roundNumber(verticalCoverageMeters, 2),
+     startBearing: roundNumber(startBearing, 2),
+     photosPerLoop: safePhotosPerLoop,
++    recommendedPhotosPerLoop,
+     planningInputs: {
+       focalLengthMm: Number(focalLengthMm),
+       megapixelsWan: Number(megapixelsWan),
+@@ -803,6 +886,8 @@ export const planSinglePointOrbitMission = ({
+       pitchDeg: safePitchDeg,
+       photosPerLoop: safePhotosPerLoop,
+       verticalOverlapPercent: Number(verticalOverlapPercent || 70),
++      horizontalOverlapPercent: roundNumber(horizontalOverlapRatio * 100, 1),
++      autoPhotosPerLoop: Boolean(autoPhotosPerLoop),
+     },
+     obstacleAnalysis: {
+       enabled: false,
+@@ -829,6 +914,7 @@ export const planBuildingFootprintMission = ({
+   highElevationM,
+   pitchDeg,
+   verticalOverlapPercent,
++  horizontalOverlapPercent,
+   footprintPoints,
+ }) => {
+   if (!Array.isArray(footprintPoints) || footprintPoints.length < 3) {
+@@ -836,7 +922,11 @@ export const planBuildingFootprintMission = ({
+   }
+ 
+   const overlapRatio = clamp(Number(verticalOverlapPercent || 70) / 100, 0.1, 0.95)
+-  const horizontalOverlapRatio = DEFAULT_BUILDING_HORIZONTAL_OVERLAP_RATIO
++  const horizontalOverlapRatio = clamp(
++    Number(horizontalOverlapPercent ?? DEFAULT_BUILDING_HORIZONTAL_OVERLAP_RATIO * 100) / 100,
++    0.1,
++    0.95,
++  )
+   const safePitchDeg = clamp(Number(pitchDeg || -10), -60, 60)
+   const safeGsdMm = Math.max(Number(gsdMm) || 5, 0.1)
+   const safeLowElevation = Number(lowElevationM) || 0
+@@ -1011,6 +1101,7 @@ export const planBuildingFootprintMission = ({
+       pitchDeg: safePitchDeg,
+       photosPerLoop: polygonWaypoints.length,
+       verticalOverlapPercent: Number(verticalOverlapPercent || 70),
++      horizontalOverlapPercent: roundNumber(horizontalOverlapRatio * 100, 1),
+     },
+     obstacleAnalysis: {
+       enabled: false,

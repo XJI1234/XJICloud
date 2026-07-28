@@ -1,0 +1,40 @@
+---
+description: 航线规划算法改动时必须同步更新原理 README
+globs:
+  - local/wayline-planning/**
+  - ../Wayline/src/utils/routePlanner.js
+  - ../Wayline/src/utils/informationGainReshootPlanner.js
+  - ../Wayline/src/utils/multiUavPlanner.js
+  - ../Wayline/src/utils/routeCollisionPlanner.js
+  - ../Wayline/src/algorithm/core/missionPlanner.js
+  - ../Wayline/src/components/plannerPanel.vue
+  - ../Wayline/src/wasm/**
+  - ../Wayline/native/**
+alwaysApply: false
+---
+
+# 航线算法文档同步
+
+权威文档：`local/wayline-planning/ALGORITHM.md`
+
+## 何时更新
+
+修改、新增或删除下列能力时，**同一次改动内**更新该文档：
+
+- 种子航线（orbit / building）几何或重叠逻辑
+- 信息增益补拍（IG）、β 预算、效用函数
+- 多机分割、白模绕障
+- 规划流水线顺序或入口函数
+- 文献依据 / 代理实现与真 FisherRF 的关系说明
+
+## 如何更新
+
+1. 改对应章节的原理、公式、步骤或对照表（保持与代码一致）
+2. 在文末 **「变更记录」** 追加一行：`日期 | 摘要 | 涉及文件`
+3. 若新增算法模块：补总流水线表 + 独立章节
+4. 勿删「IG 不是论文逐行移植」的定位说明，除非实现已换成真 FisherRF/POp-GS
+
+## 不要
+
+- 只改代码不改 `ALGORITHM.md`
+- 把部署说明写进算法文档（部署见 `deploy/WAYLINE_FRONTEND_PLANNING.md`）

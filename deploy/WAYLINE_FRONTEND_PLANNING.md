@@ -36,3 +36,13 @@ pnpm run dev          # 前端；规划默认走浏览器内核
 ## 部署前端到 VM
 
 构建后同步 `dist/route/`（含 `index.html`、`assets/`、`cesium/` 等）到服务器 `/www/wwwroot/.../route/`。无需为每位用户部署规划后端。
+
+## 本地算法实验（重要）
+
+航线算法实验约定：**先本地改 → 本地测通 → 你确认后再 Git 远程**。
+
+- 开发工作区：`../Wayline`（未确认前只改工作树，不 push）
+- 备份镜像：`XJICloud/local/wayline-planning/`
+- **算法原理文档（权威）**：[`local/wayline-planning/ALGORITHM.md`](../local/wayline-planning/ALGORITHM.md) —— 改算法时由 Cursor 规则强制同步更新
+- **禁止**未经确认直接改生产 `/www/wwwroot/.../route/`（本机测试同步除外）
+- **禁止**未经确认 `git push` Wayline 远程

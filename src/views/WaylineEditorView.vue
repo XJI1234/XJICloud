@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const loading = ref(true)
 /** Bust browser/iframe cache so Wayline always picks up latest /route/index.html → hashed JS. */
@@ -17,10 +19,17 @@ onMounted(() => {
     loading.value = false
   }, { once: true })
 })
+
+function backToGate() {
+  void router.push({ name: 'wayline' })
+}
 </script>
 
 <template>
   <div class="wayline-page">
+    <button class="wayline-back" type="button" title="返回航线前置页" @click="backToGate">
+      返回
+    </button>
     <iframe
       ref="iframeRef"
       class="wayline-iframe"

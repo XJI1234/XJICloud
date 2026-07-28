@@ -39,7 +39,13 @@ const toolItems = [
 ] as const
 
 function isActiveNav(path: string | null) {
-  return Boolean(path && route.path === path)
+  if (!path) {
+    return false
+  }
+  if (path === '/app/wayline') {
+    return route.path === '/app/wayline' || route.path.startsWith('/app/wayline/')
+  }
+  return route.path === path
 }
 
 function navigate(path: string) {
@@ -98,12 +104,18 @@ onBeforeUnmount(() => {
 })
 
 const statusText = computed(() => cameraStatus.value)
-const hideStatusBar = computed(() => route.name === 'supersplat' || route.name === 'wayline')
+const hideStatusBar = computed(() => (
+  route.name === 'supersplat'
+  || route.name === 'wayline-editor'
+))
 const isImmersiveRoute = computed(() => route.name === 'home')
+const shellClass = computed(() => ({
+  'cloud-shell--immersive': isImmersiveRoute.value,
+}))
 </script>
 
 <template>
-  <div class="cloud-shell" :class="{ 'cloud-shell--immersive': isImmersiveRoute }">
+  <div class="cloud-shell" :class="shellClass">
     <div class="cloud-shell__backdrop" aria-hidden="true" />
     <div class="cloud-edge-accent" aria-hidden="true" />
     <header class="cloud-header">
