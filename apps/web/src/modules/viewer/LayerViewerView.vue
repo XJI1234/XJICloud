@@ -107,12 +107,49 @@ const pendingDirectoryPath = ref<string | null>(null)
 const exportPending = ref(false)
 const modelInfo = ref<LoadedModelInfo | null>(null)
 const actionError = ref('')
-const statusMessage = ref(t('viewer.status.pickFile'))
+const statusState = ref<
+  | { type: 'i18n'; key: string; params?: Record<string, unknown> }
+  | { type: 'raw'; message: string }
+>({ type: 'i18n', key: 'viewer.status.pickFile' })
 const canUndoEdit = ref(false)
 const canRedoEdit = ref(false)
 const projectInfo = ref<ProjectInfoConfig>(createEmptyProjectInfo())
 const projectInfoDraft = ref<ProjectInfoConfig>(createEmptyProjectInfo())
 const projectInfoDialogVisible = ref(false)
+
+function setStatus(key: string, params?: Record<string, unknown>) {
+  statusState.value = params ? { type: 'i18n', key, params } : { type: 'i18n', key }
+}
+
+function setRawStatus(message: string) {
+  statusState.value = { type: 'raw', message }
+}
+
+const statusMessage = computed(() => {
+  const state = statusState.value
+  if (state.type === 'raw') {
+    return state.message
+  }
+
+  if (state.key === 'viewer.status.exported') {
+    const params = state.params ?? {}
+    const count = Number(params.count ?? 0)
+    const clippedCount = Number(params.clippedCount ?? 0)
+    const shDegree = Number(params.shDegree ?? 0)
+    const sh = shDegree > 0 ? `，SH ${shDegree}` : ''
+    const clipped = clippedCount > 0
+      ? t('viewer.status.exportClipped', { count: clippedCount.toLocaleString(locale.value) })
+      : ''
+    return String(t(state.key, {
+      fileName: params.fileName,
+      count: count.toLocaleString(locale.value),
+      sh,
+      clipped,
+    }))
+  }
+
+  return String(t(state.key, state.params as Record<string, unknown>))
+})
 
 const canEdit = computed(() => Boolean(modelInfo.value))
 const canExport = computed(() => Boolean(modelInfo.value && !exportPending.value))
@@ -234,7 +271,7 @@ function setCurrentModelSource(file: File, modelId: string | null = null) {
   modelInfo.value = null
   resetProjectInfoState()
   resetModelInteractionState()
-  statusMessage.value = t('viewer.status.loadingFile', { name: file.name })
+  setStatus('viewer.status.loadingFile', { name: file.name })
   closeModelSelectionDialog()
 }
 
@@ -249,10 +286,10 @@ async function loadCloudModel(candidate: ModelCandidate) {
   })
 
   try {
-    statusMessage.value = t('viewer.status.downloading', { name: candidate.name })
+    setStatus('viewer.status.downloading', { name: candidate.name })
     const loaded = await viewerStorage.loadModelBytes(candidate.id, (loaded, total) => {
       if (total > 0) {
-        statusMessage.value = t('viewer.status.downloadingProgress', {
+        setStatus('viewer.status.downloadingProgress', {
           name: candidate.name,
           percent: Math.round((loaded / total) * 100),
         })
@@ -260,8 +297,13 @@ async function loadCloudModel(candidate: ModelCandidate) {
     })
     setCurrentModelSource(loaded.file, loaded.modelId)
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : t('viewer.status.loadModelFailed')
-    statusMessage.value = actionError.value
+    if (error instanceof ApiError) {
+      actionError.value = error.message
+      setRawStatus(error.message)
+    } else {
+      actionError.value = 'loadModelFailed'
+      setStatus('viewer.status.loadModelFailed')
+    }
   }
 }
 
@@ -315,39 +357,46 @@ function toModelCandidates(models: ModelSummary[]) {
 function presentModelSelection(models: ModelSummary[]) {
   modelCandidates.value = toModelCandidates(models)
   modelSelectionVisible.value = true
-  statusMessage.value = models.length > 1
-    ? t('viewer.status.selectModelMulti', { count: models.length })
-    : t('viewer.status.selectModelPrompt')
+  if (models.length > 1) {
+    setStatus('viewer.status.selectModelMulti', { count: models.length })
+  } else {
+    setStatus('viewer.status.selectModelPrompt')
+  }
 }
 
 async function openFilePicker() {
   actionError.value = ''
 
   if (!projectStore.activeProjectId) {
-    actionError.value = t('viewer.status.selectProjectFirst')
-    statusMessage.value = actionError.value
+    actionError.value = 'selectProjectFirst'
+    setStatus('viewer.status.selectProjectFirst')
     return
   }
 
   try {
     const models = await viewerStorage.listModels(projectStore.activeProjectId)
     if (models.length === 0) {
-      actionError.value = t('viewer.status.noModels')
-      statusMessage.value = actionError.value
+      actionError.value = 'noModels'
+      setStatus('viewer.status.noModels')
       return
     }
 
     presentModelSelection(models)
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : t('viewer.status.loadModelListFailed')
-    statusMessage.value = actionError.value
+    if (error instanceof ApiError) {
+      actionError.value = error.message
+      setRawStatus(error.message)
+    } else {
+      actionError.value = 'loadModelListFailed'
+      setStatus('viewer.status.loadModelListFailed')
+    }
   }
 }
 
 function triggerUpload() {
   if (!projectStore.activeProjectId) {
-    actionError.value = t('viewer.status.selectProjectFirst')
-    statusMessage.value = actionError.value
+    actionError.value = 'selectProjectFirst'
+    setStatus('viewer.status.selectProjectFirst')
     return
   }
 
@@ -364,17 +413,22 @@ async function handleUpload(event: Event) {
   }
 
   try {
-    statusMessage.value = t('viewer.status.uploading', { name: file.name })
+    setStatus('viewer.status.uploading', { name: file.name })
     const model = await uploadModel(projectStore.activeProjectId, file)
     rememberModelMeta(model.id, {
       fileName: model.fileName,
       projectId: projectStore.activeProjectId,
     })
     setCurrentModelSource(file, model.id)
-    statusMessage.value = t('viewer.status.uploadDoneLoading', { name: file.name })
+    setStatus('viewer.status.uploadDoneLoading', { name: file.name })
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : t('viewer.status.uploadModelFailed')
-    statusMessage.value = actionError.value
+    if (error instanceof ApiError) {
+      actionError.value = error.message
+      setRawStatus(error.message)
+    } else {
+      actionError.value = 'uploadModelFailed'
+      setStatus('viewer.status.uploadModelFailed')
+    }
   }
 }
 
@@ -396,16 +450,16 @@ function setPainterMode(nextMode: PainterMode) {
 
   switch (nextMode) {
     case 'paint':
-      statusMessage.value = t('viewer.status.paintMode')
+      setStatus('viewer.status.paintMode')
       break
     case 'erase':
-      statusMessage.value = t('viewer.status.eraseMode')
+      setStatus('viewer.status.eraseMode')
       break
     case 'undo':
-      statusMessage.value = t('viewer.status.eraserMode')
+      setStatus('viewer.status.eraserMode')
       break
     default:
-      statusMessage.value = t('viewer.status.viewMode')
+      setStatus('viewer.status.viewMode')
       break
   }
 }
@@ -419,12 +473,12 @@ function requestRotateView(direction: 'clockwise' | 'counterclockwise') {
   activeSidePanel.value = 'view'
 
   if (direction === 'clockwise') {
-    statusMessage.value = t('viewer.status.rotatingCw')
+    setStatus('viewer.status.rotatingCw')
     rotateClockwiseToken.value += 1
     return
   }
 
-  statusMessage.value = t('viewer.status.rotatingCcw')
+  setStatus('viewer.status.rotatingCcw')
   rotateCounterclockwiseToken.value += 1
 }
 
@@ -438,9 +492,7 @@ function toggleAnnotationPlacement() {
   annotationPlacementActive.value = !annotationPlacementActive.value
   actionError.value = ''
   activeSidePanel.value = 'view'
-  statusMessage.value = annotationPlacementActive.value
-    ? t('viewer.status.bubbleOn')
-    : t('viewer.status.bubbleOff')
+  setStatus(annotationPlacementActive.value ? 'viewer.status.bubbleOn' : 'viewer.status.bubbleOff')
 }
 
 function toggleCubePlacement() {
@@ -453,9 +505,7 @@ function toggleCubePlacement() {
   cubePlacementActive.value = !cubePlacementActive.value
   actionError.value = ''
   activeSidePanel.value = 'view'
-  statusMessage.value = cubePlacementActive.value
-    ? t('viewer.status.cubeOn')
-    : t('viewer.status.cubeOff')
+  setStatus(cubePlacementActive.value ? 'viewer.status.cubeOn' : 'viewer.status.cubeOff')
 }
 
 function requestExport() {
@@ -466,7 +516,7 @@ function requestExport() {
   exportPending.value = true
   activeSidePanel.value = 'edit'
   actionError.value = ''
-  statusMessage.value = t('viewer.status.exporting')
+  setStatus('viewer.status.exporting')
   exportToken.value += 1
 }
 
@@ -480,7 +530,7 @@ function requestRestoreModel() {
   cubePlacementActive.value = false
   exportPending.value = false
   actionError.value = ''
-  statusMessage.value = t('viewer.status.restoring')
+  setStatus('viewer.status.restoring')
   restoreModelToken.value += 1
 }
 
@@ -490,7 +540,7 @@ function requestUndoLastEdit() {
   }
 
   actionError.value = ''
-  statusMessage.value = t('viewer.status.undoing')
+  setStatus('viewer.status.undoing')
   undoEditToken.value += 1
 }
 
@@ -500,7 +550,7 @@ function requestRedoLastEdit() {
   }
 
   actionError.value = ''
-  statusMessage.value = t('viewer.status.redoing')
+  setStatus('viewer.status.redoing')
   redoEditToken.value += 1
 }
 
@@ -510,7 +560,7 @@ function requestResetView() {
   }
 
   actionError.value = ''
-  statusMessage.value = t('viewer.status.resettingCamera')
+  setStatus('viewer.status.resettingCamera')
   resetViewToken.value += 1
 }
 
@@ -520,7 +570,7 @@ function requestSaveDefaultView() {
   }
 
   actionError.value = ''
-  statusMessage.value = t('viewer.status.savingDefaultView')
+  setStatus('viewer.status.savingDefaultView')
   saveDefaultViewToken.value += 1
 }
 
@@ -530,7 +580,7 @@ function requestSaveMarkers() {
   }
 
   actionError.value = ''
-  statusMessage.value = t('viewer.status.savingMarkers')
+  setStatus('viewer.status.savingMarkers')
   saveMarkersToken.value += 1
 }
 
@@ -572,7 +622,7 @@ function saveProjectInfoChanges() {
   projectInfoDialogVisible.value = false
   activeSidePanel.value = 'info'
   actionError.value = ''
-  statusMessage.value = t('viewer.status.savingProjectInfo')
+  setStatus('viewer.status.savingProjectInfo')
   saveProjectInfoToken.value += 1
 }
 
@@ -657,7 +707,7 @@ function handleLoaded(info: LoadedModelInfo) {
   cubePlacementActive.value = false
   actionError.value = ''
   activeSidePanel.value = 'info'
-  statusMessage.value = t('viewer.status.modelLoaded', { name: info.fileName })
+  setStatus('viewer.status.modelLoaded', { name: info.fileName })
 }
 
 function handleFailed(message: string) {
@@ -668,27 +718,23 @@ function handleFailed(message: string) {
   exportPending.value = false
   annotationPlacementActive.value = false
   cubePlacementActive.value = false
-  statusMessage.value = message
+  setRawStatus(message)
 }
 
 function handleStatus(message: string) {
   if (!actionError.value) {
-    statusMessage.value = message
+    setRawStatus(message)
   }
 }
 
 function handleExported(result: PainterExportResult) {
   exportPending.value = false
   actionError.value = ''
-  const shSuffix = result.sphericalHarmonicsDegree > 0 ? `，SH ${result.sphericalHarmonicsDegree}` : ''
-  const clippedSuffix = result.clippedCount > 0
-    ? t('viewer.status.exportClipped', { count: result.clippedCount.toLocaleString(locale.value) })
-    : ''
-  statusMessage.value = t('viewer.status.exported', {
+  setStatus('viewer.status.exported', {
     fileName: result.fileName,
-    count: result.splatCount.toLocaleString(locale.value),
-    sh: shSuffix,
-    clipped: clippedSuffix,
+    count: result.splatCount,
+    shDegree: result.sphericalHarmonicsDegree,
+    clippedCount: result.clippedCount,
   })
 }
 
@@ -696,12 +742,12 @@ function handleExportFailed(message: string) {
   exportPending.value = false
   if (message === t('viewer.status.exportCancelled') || message === '已取消导出') {
     actionError.value = ''
-    statusMessage.value = message
+    setStatus('viewer.status.exportCancelled')
     return
   }
 
   actionError.value = message
-  statusMessage.value = message
+  setRawStatus(message)
 }
 
 function handleAnnotationPlacementChange(active: boolean) {
@@ -756,7 +802,7 @@ function handleCameraChange(status: CameraStatus) {
 onMounted(() => {
   window.addEventListener('keydown', onWindowKeydown)
   projectStore.fetchProjects().catch(() => {
-    statusMessage.value = t('viewer.status.projectsLoadFailed')
+    setStatus('viewer.status.projectsLoadFailed')
   })
 })
 
