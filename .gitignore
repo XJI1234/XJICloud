@@ -10,8 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-vendors/supersplat/node_modules
-vendors/supersplat/dist
+# Generated at web predev/prebuild from vendors/supersplat
 apps/web/public/supersplat
 release
 *.local

@@ -32,7 +32,7 @@ XJICloud/
 ├── services/backend/         # Spring Boot（:8080）
 ├── services/gpu-worker/      # Python Worker + Dockerfile
 ├── rust/                     # spark-rs、spark-worker-rs WASM
-├── vendors/supersplat/       # Git Submodule（PlayCanvas）
+├── vendors/supersplat/       # SuperSplat 预编译静态资源
 ├── deploy/                   # Compose、Nginx、systemd、K8s
 ├── docs/                     # Deploy.md、本文件
 ├── scripts/                  # copy-supersplat-dist 等
@@ -239,9 +239,10 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 ## 10. 本地开发
 
 ```bash
-git submodule update --init --recursive
 pnpm install
+
 cd services/backend && mvn spring-boot:run
+
 pnpm dev:web
 pnpm dev:admin
 docker build -t xjicloud/gpu-worker services/gpu-worker/
@@ -251,7 +252,7 @@ docker build -t xjicloud/gpu-worker services/gpu-worker/
 
 ## 11. 已知限制
 
-1. SuperSplat：`vendors/supersplat` submodule + `pnpm build:supersplat`
+1. SuperSplat：使用 `vendors/supersplat` 预编译资源；web `predev`/`prebuild` 自动复制到 `public/supersplat`
 2. OSS CORS / 用户 PC 网段防火墙（Deploy.md §5.1.5）
 3. SSE 需 Nginx `proxy_buffering off`
 4. Worker 密钥须与后端一致

@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node ../../scripts/copy-supersplat-dist.mjs",
     "dev": "vite",
+    "prebuild": "node ../../scripts/copy-supersplat-dist.mjs",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },

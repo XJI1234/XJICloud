@@ -14,7 +14,7 @@ COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile=false
 
 COPY . .
-# SuperSplat 子模块可能未 checkout；跳过 build:supersplat，仅构建主站与管理端
+# web prebuild 会从 vendors/supersplat 复制预编译静态资源到 public/supersplat
 RUN pnpm run build:web && pnpm run build:admin
 
 FROM nginx:1.27-alpine

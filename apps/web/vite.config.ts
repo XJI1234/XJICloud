@@ -63,7 +63,7 @@ export default defineConfig({
   server: {
     watch: {
       usePolling: true,
-      ignored: ['**/vendors/supersplat/**', '**/public/supersplat/**'],
+      ignored: ['**/public/supersplat/**'],
     },
     port: 5174,
     strictPort: true,

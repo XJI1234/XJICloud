@@ -21,7 +21,7 @@ XJICloud/
 │   └── gpu-worker/          # Python GPU Worker 容器
 ├── rust/                    # Spark WASM（Cargo workspace）
 ├── vendors/
-│   └── supersplat/          # Git Submodule（PlayCanvas SuperSplat）
+│   └── supersplat/          # SuperSplat 预编译静态资源（构建时复制到 public）
 ├── deploy/                  # Compose / Nginx / systemd / K8s
 ├── docs/                    # Deploy.md、AGENT_CONTEXT.md
 ├── scripts/                 # 构建辅助脚本
@@ -35,7 +35,7 @@ XJICloud/
 | 管理前端 | `apps/admin` | `pnpm --filter @xjicloud/admin dev` |
 | 后端 | `services/backend` | `cd services/backend && mvn spring-boot:run` |
 | Worker | `services/gpu-worker` | `docker build -t xjicloud/gpu-worker services/gpu-worker` |
-| SuperSplat | `vendors/supersplat` | `pnpm build:supersplat` |
+| SuperSplat | `vendors/supersplat`（预编译） | web `predev`/`prebuild` 自动复制 |
 
 ---
 
@@ -46,14 +46,12 @@ XJICloud/
 - **Node.js** ≥ 18、**pnpm** 9（`corepack enable`）
 - **Java** 17+、**Maven** 3.9+
 - **Docker**（Redis、MinIO、Worker）
-- **Git**（含 submodule）
 
-### 1. 克隆并初始化 submodule
+### 1. 克隆与安装
 
 ```bash
 git clone <repo-url> XJICloud
 cd XJICloud
-git submodule update --init --recursive
 pnpm install
 ```
 
@@ -97,10 +95,9 @@ docker run --rm \
 
 ```bash
 pnpm build:wasm          # Rust WASM
-pnpm build:supersplat    # 需已 init submodule → apps/web/public/supersplat
-pnpm build:web
+pnpm build:web           # 自动复制 vendors/supersplat → public/supersplat
 pnpm build:admin
-pnpm build:all           # supersplat + web + admin
+pnpm build:all           # web + admin
 
 cd services/backend && mvn -DskipTests package
 ```
@@ -147,11 +144,11 @@ sudo ./deploy/deploy-backend.sh
 
 - [docs/Deploy.md](docs/Deploy.md) — 分机部署
 - [docs/AGENT_CONTEXT.md](docs/AGENT_CONTEXT.md) — 架构与 API 速查（给开发 / Agent）
-- [vendors/README.md](vendors/README.md) — SuperSplat submodule 说明
+- [vendors/README.md](vendors/README.md) — SuperSplat 预编译资源说明
 
 ---
 
 ## 许可与第三方
 
 - **Spark 2.0**（`packages/spark`）：专有许可
-- **SuperSplat**：PlayCanvas，见 submodule 内许可证
+- **SuperSplat**：PlayCanvas；仓库内仅保留预编译静态资源，见上游许可证
