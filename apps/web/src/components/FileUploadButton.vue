@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ApiError } from '@/api/client'
 import { uploadModel } from '@/api/models'
 
@@ -16,12 +17,13 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
+const { t } = useI18n()
 const inputRef = ref<HTMLInputElement | null>(null)
 const pending = ref(false)
 
 function trigger() {
   if (!props.projectId) {
-    emit('error', '请先打开一个项目')
+    emit('error', t('fileUpload.openProjectFirst'))
     return
   }
   inputRef.value?.click()
@@ -41,7 +43,7 @@ async function handleChange(event: Event) {
     await uploadModel(props.projectId, file)
     emit('success', file.name)
   } catch (error) {
-    emit('error', error instanceof ApiError ? error.message : '上传失败')
+    emit('error', error instanceof ApiError ? error.message : t('fileUpload.uploadFailed'))
   } finally {
     pending.value = false
   }
@@ -57,7 +59,7 @@ async function handleChange(event: Event) {
       :disabled="pending || !projectId"
       @click="trigger"
     >
-      {{ pending ? (pendingLabel ?? '上传中...') : (label ?? '选择文件上传') }}
+      {{ pending ? (pendingLabel ?? t('common.uploading')) : (label ?? t('fileUpload.defaultLabel')) }}
     </button>
     <input
       ref="inputRef"

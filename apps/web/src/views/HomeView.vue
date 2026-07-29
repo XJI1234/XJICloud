@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { ApiError } from '@/api/client'
+import { useFormatDateTime } from '@/composables/useAppLocale'
 
 const router = useRouter()
 const projectStore = useProjectStore()
+const { t } = useI18n()
+const { formatDateTime } = useFormatDateTime()
 
 const errorMessage = ref('')
 const createDialogVisible = ref(false)
@@ -19,7 +23,7 @@ onMounted(async () => {
   try {
     await projectStore.fetchProjects()
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : '加载项目失败'
+    errorMessage.value = error instanceof ApiError ? error.message : t('home.loadProjectsFailed')
   }
 })
 
@@ -38,7 +42,7 @@ function openProjectPicker() {
 
 async function submitCreateProject() {
   if (!newProjectName.value.trim()) {
-    errorMessage.value = '请输入项目名称'
+    errorMessage.value = t('home.enterProjectName')
     return
   }
 
@@ -48,7 +52,7 @@ async function submitCreateProject() {
     createDialogVisible.value = false
     await router.push('/app/projects')
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : '创建项目失败'
+    errorMessage.value = error instanceof ApiError ? error.message : t('home.createProjectFailed')
   } finally {
     pending.value = false
   }
@@ -56,7 +60,7 @@ async function submitCreateProject() {
 
 function confirmOpenProject() {
   if (!selectedProjectId.value) {
-    errorMessage.value = '请选择一个项目'
+    errorMessage.value = t('home.selectProject')
     return
   }
 
@@ -68,16 +72,6 @@ function confirmOpenProject() {
 function openRecentProject(projectId: string) {
   projectStore.openProject(projectId)
   router.push('/app/projects')
-}
-
-function formatDate(timestamp: number) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(timestamp))
 }
 </script>
 
@@ -92,15 +86,15 @@ function formatDate(timestamp: number) {
 
     <div class="home-grid">
       <div class="home-hero-main">
-        <p class="home-eyebrow">XJI Cloud</p>
-        <h1 class="home-display-title">建模解决方案云平台</h1>
+        <p class="home-eyebrow">{{ t('brand.title') }}</p>
+        <h1 class="home-display-title">{{ t('brand.subtitle') }}</h1>
 
         <div class="home-actions">
           <button class="home-primary-button" type="button" @click="openCreateDialog">
-            新建项目
+            {{ t('home.newProject') }}
           </button>
           <button class="home-secondary-button" type="button" @click="openProjectPicker">
-            打开项目
+            {{ t('home.openProject') }}
           </button>
         </div>
 
@@ -108,15 +102,17 @@ function formatDate(timestamp: number) {
       </div>
 
       <aside class="home-recent-section">
-        <h2 class="home-recent-title">最近项目 ({{ projectStore.recentProjects.length }})</h2>
-        <p v-if="projectStore.loading" class="home-recent-empty">加载中...</p>
-        <p v-else-if="projectStore.recentProjects.length === 0" class="home-recent-empty">暂无最近打开的项目</p>
+        <h2 class="home-recent-title">{{ t('home.recentProjects', { count: projectStore.recentProjects.length }) }}</h2>
+        <p v-if="projectStore.loading" class="home-recent-empty">{{ t('common.loading') }}</p>
+        <p v-else-if="projectStore.recentProjects.length === 0" class="home-recent-empty">{{ t('home.noRecentProjects') }}</p>
         <ul v-else class="home-recent-list">
           <li v-for="project in projectStore.recentProjects" :key="project.id">
             <button class="home-recent-card" type="button" @click="openRecentProject(project.id)">
               <p class="home-recent-card__name">{{ project.name }}</p>
-              <p class="home-recent-card__desc">{{ project.description || '暂无描述' }}</p>
-              <p class="home-recent-card__meta">上次打开 {{ formatDate(project.openedAt) }}</p>
+              <p class="home-recent-card__desc">{{ project.description || t('common.noDescription') }}</p>
+              <p class="home-recent-card__meta">
+                {{ t('home.lastOpened', { date: formatDateTime(project.openedAt) }) }}
+              </p>
             </button>
           </li>
         </ul>
@@ -126,19 +122,31 @@ function formatDate(timestamp: number) {
     <div v-if="createDialogVisible" class="app-modal-backdrop" @click.self="createDialogVisible = false">
       <div class="app-modal home-dialog">
         <div class="app-modal-header">
-          <h2 class="app-modal-title">新建项目</h2>
+          <h2 class="app-modal-title">{{ t('home.createProjectTitle') }}</h2>
         </div>
         <div class="app-modal-body home-dialog-body">
-          <label class="field-label" for="home-project-name">项目名称</label>
-          <input id="home-project-name" v-model="newProjectName" class="text-control" type="text" placeholder="输入项目名称" />
-          <label class="field-label" for="home-project-desc">项目描述</label>
-          <input id="home-project-desc" v-model="newProjectDescription" class="text-control" type="text" placeholder="可选" />
+          <label class="field-label" for="home-project-name">{{ t('home.projectName') }}</label>
+          <input
+            id="home-project-name"
+            v-model="newProjectName"
+            class="text-control"
+            type="text"
+            :placeholder="t('home.projectNamePlaceholder')"
+          />
+          <label class="field-label" for="home-project-desc">{{ t('home.projectDesc') }}</label>
+          <input
+            id="home-project-desc"
+            v-model="newProjectDescription"
+            class="text-control"
+            type="text"
+            :placeholder="t('home.projectDescPlaceholder')"
+          />
           <p v-if="errorMessage" class="home-error">{{ errorMessage }}</p>
         </div>
         <div class="app-modal-footer">
-          <button class="side-button" type="button" @click="createDialogVisible = false">取消</button>
+          <button class="side-button" type="button" @click="createDialogVisible = false">{{ t('common.cancel') }}</button>
           <button class="side-button primary" type="button" :disabled="pending" @click="submitCreateProject">
-            {{ pending ? '创建中...' : '创建并打开' }}
+            {{ pending ? t('home.creating') : t('home.createAndOpen') }}
           </button>
         </div>
       </div>
@@ -147,10 +155,10 @@ function formatDate(timestamp: number) {
     <div v-if="openDialogVisible" class="app-modal-backdrop" @click.self="openDialogVisible = false">
       <div class="app-modal home-dialog">
         <div class="app-modal-header">
-          <h2 class="app-modal-title">打开项目</h2>
+          <h2 class="app-modal-title">{{ t('home.openProjectTitle') }}</h2>
         </div>
         <div class="app-modal-body home-dialog-body">
-          <p v-if="projectStore.projects.length === 0" class="home-recent-empty">暂无项目，请先新建项目。</p>
+          <p v-if="projectStore.projects.length === 0" class="home-recent-empty">{{ t('home.noProjects') }}</p>
           <div v-else class="home-project-picker">
             <button
               v-for="project in projectStore.projects"
@@ -161,14 +169,14 @@ function formatDate(timestamp: number) {
               @click="selectedProjectId = project.id"
             >
               <strong>{{ project.name }}</strong>
-              <span>{{ project.description || '暂无描述' }}</span>
+              <span>{{ project.description || t('common.noDescription') }}</span>
             </button>
           </div>
           <p v-if="errorMessage" class="home-error">{{ errorMessage }}</p>
         </div>
         <div class="app-modal-footer">
-          <button class="side-button" type="button" @click="openDialogVisible = false">取消</button>
-          <button class="side-button primary" type="button" @click="confirmOpenProject">打开</button>
+          <button class="side-button" type="button" @click="openDialogVisible = false">{{ t('common.cancel') }}</button>
+          <button class="side-button primary" type="button" @click="confirmOpenProject">{{ t('common.open') }}</button>
         </div>
       </div>
     </div>

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
 import ToolIcon from '@/components/ToolIcon.vue'
+import { useAppLocale } from '@/composables/useAppLocale'
 import { useAuthStore } from '@/stores/auth'
 import { clearUserSession } from '@/utils/session'
 import { showComingSoon } from '@/utils/comingSoon'
@@ -10,9 +12,11 @@ import { showComingSoon } from '@/utils/comingSoon'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
+const { currentLocale, setLocale } = useAppLocale()
+
 const userModalVisible = ref(false)
 const langModalVisible = ref(false)
-const locale = ref<'zh' | 'en'>('zh')
 
 const cameraStatus = inject(CAMERA_STATUS_KEY, ref<CameraStatus>({
   longitude: '--',
@@ -21,24 +25,24 @@ const cameraStatus = inject(CAMERA_STATUS_KEY, ref<CameraStatus>({
   viewHeight: '--',
 }))
 
-const brandTitle = 'XJI Cloud'
-const brandSubtitle = '建模解决方案云平台'
+const brandTitle = computed(() => t('brand.title'))
+const brandSubtitle = computed(() => t('brand.subtitle'))
 
-const navItems = [
-  { label: '首页', route: '/app/home' },
-  { label: '工程项目', route: '/app/projects' },
-  { label: '搜索索引', route: null },
-  { label: '双屏显示', route: null },
-  { label: '用户空间', route: null },
-  { label: '热力展示', route: null },
-] as const
+const navItems = computed(() => [
+  { labelKey: 'nav.home', route: '/app/home' },
+  { labelKey: 'nav.projects', route: '/app/projects' },
+  { labelKey: 'nav.searchIndex', route: null },
+  { labelKey: 'nav.dualScreen', route: null },
+  { labelKey: 'nav.userSpace', route: null },
+  { labelKey: 'nav.heatmap', route: null },
+] as const)
 
-const toolItems = [
-  { label: '航线规划', route: null, icon: 'route' as const },
-  { label: '数据上传', route: '/app/upload', icon: 'upload' as const },
-  { label: '模型查看', route: '/app/layer', icon: 'view' as const },
-  { label: '高级编辑', route: '/app/supersplat', icon: 'edit' as const },
-] as const
+const toolItems = computed(() => [
+  { labelKey: 'tools.routePlanning', route: null, icon: 'route' as const },
+  { labelKey: 'tools.dataUpload', route: '/app/upload', icon: 'upload' as const },
+  { labelKey: 'tools.modelView', route: '/app/layer', icon: 'view' as const },
+  { labelKey: 'tools.advancedEdit', route: '/app/supersplat', icon: 'edit' as const },
+] as const)
 
 function isActiveNav(path: string | null) {
   return Boolean(path && route.path === path)
@@ -81,14 +85,7 @@ function closeAllModals() {
 }
 
 function selectLocale(next: 'zh' | 'en') {
-  if (next === 'en') {
-    closeLangModal()
-    showComingSoon('English 语言包')
-    return
-  }
-
-  locale.value = 'zh'
-  localStorage.setItem('xjicloud_locale', 'zh')
+  setLocale(next)
   closeLangModal()
 }
 
@@ -105,11 +102,6 @@ function onDocumentKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
-  const savedLocale = localStorage.getItem('xjicloud_locale')
-  if (savedLocale === 'zh') {
-    locale.value = 'zh'
-  }
-
   document.addEventListener('keydown', onDocumentKeydown)
 })
 
@@ -128,7 +120,7 @@ const isImmersiveRoute = computed(() => route.name === 'home')
     <div class="cloud-edge-accent" aria-hidden="true" />
     <header class="cloud-header">
       <div class="cloud-brand">
-        <button class="cloud-brand-button" type="button" title="返回首页" @click="goHome">
+        <button class="cloud-brand-button" type="button" :title="t('nav.home')" @click="goHome">
           <img class="cloud-brand-logo" src="/logo.jpg" alt="XJI Cloud" />
           <div>
             <h1 class="cloud-brand-title">{{ brandTitle }}</h1>
@@ -137,62 +129,62 @@ const isImmersiveRoute = computed(() => route.name === 'home')
         </button>
       </div>
 
-      <nav class="cloud-top-nav" aria-label="主导航">
+      <nav class="cloud-top-nav" aria-label="Main navigation">
         <button
           v-for="item in navItems"
-          :key="item.label"
+          :key="item.labelKey"
           class="cloud-nav-link"
           :class="{ 'is-active': isActiveNav(item.route) }"
           type="button"
-          @click="item.route ? navigate(item.route) : showComingSoon(item.label)"
+          @click="item.route ? navigate(item.route) : showComingSoon(item.labelKey)"
         >
-          {{ item.label }}
+          {{ t(item.labelKey) }}
         </button>
       </nav>
 
       <div class="cloud-header-actions">
-        <button class="cloud-header-tool-button" type="button" @click="showComingSoon('团队')">
+        <button class="cloud-header-tool-button" type="button" @click="showComingSoon('header.team')">
           <span class="cloud-header-tool-button__icon">
             <ToolIcon name="team" />
           </span>
-          <span class="cloud-header-tool-button__label">团队</span>
+          <span class="cloud-header-tool-button__label">{{ t('header.team') }}</span>
         </button>
 
         <button class="cloud-header-tool-button" type="button" @click="openLangModal">
           <span class="cloud-header-tool-button__icon">
             <ToolIcon name="language" />
           </span>
-          <span class="cloud-header-tool-button__label">语言</span>
+          <span class="cloud-header-tool-button__label">{{ t('header.language') }}</span>
         </button>
 
-        <button class="cloud-header-tool-button" type="button" @click="showComingSoon('帮助')">
+        <button class="cloud-header-tool-button" type="button" @click="showComingSoon('header.help')">
           <span class="cloud-header-tool-button__icon">
             <ToolIcon name="help" />
           </span>
-          <span class="cloud-header-tool-button__label">帮助</span>
+          <span class="cloud-header-tool-button__label">{{ t('header.help') }}</span>
         </button>
 
         <button class="cloud-user-chip" type="button" @click="openUserModal">
-          我的
+          {{ t('header.mine') }}
         </button>
       </div>
     </header>
 
     <div class="cloud-body">
-      <aside class="cloud-tool-rail" aria-label="工具栏">
+      <aside class="cloud-tool-rail" aria-label="Toolbar">
         <button
           v-for="item in toolItems"
-          :key="item.label"
+          :key="item.labelKey"
           class="cloud-tool-button"
           :class="{ 'is-active': isActiveNav(item.route) }"
           type="button"
-          :title="item.label"
-          @click="item.route ? navigate(item.route) : showComingSoon(item.label)"
+          :title="t(item.labelKey)"
+          @click="item.route ? navigate(item.route) : showComingSoon(item.labelKey)"
         >
           <span class="cloud-tool-glyph">
             <ToolIcon :name="item.icon" />
           </span>
-          <span class="cloud-tool-label">{{ item.label }}</span>
+          <span class="cloud-tool-label">{{ t(item.labelKey) }}</span>
         </button>
       </aside>
 
@@ -207,12 +199,12 @@ const isImmersiveRoute = computed(() => route.name === 'home')
 
     <footer v-if="!hideStatusBar" class="cloud-status-bar">
       <div class="cloud-status-metrics">
-        <span>经度 {{ statusText.longitude }}</span>
-        <span>纬度 {{ statusText.latitude }}</span>
-        <span>高程 {{ statusText.elevation }}</span>
-        <span>视角 {{ statusText.viewHeight }}</span>
+        <span>{{ t('status.longitude') }} {{ statusText.longitude }}</span>
+        <span>{{ t('status.latitude') }} {{ statusText.latitude }}</span>
+        <span>{{ t('status.elevation') }} {{ statusText.elevation }}</span>
+        <span>{{ t('status.viewHeight') }} {{ statusText.viewHeight }}</span>
       </div>
-      <div class="cloud-status-hint">GIS 底图与双屏显示将在后续版本启用</div>
+      <div class="cloud-status-hint">{{ t('status.gisHint') }}</div>
     </footer>
 
     <Teleport to="body">
@@ -223,17 +215,17 @@ const isImmersiveRoute = computed(() => route.name === 'home')
       >
         <div class="app-modal header-modal" role="dialog" aria-labelledby="user-modal-title">
           <div class="app-modal-header">
-            <h2 id="user-modal-title" class="app-modal-title">我的</h2>
+            <h2 id="user-modal-title" class="app-modal-title">{{ t('header.mine') }}</h2>
           </div>
           <div class="app-modal-body">
             <div class="cloud-user-menu-info header-modal-user-info">
-              <strong>{{ authStore.displayName || '未设置显示名' }}</strong>
+              <strong>{{ authStore.displayName || t('common.notSet') }}</strong>
               <span>@{{ authStore.username || 'unknown' }}</span>
             </div>
           </div>
           <div class="app-modal-footer header-modal-footer">
-            <button class="side-button" type="button" @click="closeUserModal">关闭</button>
-            <button class="side-button primary" type="button" @click="logout">退出登录</button>
+            <button class="side-button" type="button" @click="closeUserModal">{{ t('common.close') }}</button>
+            <button class="side-button primary" type="button" @click="logout">{{ t('header.logout') }}</button>
           </div>
         </div>
       </div>
@@ -245,28 +237,28 @@ const isImmersiveRoute = computed(() => route.name === 'home')
       >
         <div class="app-modal header-modal" role="dialog" aria-labelledby="lang-modal-title">
           <div class="app-modal-header">
-            <h2 id="lang-modal-title" class="app-modal-title">语言</h2>
+            <h2 id="lang-modal-title" class="app-modal-title">{{ t('header.language') }}</h2>
           </div>
           <div class="app-modal-body header-modal-options">
             <button
               class="header-modal-option cloud-user-menu-item"
-              :class="{ 'is-active': locale === 'zh' }"
+              :class="{ 'is-active': currentLocale === 'zh' }"
               type="button"
               @click="selectLocale('zh')"
             >
-              中文
+              {{ t('header.langZh') }}
             </button>
             <button
               class="header-modal-option cloud-user-menu-item"
-              :class="{ 'is-active': locale === 'en' }"
+              :class="{ 'is-active': currentLocale === 'en' }"
               type="button"
               @click="selectLocale('en')"
             >
-              English
+              {{ t('header.langEn') }}
             </button>
           </div>
           <div class="app-modal-footer header-modal-footer">
-            <button class="side-button" type="button" @click="closeLangModal">关闭</button>
+            <button class="side-button" type="button" @click="closeLangModal">{{ t('common.close') }}</button>
           </div>
         </div>
       </div>

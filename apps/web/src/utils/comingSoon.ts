@@ -1,3 +1,6 @@
-export function showComingSoon(label: string) {
-  window.alert(`${label} 功能即将推出`)
+import i18n from '@/i18n'
+
+export function showComingSoon(featureKey: string) {
+  const feature = i18n.global.t(featureKey)
+  window.alert(i18n.global.t('common.comingSoon', { feature }))
 }
