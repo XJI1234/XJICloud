@@ -11,7 +11,7 @@ IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/xjicloud-gpu-worker:${IMAGE_TAG}"
 cd "${REPO_ROOT}"
 
 echo "[acr] Building gpu-worker..."
-docker build -t xjicloud/gpu-worker:latest gpu-worker/
+docker build -t xjicloud/gpu-worker:latest services/gpu-worker/
 
 echo "[acr] Tagging ${IMAGE}..."
 docker tag xjicloud/gpu-worker:latest "${IMAGE}"

@@ -1,0 +1,3 @@
+[submodule "vendors/supersplat"]
+	path = vendors/supersplat
+	url = https://github.com/playcanvas/supersplat.git

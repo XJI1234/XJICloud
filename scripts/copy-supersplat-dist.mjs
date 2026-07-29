@@ -3,8 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const source = path.join(root, 'modules', 'supersplat', 'dist')
-const target = path.join(root, 'public', 'supersplat')
+const source = path.join(root, 'vendors', 'supersplat', 'dist')
+const target = path.join(root, 'apps', 'web', 'public', 'supersplat')
 
 function copyRecursive(from, to) {
   fs.mkdirSync(to, { recursive: true })
@@ -21,6 +21,7 @@ function copyRecursive(from, to) {
 
 if (!fs.existsSync(source)) {
   console.error(`SuperSplat dist not found: ${source}`)
+  console.error('Run: git submodule update --init --recursive && pnpm build:supersplat')
   process.exit(1)
 }
 

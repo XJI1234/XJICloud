@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG_SRC="$SCRIPT_DIR/config"
-BACKEND_DIR="$REPO_ROOT/backend"
+BACKEND_DIR="$REPO_ROOT/services/backend"
 
 SKIP_BUILD=0
 NO_SYSTEMD=0
@@ -379,7 +379,7 @@ do_install_or_upgrade() {
     elif [[ -x "$BACKEND_DIR/mvnw" ]]; then
       MVN=("$BACKEND_DIR/mvnw")
     else
-      die "未找到 mvn 或 backend/mvnw，请安装 Maven 3.9+ 或使用 --skip-build"
+      die "未找到 mvn 或 services/backend/mvnw，请安装 Maven 3.9+ 或使用 --skip-build"
     fi
     log "开始 Maven 构建..."
     (cd "$BACKEND_DIR" && JAVA_HOME="$JAVA_HOME" PATH="$(dirname "$JAVA_BIN"):$PATH" "${MVN[@]}" -DskipTests package)
