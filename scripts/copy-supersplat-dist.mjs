@@ -3,12 +3,17 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const source = path.join(root, 'modules', 'supersplat', 'dist')
-const target = path.join(root, 'public', 'supersplat')
+/** Prebuilt SuperSplat static assets (committed; no source build). */
+const source = path.join(root, 'vendors', 'supersplat')
+const target = path.join(root, 'apps', 'web', 'public', 'supersplat')
 
 function copyRecursive(from, to) {
   fs.mkdirSync(to, { recursive: true })
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    // Skip docs / meta that might appear later; only copy web assets
+    if (entry.name === 'README.md' || entry.name === '.gitkeep') {
+      continue
+    }
     const srcPath = path.join(from, entry.name)
     const destPath = path.join(to, entry.name)
     if (entry.isDirectory()) {
@@ -19,8 +24,9 @@ function copyRecursive(from, to) {
   }
 }
 
-if (!fs.existsSync(source)) {
-  console.error(`SuperSplat dist not found: ${source}`)
+if (!fs.existsSync(source) || !fs.existsSync(path.join(source, 'index.html'))) {
+  console.error(`SuperSplat static assets not found: ${source}`)
+  console.error('Expected committed prebuilt files under vendors/supersplat/')
   process.exit(1)
 }
 
@@ -29,4 +35,4 @@ if (fs.existsSync(target)) {
 }
 
 copyRecursive(source, target)
-console.log(`Copied SuperSplat dist to ${target}`)
+console.log(`Copied SuperSplat assets → ${target}`)

@@ -1,0 +1,19 @@
+{
+  "name": "@xjicloud/spark",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "three": "^0.180.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "three-mesh-bvh": "^0.9.10",
+    "three-player-controller": "^0.4.5"
+  }
+}

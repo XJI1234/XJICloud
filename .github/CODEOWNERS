@@ -1,1 +1,22 @@
+# Default owner (fallback)
 * @QBM3-ai
+
+# User frontend, Spark renderer, WASM, SuperSplat iframe
+/apps/web/ @QBM3-ai
+/packages/spark/ @QBM3-ai
+/packages/shared/ @QBM3-ai
+/rust/ @QBM3-ai
+/vendors/supersplat/ @QBM3-ai
+
+# Admin frontend
+/apps/admin/ @QBM3-ai
+
+# Backend API
+/services/backend/ @QBM3-ai
+
+# GPU worker / training agent
+/services/gpu-worker/ @QBM3-ai
+
+# Deploy & docs
+/deploy/ @QBM3-ai
+/docs/ @QBM3-ai
