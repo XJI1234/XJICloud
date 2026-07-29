@@ -84,7 +84,6 @@ type AnnotationDialogTarget =
 
 const props = defineProps<{
   file: File | null
-  filePath: string | null
   fileHandle: FileSystemFileHandle | null
   directoryHandle: FileSystemDirectoryHandle | null
   painterMode: PainterMode
@@ -186,7 +185,6 @@ let pointDragDidMove = false
 let cubeDragDidMove = false
 let cubeDragPlaneAnchor: THREE.Vector3 | null = null
 let currentConfigHandle: FileSystemFileHandle | null = null
-let currentConfigPath: string | null = null
 let currentConfigFileName = ''
 let currentDefaultView: StoredDefaultView | null = null
 let configDirty = false
@@ -297,19 +295,6 @@ function getViewerConfigFileName(file = currentFile) {
 
   const baseName = file.name.replace(/\.[^.]+$/, '') || 'viewer-model'
   return `${baseName}${VIEWER_CONFIG_SUFFIX}`
-}
-
-function getViewerConfigPath(filePath = props.filePath) {
-  if (!filePath) {
-    return null
-  }
-
-  return `${filePath.replace(/\.[^.]+$/, '')}${VIEWER_CONFIG_SUFFIX}`
-}
-
-function getFileNameFromPath(filePath: string) {
-  const segments = filePath.split(/[/\\]/)
-  return segments[segments.length - 1] || filePath
 }
 
 function markConfigDirty() {
@@ -597,10 +582,9 @@ async function writeActiveViewerConfigFile(config: ViewerConfigFile) {
   throw new Error('当前没有可写入的配置文件（需使用云模型或本地目录权限）')
 }
 
-async function ensureViewerConfigFile(file = currentFile, directoryHandle = props.directoryHandle, filePath = props.filePath) {
+async function ensureViewerConfigFile(file = currentFile, directoryHandle = props.directoryHandle) {
   if (props.cloudModelId && storage) {
     currentConfigHandle = null
-    currentConfigPath = null
     currentConfigFileName = 'viewer.json'
 
     try {
@@ -617,19 +601,8 @@ async function ensureViewerConfigFile(file = currentFile, directoryHandle = prop
     }
   }
 
-  if (filePath) {
-    // Desktop file-path mode removed; fall through to empty / File System Access paths.
-    currentConfigHandle = null
-    currentConfigPath = null
-    currentConfigFileName = ''
-    currentDefaultView = null
-    configDirty = false
-    return createEmptyViewerConfig()
-  }
-
   if (!file || !directoryHandle) {
     currentConfigHandle = null
-    currentConfigPath = null
     currentConfigFileName = ''
     currentDefaultView = null
     configDirty = false
@@ -643,7 +616,6 @@ async function ensureViewerConfigFile(file = currentFile, directoryHandle = prop
 
   const configHandle = await directoryHandle.getFileHandle(configFileName, { create: true })
   currentConfigHandle = configHandle
-  currentConfigPath = null
   currentConfigFileName = configFileName
 
   const configFile = await configHandle.getFile()
@@ -674,7 +646,7 @@ async function saveViewerConfig(successMessage: string, failureMessage: string) 
     }
   }
 
-  if (!currentConfigHandle && !currentConfigPath) {
+  if (!currentConfigHandle) {
     emit('status', failureMessage)
     return false
   }
@@ -1875,7 +1847,6 @@ function disposeCurrentMesh() {
   clearEditHistory()
   activePaintPointerId = null
   currentConfigHandle = null
-  currentConfigPath = null
   currentConfigFileName = ''
   currentDefaultView = null
   configDirty = false

@@ -9,6 +9,7 @@ import {
   CLOUD_SAVE_ERROR,
   CLOUD_SAVE_REQUEST,
   isDirty,
+  isTrustedIframeMessage,
   loadModelInIframe,
 } from '@/bridges/supersplatBridge'
 import { useProjectStore } from '@/stores/project'
@@ -16,7 +17,7 @@ import { useProjectStore } from '@/stores/project'
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const models = ref<ModelSummary[]>([])
@@ -75,6 +76,7 @@ async function loadEditor() {
       signedUrl: token.url,
       fileName: model.fileName,
       modelId: model.id,
+      lang: locale.value === 'en-US' ? 'en' : 'zh-CN',
     })
     await router.replace({
       path: route.path,
@@ -96,6 +98,14 @@ async function handleCloudSaveRequest(event: MessageEvent) {
   }
 
   if (data?.type !== CLOUD_SAVE_REQUEST || !data.modelId || !data.fileName || !data.buffer) {
+    return
+  }
+
+  if (!isTrustedIframeMessage(event, iframeRef.value)) {
+    return
+  }
+
+  if (!selectedModelId.value || data.modelId !== selectedModelId.value) {
     return
   }
 
@@ -134,6 +144,12 @@ watch(
 
 watch(selectedModelId, async (modelId, previousId) => {
   if (modelId && modelId !== previousId) {
+    await loadEditor()
+  }
+})
+
+watch(locale, async () => {
+  if (selectedModelId.value && iframeRef.value) {
     await loadEditor()
   }
 })

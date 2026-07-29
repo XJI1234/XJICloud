@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ApiError } from '@/api/client'
 import { uploadModel } from '@/api/models'
 import SparkViewport from '@/modules/viewer/components/SparkViewport.vue'
@@ -59,13 +60,9 @@ interface ModelCandidate {
   path: string | null
 }
 
-const PROJECT_INFO_BUILTIN_FIELDS = [
-  { key: 'coordinates', label: '经纬度' },
-  { key: 'buildingName', label: '建筑名称' },
-  { key: 'floorCount', label: '楼层数' },
-  { key: 'height', label: '高度' },
-] as const
+const PROJECT_INFO_BUILTIN_KEYS = ['coordinates', 'buildingName', 'floorCount', 'height'] as const
 
+const { t, locale } = useI18n()
 const projectStore = useProjectStore()
 const viewerStorage = createCloudViewerStorage()
 provide(VIEWER_STORAGE_KEY, viewerStorage)
@@ -82,7 +79,6 @@ const currentModelId = ref<string | null>(null)
 const currentFile = ref<File | null>(null)
 const currentFileHandle = ref<FileSystemFileHandle | null>(null)
 const currentDirectoryHandle = ref<FileSystemDirectoryHandle | null>(null)
-const currentFilePath = ref<string | null>(null)
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const panelCollapsed = ref(false)
 const activeSidePanel = ref<SidePanelMenu>('info')
@@ -111,7 +107,7 @@ const pendingDirectoryPath = ref<string | null>(null)
 const exportPending = ref(false)
 const modelInfo = ref<LoadedModelInfo | null>(null)
 const actionError = ref('')
-const statusMessage = ref('选择一个 PLY 或 SPZ 文件开始查看')
+const statusMessage = ref(t('viewer.status.pickFile'))
 const canUndoEdit = ref(false)
 const canRedoEdit = ref(false)
 const projectInfo = ref<ProjectInfoConfig>(createEmptyProjectInfo())
@@ -120,26 +116,22 @@ const projectInfoDialogVisible = ref(false)
 
 const canEdit = computed(() => Boolean(modelInfo.value))
 const canExport = computed(() => Boolean(modelInfo.value && !exportPending.value))
-const activeProjectName = computed(() => projectStore.projects.find((project) => project.id === projectStore.activeProjectId)?.name ?? '未选择项目')
-const brushRadiusLabel = computed(() => `${(Number(brushRadiusFactor.value) * 100).toFixed(1)}% 模型半径`)
-const brushDepthLabel = computed(() => `${Number(brushDepthFactor.value).toFixed(1)} 倍模型半径`)
-const painterModeLabel = computed(() => {
-  switch (painterMode.value) {
-    case 'paint':
-      return '颜色标记模式'
-    case 'erase':
-      return '模型擦除模式'
-    case 'undo':
-      return '橡皮擦模式'
-    default:
-      return '查看模式'
-  }
-})
+const activeProjectName = computed(() => projectStore.projects.find((project) => project.id === projectStore.activeProjectId)?.name ?? t('viewer.noProjectSelected'))
+const brushRadiusLabel = computed(() => t('viewer.brushRadiusValue', { percent: (Number(brushRadiusFactor.value) * 100).toFixed(1) }))
+const brushDepthLabel = computed(() => t('viewer.brushDepthValue', { value: Number(brushDepthFactor.value).toFixed(1) }))
+const painterModeLabel = computed(() => t(`viewer.painterMode.${painterMode.value}`))
+
+function getBuiltinProjectInfoFields() {
+  return PROJECT_INFO_BUILTIN_KEYS.map((key) => ({
+    key,
+    label: t(`viewer.fields.${key}`),
+  }))
+}
 
 function createEmptyProjectInfo(): ProjectInfoConfig {
   return {
     projectName: '',
-    fields: PROJECT_INFO_BUILTIN_FIELDS.map(({ key, label }) => ({
+    fields: getBuiltinProjectInfoFields().map(({ key, label }) => ({
       key,
       label,
       value: '',
@@ -156,6 +148,7 @@ function normalizeProjectInfo(info: ProjectInfoConfig | null | undefined): Proje
   const builtinFields = new Map<string, ProjectInfoField>()
   const customFields: ProjectInfoField[] = []
   const seenCustomKeys = new Set<string>()
+  const builtinDefinitions = getBuiltinProjectInfoFields()
 
   for (const rawField of rawFields) {
     if (!rawField || typeof rawField !== 'object') {
@@ -167,10 +160,10 @@ function normalizeProjectInfo(info: ProjectInfoConfig | null | undefined): Proje
       continue
     }
 
-    const builtinDefinition = PROJECT_INFO_BUILTIN_FIELDS.find((field) => field.key === key)
+    const builtinDefinition = builtinDefinitions.find((field) => field.key === key)
     const label = typeof rawField.label === 'string' && rawField.label.trim()
       ? rawField.label.trim()
-      : builtinDefinition?.label ?? '自定义字段'
+      : builtinDefinition?.label ?? t('viewer.customField')
     const value = typeof rawField.value === 'string' ? rawField.value : ''
 
     if (builtinDefinition) {
@@ -191,7 +184,7 @@ function normalizeProjectInfo(info: ProjectInfoConfig | null | undefined): Proje
   return {
     projectName: typeof info.projectName === 'string' ? info.projectName.trim() : '',
     fields: [
-      ...PROJECT_INFO_BUILTIN_FIELDS.map(({ key, label }) => {
+      ...builtinDefinitions.map(({ key, label }) => {
         const existingField = builtinFields.get(key)
         return {
           key,
@@ -207,13 +200,13 @@ function normalizeProjectInfo(info: ProjectInfoConfig | null | undefined): Proje
 function createCustomProjectInfoField(): ProjectInfoField {
   return {
     key: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    label: '自定义字段',
+    label: t('viewer.customField'),
     value: '',
   }
 }
 
 function isBuiltinProjectInfoField(key: string) {
-  return PROJECT_INFO_BUILTIN_FIELDS.some((field) => field.key === key)
+  return PROJECT_INFO_BUILTIN_KEYS.some((fieldKey) => fieldKey === key)
 }
 
 function resetProjectInfoState() {
@@ -237,12 +230,11 @@ function setCurrentModelSource(file: File, modelId: string | null = null) {
   currentFile.value = file
   currentFileHandle.value = null
   currentDirectoryHandle.value = null
-  currentFilePath.value = null
   currentModelId.value = modelId
   modelInfo.value = null
   resetProjectInfoState()
   resetModelInteractionState()
-  statusMessage.value = `正在载入 ${file.name}`
+  statusMessage.value = t('viewer.status.loadingFile', { name: file.name })
   closeModelSelectionDialog()
 }
 
@@ -257,15 +249,18 @@ async function loadCloudModel(candidate: ModelCandidate) {
   })
 
   try {
-    statusMessage.value = `正在下载 ${candidate.name}...`
+    statusMessage.value = t('viewer.status.downloading', { name: candidate.name })
     const loaded = await viewerStorage.loadModelBytes(candidate.id, (loaded, total) => {
       if (total > 0) {
-        statusMessage.value = `正在下载 ${candidate.name} (${Math.round((loaded / total) * 100)}%)`
+        statusMessage.value = t('viewer.status.downloadingProgress', {
+          name: candidate.name,
+          percent: Math.round((loaded / total) * 100),
+        })
       }
     })
     setCurrentModelSource(loaded.file, loaded.modelId)
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : '加载模型失败'
+    actionError.value = error instanceof ApiError ? error.message : t('viewer.status.loadModelFailed')
     statusMessage.value = actionError.value
   }
 }
@@ -299,7 +294,7 @@ function formatModelUpdatedAt(updatedAt: string) {
   if (Number.isNaN(date.getTime())) {
     return updatedAt
   }
-  return date.toLocaleString()
+  return date.toLocaleString(locale.value)
 }
 
 function toModelCandidates(models: ModelSummary[]) {
@@ -321,15 +316,15 @@ function presentModelSelection(models: ModelSummary[]) {
   modelCandidates.value = toModelCandidates(models)
   modelSelectionVisible.value = true
   statusMessage.value = models.length > 1
-    ? `当前工程共有 ${models.length} 个模型，请选择要加载的文件`
-    : '请选择要加载的模型文件'
+    ? t('viewer.status.selectModelMulti', { count: models.length })
+    : t('viewer.status.selectModelPrompt')
 }
 
 async function openFilePicker() {
   actionError.value = ''
 
   if (!projectStore.activeProjectId) {
-    actionError.value = '请先在工程项目页选择或创建项目'
+    actionError.value = t('viewer.status.selectProjectFirst')
     statusMessage.value = actionError.value
     return
   }
@@ -337,21 +332,21 @@ async function openFilePicker() {
   try {
     const models = await viewerStorage.listModels(projectStore.activeProjectId)
     if (models.length === 0) {
-      actionError.value = '当前项目还没有模型，请先上传 PLY 或 SPZ 文件'
+      actionError.value = t('viewer.status.noModels')
       statusMessage.value = actionError.value
       return
     }
 
     presentModelSelection(models)
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : '加载模型列表失败'
+    actionError.value = error instanceof ApiError ? error.message : t('viewer.status.loadModelListFailed')
     statusMessage.value = actionError.value
   }
 }
 
 function triggerUpload() {
   if (!projectStore.activeProjectId) {
-    actionError.value = '请先在工程项目页选择或创建项目'
+    actionError.value = t('viewer.status.selectProjectFirst')
     statusMessage.value = actionError.value
     return
   }
@@ -369,16 +364,16 @@ async function handleUpload(event: Event) {
   }
 
   try {
-    statusMessage.value = `正在上传 ${file.name}...`
+    statusMessage.value = t('viewer.status.uploading', { name: file.name })
     const model = await uploadModel(projectStore.activeProjectId, file)
     rememberModelMeta(model.id, {
       fileName: model.fileName,
       projectId: projectStore.activeProjectId,
     })
     setCurrentModelSource(file, model.id)
-    statusMessage.value = `上传完成，正在载入 ${file.name}`
+    statusMessage.value = t('viewer.status.uploadDoneLoading', { name: file.name })
   } catch (error) {
-    actionError.value = error instanceof ApiError ? error.message : '上传模型失败'
+    actionError.value = error instanceof ApiError ? error.message : t('viewer.status.uploadModelFailed')
     statusMessage.value = actionError.value
   }
 }
@@ -401,16 +396,16 @@ function setPainterMode(nextMode: PainterMode) {
 
   switch (nextMode) {
     case 'paint':
-      statusMessage.value = '左键进行颜色标记，右键仍可拖动画面'
+      statusMessage.value = t('viewer.status.paintMode')
       break
     case 'erase':
-      statusMessage.value = '左键执行模型擦除，右键仍可拖动画面'
+      statusMessage.value = t('viewer.status.eraseMode')
       break
     case 'undo':
-      statusMessage.value = '左键使用橡皮擦恢复原始颜色与透明度'
+      statusMessage.value = t('viewer.status.eraserMode')
       break
     default:
-      statusMessage.value = '查看模式已启用，左键旋转，右键拖动，滚轮缩放'
+      statusMessage.value = t('viewer.status.viewMode')
       break
   }
 }
@@ -424,12 +419,12 @@ function requestRotateView(direction: 'clockwise' | 'counterclockwise') {
   activeSidePanel.value = 'view'
 
   if (direction === 'clockwise') {
-    statusMessage.value = '正在顺时针旋转屏幕平面视角'
+    statusMessage.value = t('viewer.status.rotatingCw')
     rotateClockwiseToken.value += 1
     return
   }
 
-  statusMessage.value = '正在逆时针旋转屏幕平面视角'
+  statusMessage.value = t('viewer.status.rotatingCcw')
   rotateCounterclockwiseToken.value += 1
 }
 
@@ -443,7 +438,9 @@ function toggleAnnotationPlacement() {
   annotationPlacementActive.value = !annotationPlacementActive.value
   actionError.value = ''
   activeSidePanel.value = 'view'
-  statusMessage.value = annotationPlacementActive.value ? '气泡标注模式已启用，请单击模型表面添加文字' : '已取消气泡标注模式'
+  statusMessage.value = annotationPlacementActive.value
+    ? t('viewer.status.bubbleOn')
+    : t('viewer.status.bubbleOff')
 }
 
 function toggleCubePlacement() {
@@ -456,7 +453,9 @@ function toggleCubePlacement() {
   cubePlacementActive.value = !cubePlacementActive.value
   actionError.value = ''
   activeSidePanel.value = 'view'
-  statusMessage.value = cubePlacementActive.value ? '立方体标记模式已启用，请按住左键拖拽绘制立方体' : '已取消立方体标记模式'
+  statusMessage.value = cubePlacementActive.value
+    ? t('viewer.status.cubeOn')
+    : t('viewer.status.cubeOff')
 }
 
 function requestExport() {
@@ -467,7 +466,7 @@ function requestExport() {
   exportPending.value = true
   activeSidePanel.value = 'edit'
   actionError.value = ''
-  statusMessage.value = '正在导出已编辑模型为 SPZ'
+  statusMessage.value = t('viewer.status.exporting')
   exportToken.value += 1
 }
 
@@ -481,7 +480,7 @@ function requestRestoreModel() {
   cubePlacementActive.value = false
   exportPending.value = false
   actionError.value = ''
-  statusMessage.value = '正在恢复原始模型'
+  statusMessage.value = t('viewer.status.restoring')
   restoreModelToken.value += 1
 }
 
@@ -491,7 +490,7 @@ function requestUndoLastEdit() {
   }
 
   actionError.value = ''
-  statusMessage.value = '正在撤回上一次更改'
+  statusMessage.value = t('viewer.status.undoing')
   undoEditToken.value += 1
 }
 
@@ -501,7 +500,7 @@ function requestRedoLastEdit() {
   }
 
   actionError.value = ''
-  statusMessage.value = '正在重做上一次撤回的更改'
+  statusMessage.value = t('viewer.status.redoing')
   redoEditToken.value += 1
 }
 
@@ -511,7 +510,7 @@ function requestResetView() {
   }
 
   actionError.value = ''
-  statusMessage.value = '正在重置相机视角'
+  statusMessage.value = t('viewer.status.resettingCamera')
   resetViewToken.value += 1
 }
 
@@ -521,7 +520,7 @@ function requestSaveDefaultView() {
   }
 
   actionError.value = ''
-  statusMessage.value = '正在保存当前视角为该模型的默认视角'
+  statusMessage.value = t('viewer.status.savingDefaultView')
   saveDefaultViewToken.value += 1
 }
 
@@ -531,7 +530,7 @@ function requestSaveMarkers() {
   }
 
   actionError.value = ''
-  statusMessage.value = '正在保存当前标记配置'
+  statusMessage.value = t('viewer.status.savingMarkers')
   saveMarkersToken.value += 1
 }
 
@@ -573,7 +572,7 @@ function saveProjectInfoChanges() {
   projectInfoDialogVisible.value = false
   activeSidePanel.value = 'info'
   actionError.value = ''
-  statusMessage.value = '正在保存项目信息'
+  statusMessage.value = t('viewer.status.savingProjectInfo')
   saveProjectInfoToken.value += 1
 }
 
@@ -658,7 +657,7 @@ function handleLoaded(info: LoadedModelInfo) {
   cubePlacementActive.value = false
   actionError.value = ''
   activeSidePanel.value = 'info'
-  statusMessage.value = `${info.fileName} 已载入，左键旋转，右键拖动，滚轮缩放`
+  statusMessage.value = t('viewer.status.modelLoaded', { name: info.fileName })
 }
 
 function handleFailed(message: string) {
@@ -682,17 +681,24 @@ function handleExported(result: PainterExportResult) {
   exportPending.value = false
   actionError.value = ''
   const shSuffix = result.sphericalHarmonicsDegree > 0 ? `，SH ${result.sphericalHarmonicsDegree}` : ''
-  const clippedSuffix = result.clippedCount > 0 ? `，裁剪 ${result.clippedCount.toLocaleString('zh-CN')} 个 splat` : ''
-  statusMessage.value = `已导出 ${result.fileName}，包含 ${result.splatCount.toLocaleString('zh-CN')} 个 splat${shSuffix}${clippedSuffix}`
+  const clippedSuffix = result.clippedCount > 0
+    ? t('viewer.status.exportClipped', { count: result.clippedCount.toLocaleString(locale.value) })
+    : ''
+  statusMessage.value = t('viewer.status.exported', {
+    fileName: result.fileName,
+    count: result.splatCount.toLocaleString(locale.value),
+    sh: shSuffix,
+    clipped: clippedSuffix,
+  })
 }
 
 function handleExportFailed(message: string) {
   exportPending.value = false
-  if (message === '已取消导出') {
+  if (message === t('viewer.status.exportCancelled') || message === '已取消导出') {
     actionError.value = ''
     statusMessage.value = message
-      return
-    }
+    return
+  }
 
   actionError.value = message
   statusMessage.value = message
@@ -750,7 +756,7 @@ function handleCameraChange(status: CameraStatus) {
 onMounted(() => {
   window.addEventListener('keydown', onWindowKeydown)
   projectStore.fetchProjects().catch(() => {
-    statusMessage.value = '项目列表加载失败，请检查登录状态'
+    statusMessage.value = t('viewer.status.projectsLoadFailed')
   })
 })
 
@@ -765,7 +771,6 @@ onBeforeUnmount(() => {
       <div class="viewport-frame">
         <SparkViewport
           :file="currentFile"
-          :file-path="currentFilePath"
           :file-handle="currentFileHandle"
           :directory-handle="currentDirectoryHandle"
           :cloud-model-id="currentModelId"
@@ -807,17 +812,17 @@ onBeforeUnmount(() => {
     </section>
 
     <button v-if="panelCollapsed" class="panel-toggle collapsed-toggle floating-collapsed-toggle" type="button" @click="togglePanel">
-      菜单
+      {{ t('viewer.menu') }}
     </button>
 
     <aside class="side-panel" :class="{ collapsed: panelCollapsed }">
       <div v-if="!panelCollapsed" class="side-content">
         <button class="panel-toggle expanded-toggle" type="button" @click="togglePanel">
-          收起菜单
+          {{ t('viewer.collapseMenu') }}
         </button>
 
         <section class="model-card">
-          <h1 class="model-title">{{ modelInfo?.fileName || '等待模型载入' }}</h1>
+          <h1 class="model-title">{{ modelInfo?.fileName || t('viewer.waitingModel') }}</h1>
         </section>
 
         <nav class="nav-strip" aria-label="Viewer navigation">
@@ -827,7 +832,7 @@ onBeforeUnmount(() => {
             type="button"
             @click="setActiveSidePanel('info')"
           >
-            信息
+            {{ t('viewer.info') }}
           </button>
           <button
             class="nav-button"
@@ -835,7 +840,7 @@ onBeforeUnmount(() => {
             type="button"
             @click="setActiveSidePanel('view')"
           >
-            查看
+            {{ t('viewer.view') }}
           </button>
           <button
             class="nav-button"
@@ -844,78 +849,78 @@ onBeforeUnmount(() => {
             :disabled="!canEdit"
             @click="setActiveSidePanel('edit')"
           >
-            编辑
+            {{ t('viewer.edit') }}
           </button>
         </nav>
 
         <section v-if="activeSidePanel === 'info'" class="section-card info-card">
-          <p class="info-project-context">当前项目：{{ activeProjectName }}</p>
+          <p class="info-project-context">{{ t('viewer.currentProject', { name: activeProjectName }) }}</p>
           <button class="side-button primary" type="button" @click="openFilePicker">
-            选择模型
+            {{ t('viewer.selectModel') }}
           </button>
           <button class="side-button" type="button" @click="triggerUpload">
-            上传模型
+            {{ t('viewer.uploadModel') }}
           </button>
 
           <template v-if="modelInfo">
             <div class="info-summary">
-              <h3 class="info-project-title">{{ projectInfo.projectName || '未命名项目' }}</h3>
+              <h3 class="info-project-title">{{ projectInfo.projectName || t('viewer.unnamedProject') }}</h3>
             </div>
 
             <div class="info-list">
               <article v-for="field in projectInfo.fields" :key="field.key" class="info-item">
                 <span class="info-item-label">{{ field.label }}</span>
                 <strong class="info-item-value" :class="{ 'is-empty': !field.value }">
-                  {{ field.value || '未填写' }}
+                  {{ field.value || t('viewer.notFilled') }}
                 </strong>
               </article>
             </div>
 
             <button class="side-button primary info-edit-button" type="button" :disabled="!modelInfo" @click="openProjectInfoDialog">
-              编辑信息
+              {{ t('viewer.editInfo') }}
             </button>
           </template>
 
           <template v-else>
             <div class="info-empty-state">
-              <p class="info-empty-title">请加载模型</p>
+              <p class="info-empty-title">{{ t('viewer.loadModelPrompt') }}</p>
             </div>
           </template>
         </section>
 
         <section v-else-if="activeSidePanel === 'view'" class="section-card">
-          <h2 class="section-title">查看</h2>
+          <h2 class="section-title">{{ t('viewer.view') }}</h2>
 
           <div class="action-stack">
             <button class="side-button" type="button" :disabled="!modelInfo" @click="requestResetView">
-              重置视角
+              {{ t('viewer.resetView') }}
             </button>
             <button class="side-button" type="button" :disabled="!modelInfo" @click="requestSaveDefaultView">
-              设为默认视角
+              {{ t('viewer.setDefaultView') }}
             </button>
             <button class="side-button" :class="{ 'is-active': annotationPlacementActive }" type="button" :disabled="!modelInfo" @click="toggleAnnotationPlacement">
-              {{ annotationPlacementActive ? '取消气泡标注' : '添加气泡标注' }}
+              {{ annotationPlacementActive ? t('viewer.cancelBubbleAnnotation') : t('viewer.addBubbleAnnotation') }}
             </button>
             <button class="side-button" :class="{ 'is-active': cubePlacementActive }" type="button" :disabled="!modelInfo" @click="toggleCubePlacement">
-              {{ cubePlacementActive ? '取消立方体标记' : '添加立方体标记' }}
+              {{ cubePlacementActive ? t('viewer.cancelCubeMarker') : t('viewer.addCubeMarker') }}
             </button>
             <div class="rotation-row">
               <button class="side-button rotation-button" type="button" :disabled="!modelInfo" @click="requestRotateView('counterclockwise')">
                 <img class="rotation-icon" :src="counterclockwiseRotateIcon" alt="" aria-hidden="true" />
-                <span>逆时针</span>
+                <span>{{ t('viewer.counterclockwise') }}</span>
               </button>
               <button class="side-button rotation-button" type="button" :disabled="!modelInfo" @click="requestRotateView('clockwise')">
                 <img class="rotation-icon" :src="clockwiseRotateIcon" alt="" aria-hidden="true" />
-                <span>顺时针</span>
+                <span>{{ t('viewer.clockwise') }}</span>
               </button>
             </div>
             <button class="side-button primary" type="button" :disabled="!modelInfo" @click="requestSaveMarkers">
-              保存标记更改
+              {{ t('viewer.saveMarkerChanges') }}
             </button>
           </div>
 
           <div class="field-block">
-            <label class="field-label" for="annotation-edge-color">气泡标记颜色</label>
+            <label class="field-label" for="annotation-edge-color">{{ t('viewer.bubbleColor') }}</label>
             <div class="color-row">
               <input id="annotation-edge-color" v-model="annotationEdgeColor" class="color-swatch" type="color" :disabled="!modelInfo" />
               <span class="field-value">{{ annotationEdgeColor.toUpperCase() }}</span>
@@ -923,7 +928,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="field-block">
-            <label class="field-label" for="cube-edge-color">立方体边线颜色</label>
+            <label class="field-label" for="cube-edge-color">{{ t('viewer.cubeEdgeColor') }}</label>
             <div class="color-row">
               <input id="cube-edge-color" v-model="cubeEdgeColor" class="color-swatch" type="color" :disabled="!modelInfo" />
               <span class="field-value">{{ cubeEdgeColor.toUpperCase() }}</span>
@@ -932,25 +937,25 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-else class="section-card">
-          <h2 class="section-title">编辑</h2>
+          <h2 class="section-title">{{ t('viewer.edit') }}</h2>
 
           <div class="chip-row">
             <button class="mode-chip" :class="{ 'is-active': painterMode === 'paint' }" type="button" :disabled="!canEdit" @click="setPainterMode('paint')">
-              颜色标记
+              {{ t('viewer.colorMark') }}
             </button>
             <button class="mode-chip" :class="{ 'is-active': painterMode === 'erase' }" type="button" :disabled="!canEdit" @click="setPainterMode('erase')">
-              模型擦除
+              {{ t('viewer.modelErase') }}
             </button>
             <button class="mode-chip" :class="{ 'is-active': painterMode === 'undo' }" type="button" :disabled="!canEdit" @click="setPainterMode('undo')">
-              橡皮擦
+              {{ t('viewer.eraser') }}
             </button>
             <button class="mode-chip" :class="{ 'is-active': painterMode === 'view' }" type="button" @click="setPainterMode('view')">
-              查看
+              {{ t('viewer.viewMode') }}
             </button>
           </div>
 
           <div class="field-block">
-            <label class="field-label" for="painter-color">颜色</label>
+            <label class="field-label" for="painter-color">{{ t('viewer.color') }}</label>
             <div class="color-row">
               <input id="painter-color" v-model="painterColor" class="color-swatch" type="color" :disabled="!canEdit" />
               <span class="field-value">{{ painterColor.toUpperCase() }}</span>
@@ -958,29 +963,29 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="field-block">
-            <label class="field-label" for="brush-radius">画笔半径</label>
+            <label class="field-label" for="brush-radius">{{ t('viewer.brushRadius') }}</label>
             <input id="brush-radius" v-model.number="brushRadiusFactor" class="range-control" type="range" min="0.005" max="0.12" step="0.001" :disabled="!canEdit" />
             <span class="field-value">{{ brushRadiusLabel }}</span>
           </div>
 
           <div class="field-block">
-            <label class="field-label" for="brush-depth">画笔深度</label>
+            <label class="field-label" for="brush-depth">{{ t('viewer.brushDepth') }}</label>
             <input id="brush-depth" v-model.number="brushDepthFactor" class="range-control" type="range" min="0.2" max="8" step="0.1" :disabled="!canEdit" />
             <span class="field-value">{{ brushDepthLabel }}</span>
           </div>
 
           <div class="action-stack compact">
             <button class="side-button" type="button" :disabled="!canEdit || !canUndoEdit" @click="requestUndoLastEdit">
-              撤回
+              {{ t('viewer.undo') }}
             </button>
             <button class="side-button" type="button" :disabled="!canEdit || !canRedoEdit" @click="requestRedoLastEdit">
-              重做
+              {{ t('viewer.redo') }}
             </button>
             <button class="side-button" type="button" :disabled="!canEdit" @click="requestRestoreModel">
-              恢复原始模型
+              {{ t('viewer.restoreOriginal') }}
             </button>
             <button class="side-button primary" type="button" :disabled="!canExport" @click="requestExport">
-              {{ exportPending ? '导出中...' : '导出 SPZ' }}
+              {{ exportPending ? t('viewer.exporting') : t('viewer.exportSpz') }}
             </button>
           </div>
         </section>
@@ -995,36 +1000,36 @@ onBeforeUnmount(() => {
       <div class="app-modal project-info-modal">
         <div class="app-modal-header">
           <div>
-            <p class="eyebrow">配置文件信息</p>
-            <h2 class="app-modal-title">编辑项目信息</h2>
+            <p class="eyebrow">{{ t('viewer.configInfo') }}</p>
+            <h2 class="app-modal-title">{{ t('viewer.editProjectInfo') }}</h2>
           </div>
           <button class="annotation-dialog-button primary" type="button" @click="saveProjectInfoChanges">
-            保存
+            {{ t('common.save') }}
           </button>
         </div>
 
         <div class="app-modal-body project-info-form">
           <section class="project-info-block">
-            <label class="field-label" for="project-name-input">项目名称</label>
+            <label class="field-label" for="project-name-input">{{ t('viewer.projectName') }}</label>
             <input
               id="project-name-input"
               v-model="projectInfoDraft.projectName"
               class="text-control project-name-control"
               type="text"
-              placeholder="输入项目名称"
+              :placeholder="t('viewer.projectNamePlaceholder')"
             />
           </section>
 
           <section class="project-info-block">
-            <h3 class="section-title project-info-subtitle">字段内容</h3>
+            <h3 class="section-title project-info-subtitle">{{ t('viewer.fieldContent') }}</h3>
 
             <div class="project-info-field-list">
               <article v-for="field in projectInfoDraft.fields" :key="field.key" class="project-info-field-card">
                 <div class="project-info-field-grid">
-                  <label class="field-label">字段名称</label>
-                  <input v-model="field.label" class="text-control" type="text" placeholder="输入字段名称" />
-                  <label class="field-label">字段内容</label>
-                  <input v-model="field.value" class="text-control" type="text" placeholder="输入字段内容" />
+                  <label class="field-label">{{ t('viewer.fieldName') }}</label>
+                  <input v-model="field.label" class="text-control" type="text" :placeholder="t('viewer.fieldNamePlaceholder')" />
+                  <label class="field-label">{{ t('viewer.fieldContent') }}</label>
+                  <input v-model="field.value" class="text-control" type="text" :placeholder="t('viewer.fieldValuePlaceholder')" />
                 </div>
 
                 <div v-if="!isBuiltinProjectInfoField(field.key)" class="project-info-field-actions">
@@ -1033,20 +1038,20 @@ onBeforeUnmount(() => {
                     type="button"
                     @click="removeCustomProjectInfoField(field.key)"
                   >
-                    删除
+                    {{ t('common.delete') }}
                   </button>
                 </div>
               </article>
             </div>
 
             <button class="side-button project-info-add-button" type="button" @click="addCustomProjectInfoField">
-              新增自定义字段
+              {{ t('viewer.addCustomField') }}
             </button>
           </section>
         </div>
 
         <div class="app-modal-footer">
-          <button class="side-button" type="button" @click="closeProjectInfoDialog">取消</button>
+          <button class="side-button" type="button" @click="closeProjectInfoDialog">{{ t('common.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -1062,9 +1067,9 @@ onBeforeUnmount(() => {
     <div v-if="modelSelectionVisible" class="app-modal-backdrop" @click.self="closeModelSelectionDialog">
       <div class="app-modal model-picker-modal">
         <div class="app-modal-header">
-          <h2 class="app-modal-title">选择模型</h2>
+          <h2 class="app-modal-title">{{ t('viewer.selectModelTitle') }}</h2>
           <p class="model-picker-subtitle">
-            共 {{ modelCandidates.length }} 个模型；高级编辑保存后会更新版本，请重新选择以加载最新文件。
+            {{ t('viewer.modelCountHint', { count: modelCandidates.length }) }}
           </p>
         </div>
         <div class="app-modal-body model-choice-list">
@@ -1078,18 +1083,18 @@ onBeforeUnmount(() => {
           >
             <span class="model-choice-name">{{ candidate.name }}</span>
             <span class="model-choice-meta">
-              {{ candidate.format || '未知格式' }}
+              {{ candidate.format || t('viewer.unknownFormat') }}
               <template v-if="candidate.version"> · v{{ candidate.version }}</template>
               <template v-if="candidate.sizeBytes"> · {{ formatModelSize(candidate.sizeBytes) }}</template>
             </span>
             <span v-if="candidate.updatedAt" class="model-choice-updated">
-              更新于 {{ formatModelUpdatedAt(candidate.updatedAt) }}
+              {{ t('viewer.updatedAt', { date: formatModelUpdatedAt(candidate.updatedAt) }) }}
             </span>
-            <span v-if="candidate.id && candidate.id === currentModelId" class="model-choice-badge">当前加载</span>
+            <span v-if="candidate.id && candidate.id === currentModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
           </button>
         </div>
         <div class="app-modal-footer">
-          <button class="side-button" type="button" @click="closeModelSelectionDialog">取消</button>
+          <button class="side-button" type="button" @click="closeModelSelectionDialog">{{ t('common.cancel') }}</button>
         </div>
       </div>
     </div>

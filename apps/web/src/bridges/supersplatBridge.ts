@@ -24,6 +24,26 @@ interface ExportPlyError {
   message: string
 }
 
+function resolveTargetOrigin(iframe: HTMLIFrameElement): string {
+  try {
+    const url = new URL(iframe.src, window.location.href)
+    return url.origin
+  } catch {
+    return window.location.origin
+  }
+}
+
+function isTrustedIframeMessage(event: MessageEvent, iframe: HTMLIFrameElement | null): boolean {
+  if (!iframe?.contentWindow) {
+    return false
+  }
+  if (event.source !== iframe.contentWindow) {
+    return false
+  }
+  // Same-origin iframe (/supersplat/ on this host)
+  return event.origin === window.location.origin
+}
+
 function buildIframeSrc(options: { signedUrl: string; fileName: string; modelId: string; lang?: string }) {
   const params = new URLSearchParams({
     lng: options.lang ?? 'zh-CN',
@@ -37,7 +57,7 @@ function buildIframeSrc(options: { signedUrl: string; fileName: string; modelId:
 
 function loadModelInIframe(
   iframe: HTMLIFrameElement,
-  options: { signedUrl: string; fileName: string; modelId: string },
+  options: { signedUrl: string; fileName: string; modelId: string; lang?: string },
 ) {
   iframe.src = buildIframeSrc(options)
 }
@@ -47,6 +67,8 @@ async function isDirty(iframe: HTMLIFrameElement): Promise<boolean> {
   if (!win) {
     return false
   }
+
+  const targetOrigin = resolveTargetOrigin(iframe)
 
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {
@@ -60,6 +82,9 @@ async function isDirty(iframe: HTMLIFrameElement): Promise<boolean> {
     }
 
     function onMessage(event: MessageEvent) {
+      if (!isTrustedIframeMessage(event, iframe)) {
+        return
+      }
       const data = event.data as DirtyResponse
       if (data?.type !== IS_SCENE_DIRTY) {
         return
@@ -69,7 +94,7 @@ async function isDirty(iframe: HTMLIFrameElement): Promise<boolean> {
     }
 
     window.addEventListener('message', onMessage)
-    win.postMessage({ type: IS_SCENE_DIRTY }, '*')
+    win.postMessage({ type: IS_SCENE_DIRTY }, targetOrigin)
   })
 }
 
@@ -81,6 +106,8 @@ async function requestPlyExport(
   if (!win) {
     throw new Error('编辑器尚未就绪')
   }
+
+  const targetOrigin = resolveTargetOrigin(iframe)
 
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {
@@ -94,6 +121,9 @@ async function requestPlyExport(
     }
 
     function onMessage(event: MessageEvent) {
+      if (!isTrustedIframeMessage(event, iframe)) {
+        return
+      }
       const data = event.data as ExportPlyResult | ExportPlyError
       if (data?.type === EXPORT_PLY_RESULT) {
         cleanup()
@@ -115,7 +145,7 @@ async function requestPlyExport(
       type: EXPORT_PLY,
       compressed: options?.compressed ?? false,
       fileName: options?.fileName,
-    }, '*')
+    }, targetOrigin)
   })
 }
 
@@ -125,6 +155,7 @@ export {
   CLOUD_SAVE_ERROR,
   CLOUD_SAVE_REQUEST,
   isDirty,
+  isTrustedIframeMessage,
   loadModelInIframe,
   requestPlyExport,
 }
