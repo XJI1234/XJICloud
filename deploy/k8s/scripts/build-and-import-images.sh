@@ -6,10 +6,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "${REPO_ROOT}"
 
 echo "[build] backend..."
-docker build -t xjicloud/backend:local backend/
+docker build -t xjicloud/backend:local services/backend/
+
 
 echo "[build] gpu-worker..."
-docker build -t xjicloud/gpu-worker:local gpu-worker/
+docker build -t xjicloud/gpu-worker:local services/gpu-worker/
 
 echo "[build] frontend (may take several minutes)..."
 docker build -f deploy/k8s/frontend/Dockerfile -t xjicloud/frontend:local .

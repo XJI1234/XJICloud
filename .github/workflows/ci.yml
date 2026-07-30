@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main, ceshi]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Build frontend apps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm --filter @xjicloud/web build
+      - run: pnpm --filter @xjicloud/admin build
+
+  backend:
+    name: Build backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+      - run: mvn -B -DskipTests package

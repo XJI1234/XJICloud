@@ -33,7 +33,7 @@ services:
 
   backend:
     build:
-      context: ../backend
+      context: ../services/backend
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
@@ -69,7 +69,7 @@ services:
 
   gpu-worker:
     build:
-      context: ../gpu-worker
+      context: ../services/gpu-worker
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
