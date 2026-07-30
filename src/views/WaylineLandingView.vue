@@ -4,19 +4,11 @@ import { useRouter } from 'vue-router'
 import WaylineRouteHero from '@/components/WaylineRouteHero.vue'
 
 const router = useRouter()
-const visitCount = ref(0)
 const heroGifReady = ref(false)
 /** Public URL built at runtime so Vite does not rewrite it as a module import. */
 const heroGifSrc = ['/wayline-route-hero', '.gif'].join('')
 
-const VISIT_KEY = 'xji.wayline.landing.visits'
-
 onMounted(() => {
-  const raw = Number(localStorage.getItem(VISIT_KEY) || 0)
-  const next = (Number.isFinite(raw) ? raw : 0) + 1
-  visitCount.value = next
-  localStorage.setItem(VISIT_KEY, String(next))
-
   const probe = new Image()
   probe.onload = () => {
     heroGifReady.value = true
@@ -36,16 +28,10 @@ function enterPlanner() {
   <div class="wayline-intro">
     <div class="wayline-intro__panel">
       <div class="wayline-intro__copy">
-        <div class="wayline-intro__brand-row">
-          <p class="wayline-intro__eyebrow">
-            <img class="wayline-intro__logo" src="/logo.jpg" alt="" />
-            <span>玄境创新 · 航线规划</span>
-          </p>
-          <div class="wayline-intro__visits" title="本机访问次数">
-            <span>访问量</span>
-            <strong>{{ visitCount }}</strong>
-          </div>
-        </div>
+        <p class="wayline-intro__eyebrow">
+          <img class="wayline-intro__logo" src="/logo.jpg" alt="" />
+          <span>玄境创新 · 航线规划</span>
+        </p>
 
         <h1 class="wayline-intro__title">
           <span>智能航线</span>
@@ -110,16 +96,8 @@ function enterPlanner() {
   min-width: 0;
 }
 
-.wayline-intro__brand-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
 .wayline-intro__eyebrow {
-  margin: 0;
+  margin: 0 0 18px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -137,26 +115,6 @@ function enterPlanner() {
   border-radius: 5px;
   opacity: 0.88;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-.wayline-intro__visits {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 12px;
-  color: rgba(232, 238, 243, 0.45);
-}
-
-.wayline-intro__visits strong {
-  font-family: 'Sora', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(232, 238, 243, 0.78);
 }
 
 .wayline-intro__title {
