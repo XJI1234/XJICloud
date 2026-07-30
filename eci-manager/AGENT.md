@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-07-28（PRD v2.0；**T1–T3 / Task 1–7 已交付**；一期 mock 验收完成）
+**最后更新：** 2026-07-30（PRD v2.0.3；**T1–T3 / Task 1–7 已交付**；一期 mock 验收完成；生命周期测试补强）
 
 ---
 
@@ -13,13 +13,14 @@
 独立 **Spring Boot 3.3.5 / Java 17** 服务，目录在主仓 Monorepo 的 `eci-manager/`：
 
 - **已交付（Demo 基座 D0–D3）：** REST + 阿里云 **ECI** OpenAPI 做容器实例 **创建 / 查询 / 删除**（关闭 = 删除，非 Stop）
-- **已交付（PRD v2.0 T1–T3）：**
+- **已交付（PRD v2.0.3 T1–T3）：**
   - ✅ Task 1–4：任务模型、Provider、`/tasks` API、手动实例兼容
   - ✅ Task 5：`TaskLifecycleWatcher`、云终态自动删、`maxRuntimeSec`→TIMEOUT
   - ✅ Task 6：Mock `mock-auto-complete-sec` 时间触发终态 + 端到端 IT
   - ✅ Task 7：README / API / 设计说明 / example yml / 验收清单
+  - ✅ 测试补强：`TaskLifecycleWatcherUnitTest`、`EciTaskLifecycleMockIT`、`ManualInstanceNoAutoDeleteIT`、`StartupCompensationRunnerTest`；Mock 可注入时钟
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
-- 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**
+- 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 - **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
 - 生产最终用 ECI 还是 CCI **仍待定**（不阻塞本期）
 
@@ -195,9 +196,11 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | 联调镜像 | 真实模式用**阿里云仓库**镜像（Docker Hub 易 Pending） |
 | 生产选型 ECI/CCI | 待定，不阻塞 |
 | 云凭证 | ECS RAM / `ALIBABA_CLOUD_*`；**yml AK 不建客户端** |
-| T1 范围 | Task 1–4 完成；Task 5 终态自动删未做 |
+| T1 范围 | Task 1–7 完成；一期 mock 验收 closure |
 | `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 `TaskLifecycleWatcher` 在 Describe=Succeeded 且实例 TERMINATED 后写入 |
-| 测试文档 | `docs/测试说明.md`；README 已链入并更正进度表 |
+| 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
+| Always/OnFailure | 忽略云 Failed/Succeeded 时**不**误调 `onInstanceRunning`（Watcher 2026-07-28 修正） |
+| 测试文档 | `docs/测试说明.md` §0.3 自动化覆盖表 |
 
 ### 本地提交（对话中，未要求则勿 push）
 
@@ -209,21 +212,20 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 
 （Succeeded 路径等与 Task 3 同文件的小改随 feat 提交；独立 Bugfix 为 sanitize/配置校验。）
 
-### 测试执行结论（2026-07-27）
+### 测试执行结论（2026-07-30）
 
 | 项 | 结果 |
 |----|------|
-| `mvn test` | PASS |
-| Mock 手工 curl 清单（health/鉴权/实例/任务/cancel） | 9/9 PASS |
-| 真云冒烟（Agent 会话） | **跳过**：当时 shell 无 `ALIBABA_CLOUD_*`（即使用户已写 local yml） |
-| 用户本机随后 cloud,local 启动 | 凭证链曾 ready；失败常见原因 **`Port 8081 was already in use`**（先杀旧进程） |
+| `mvn test` | PASS（75 项，含 Watcher 单测 / Mock 自动终态 IT） |
+| Mock 手工 curl 清单 | 见 `docs/测试说明.md` §11 |
+| 真云冒烟 | **可选**；不阻塞一期 mock closure |
 
-### 实现分期（基座）
+### 实现分期
 
-- **D1–D3** Mock/云 Provider、超时、文档、启动补偿、方式 A 凭证、GPU 字段——仍有效  
-- **T0** PRD/计划批准  
-- **T1** Task 1–4（本轮收尾）  
-- **下一刀 T2 Task 5** 终态轮询 / 自动删 / 超时 / 启动任务恢复  
+- **D0–D3** Demo 基座  
+- **T0–T3** 任务编排一期（mock 验收完成，2026-07-28）  
+- **T3+** 生命周期测试补强（2026-07-30）  
+- **下一刀（可选）** 真云联调 / T4 / I1  
 
 ### 代码修复备忘（历史 + 本轮）
 
@@ -304,7 +306,7 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 
 | 路径 | 说明 |
 |------|------|
-| `../ECI任务驱动容器编排服务产品需求文档(PRD).md` | 需求 v2.0 |
+| `../ECI任务驱动容器编排服务产品需求文档(PRD).md` | 需求 v2.0.3 |
 | `../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md` | 实现计划与进度 |
 | `docs/测试说明.md` | Mock/真云逐步测试 |
 | `docs/设计与使用说明.md` | 结构 / 配置 / 用法 |

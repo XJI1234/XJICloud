@@ -7,13 +7,13 @@
 > **逐步测试：** [docs/测试说明.md](docs/测试说明.md)  
 > **Agent 上下文：** [AGENT.md](AGENT.md)  
 > **实现计划：** [docs/superpowers/plans/2026-07-27-eci-task-orchestration.md](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)  
-> **产品需求：** [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0**
+> **产品需求：** [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 
 > **费用警告：** `eci.mock=false`（cloud profile）会创建真实云资源并产生账单。任务路径在终态后会自动删；仍请到控制台确认无残留。手动实例测完务必 `DELETE`。
 
 本工程不修改主仓 `backend/`。生产最终用 ECI 还是 CCI **仍待定**（不阻塞本期）。
 
-### 实现进度（2026-07-28）
+### 实现进度（2026-07-30）
 
 | 范围 | 状态 |
 |------|------|
@@ -22,6 +22,7 @@
 | 终态自动删、`maxRuntimeSec` 超时、`TaskLifecycleWatcher` | ✅ T2 |
 | Mock 时间触发终态（`mock-auto-complete-sec`） | ✅ T3 |
 | 文档与一期验收（mock） | ✅ T3 |
+| 生命周期测试补强（Watcher 单测、Mock 边界、启动补偿） | ✅ T3+ |
 
 ## 环境要求（Linux）
 
@@ -211,7 +212,9 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 - [x] 超过 `maxRuntimeSec` → 强制删 + 任务 `FAILED`/`TIMEOUT`  
 - [x] `/instances` 手动能力仍可用  
 - [x] 错误/缺失 Api-Key → 401 且不建云资源  
-- [x] `mock=true` 全流程不调云可演练（自动化测试 + 上文 curl）
+- [x] `mock=true` 全流程不调云可演练（`mvn test` 75 项 + 文档 curl）
+
+与 PRD §1.4 对照；逐步命令见 [docs/测试说明.md](docs/测试说明.md) §11。
 
 ## 构建
 

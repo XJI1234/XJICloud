@@ -2,11 +2,13 @@
 
 | **文档版本** | **创建日期** | **状态** | **适用对象** |
 | ------------ | ------------ | -------- | ------------ |
-| **v2.0.2** | 2026-07-27 | 已评审 / 实现进行中 | 后端开发、容器运维、测试、评审人 |
+| **v2.0.3** | 2026-07-30 | 一期 mock 交付完成（T1–T3） | 后端开发、容器运维、测试、评审人 |
 | **产品定位** | 独立任务驱动的 ECI 容器编排服务 | 本服务在现有实例管理能力上增加任务提交、自动创建、终态检测、超时保护与自动删除 | |
 | **前身文档** | `ECI容器管理后端Demo产品需求文档(PRD).md` v1.1 | 本文件已取代前身文档；Demo 阶段已完成的创建、查询、删除能力继续保留 | |
 
-> **本次交付物是 v2.0 PRD（已评审批准，实现进行中）。** Demo 基座（D0–D3）已经完成。实现以 [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](docs/superpowers/plans/2026-07-27-eci-task-orchestration.md) 为准；不修改主仓 `backend/`。
+> **v2.0.3：** 一期 **T1–T3 已在 mock 下交付并验收**（`mvn test` + 文档 curl）。真云联调为可选，不阻塞一期 closure。实现细节见 [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)；工程位于 `eci-manager/`，不修改主仓 `backend/`。
+>
+> **关联增量 PRD：** [ECI任务OSS对象存储集成产品需求文档(PRD).md](ECI任务OSS对象存储集成产品需求文档(PRD).md) v1.0 — 任务容器 OSS presigned URL 读写（v2.1 规划）。
 
 ### v1.1 → v2.0 变更概览
 
@@ -90,14 +92,18 @@
 
 验收环境为 Linux，并安装 JDK 17 与 Maven。真实模式还需要有效的阿里云凭证与可达网络。
 
-1. 服务可以在 Linux 上通过 `mvn spring-boot:run` 或 `java -jar` 启动。
-2. 调用方携带正确的 `X-Api-Key` 提交单个任务时，可以指定镜像、`command`、`args`、CPU、内存、实例规格、GPU、重启策略与最大运行时长。
-3. 后端为该任务创建一台 ECI 实例；调用方可以查询任务与实例，并可以通过本地 ID 将二者关联。
-4. 当 `restartPolicy=Never` 时，任务进程正常结束或失败退出后不会重启；后端轮询到 `Succeeded` 或 `Failed` 后自动删除实例。
-5. 当任务运行时间超过 `maxRuntimeSec` 时，后端强制删除实例，并将任务标记为 `FAILED`，失败原因为 `TIMEOUT`。
-6. 原有 `/instances` 手动创建、查询与删除能力继续可用。
-7. 当请求缺少 Api-Key 或 Api-Key 错误时，服务拒绝访问（401/403），并且不创建云资源。
-8. 当 `mock=true` 时，上述任务流程不调用云 API，也能够模拟创建、运行、终态和自动删除。
+| # | 验收项 | mock（2026-07-30） | cloud（可选） |
+|---|--------|-------------------|---------------|
+| 1 | Linux 上 `mvn spring-boot:run` 或 `java -jar` 启动 | ✅ `mvn test` + 文档 curl | 待凭证联调 |
+| 2 | 正确 Api-Key 提交任务（镜像、command、args、规格、GPU、重启、超时） | ✅ | 待联调 |
+| 3 | 查询任务与实例，本地 ID 可关联 | ✅ | 待联调 |
+| 4 | `restartPolicy=Never` 时云终态后自动删实例 | ✅ `TaskLifecycleWatcher` + IT | 待联调 |
+| 5 | 超过 `maxRuntimeSec` → 强制删 + `FAILED`/`TIMEOUT` | ✅ | 待联调 |
+| 6 | `/instances` 手动能力仍可用 | ✅ | ✅（基座已有） |
+| 7 | 缺/错 Api-Key → 401/403，不建云资源 | ✅ | ✅ |
+| 8 | `mock=true` 全流程不调云可演练 | ✅ 含 `mock-auto-complete-sec` 自动终态 | N/A |
+
+明细命令与记录模板见 [`eci-manager/docs/测试说明.md`](eci-manager/docs/测试说明.md) §11；自动化覆盖见 [`eci-manager/README.md`](eci-manager/README.md) 一期验收清单。
 
 ---
 
@@ -416,14 +422,16 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 
 ## 7. 文档与交付（实现阶段）
 
-实现阶段需要交付以下文档与说明：
-
-1. `eci-manager/README.md`：说明 Linux 下 JDK/Maven 准备、mock/cloud 启动、Api-Key、任务与实例 curl、控制台核对，以及自动清理与及时删除以防账单的要求。
-2. `application-local.yml.example`
-3. 3DGS 类一次性任务示例：包含托管镜像地址、脚本参数、GPU 规格、`Never` 与超时说明。
-4. 重启策略差异说明，以及 `Always` / `OnFailure` 的成本风险说明。
-5. 本工程文档与本 PRD 版本的对应关系。
-6. 「后续如何被 XJICloud 调用」短节；生产选型仍待定。
+| # | 交付物 | 状态 | 位置 |
+|---|--------|------|------|
+| 1 | Linux 启动、mock/cloud、Api-Key、任务/实例 curl、防账单 | ✅ | [`eci-manager/README.md`](eci-manager/README.md) |
+| 2 | `application-local.yml.example`（含任务轮询、Mock 自动终态键） | ✅ | `eci-manager/src/main/resources/` |
+| 3 | 3DGS 类一次性任务示例 | ✅ | README「3DGS 类一次性任务示例」 |
+| 4 | 重启策略差异与成本风险 | ✅ | README「重启策略与成本」 |
+| 5 | 与本 PRD / 实现计划对应关系 | ✅ | README、AGENT、本 PRD §8 |
+| 6 | 「后续如何被 XJICloud 调用」；生产选型待定 | ✅ | README §「后续如何被 XJICloud 调用」 |
+| 7 | 逐步测试说明（Mock / 真云每条命令） | ✅ | [`eci-manager/docs/测试说明.md`](eci-manager/docs/测试说明.md) |
+| 8 | HTTP API 业务导读与能力对照表 | ✅ | [`eci-manager/docs/API文档.md`](eci-manager/docs/API文档.md) |
 
 ---
 
@@ -433,9 +441,10 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 |------|------|------|
 | **D0–D3** | Demo 基座：Mock、Api-Key、真实 ECI 创建/查询/删除、启动补偿 | ✅ 已完成 |
 | **T0** | PRD v2.0 评审定稿 | ✅ 已完成（2026-07-27） |
-| **T1** | 任务持久化、提交/查询/取消；任务关联实例；`restartPolicy` | 部分完成：领域模型 + Provider 透传（含 command/args）✅；**`/tasks` API 待实现** |
-| **T2** | 运行中轮询、Succeeded/Failed 自动删除、`maxRuntimeSec` | 待实现 |
-| **T3** | Mock 自动生命周期、3DGS 示例、Linux/cloud 验收与 README | 部分：Mock `simulateStatus` 钩子 ✅；其余待实现 |
+| **T1** | 任务持久化、提交/查询/取消；任务关联实例；`restartPolicy` | ✅ 已完成（Task 1–4） |
+| **T2** | 运行中轮询、Succeeded/Failed 自动删除、`maxRuntimeSec` | ✅ 已完成（Task 5） |
+| **T3** | Mock 自动生命周期、3DGS 示例、Linux/mock 验收与 README | ✅ 已完成（Task 6–7；cloud 联调可选） |
+| **T3+** | 生命周期测试补强（Watcher 单测、Mock 边界、启动补偿） | ✅ 2026-07-30 |
 | **T4（可选）** | 镜像注册表、批量提交、规格套餐 | 后续需求 |
 | **I1** | 与 XJICloud 联调或迁入；评审生产环境是否继续使用 ECI、改用 CCI，或支持双 Provider | 另立需求 |
 
@@ -461,7 +470,8 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 | v2.0 | 2026-07-26 | 升格为任务驱动容器编排服务；新增一任务一实例、可配置重启策略、云终态轮询、自动删除与运行超时；保留手动实例管理；文件名去掉 Demo。 |
 | v2.0.1 | 2026-07-26 | 增加 v1.1→v2.0 变更概览；第 0 节与第 9 节改为待评审拍板口径；同步 README/AGENT 引用。 |
 | v2.0.2 | 2026-07-27 | 评审批准；同步分期进度：T0 完成，T1 领域模型与 Provider 透传部分完成，下一刀 `/tasks` API。 |
+| v2.0.3 | 2026-07-30 | 一期 T1–T3 mock 交付完成；§1.4 验收表、§7 文档清单、§8 分期表同步；测试补强（Watcher 单测、Mock 可注入时钟、手动实例不自动删 IT）。 |
 
 ---
 
-*下一步：按实现计划继续 Task 3（任务提交/查询/取消 API）。详见 `docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`。*
+*一期 mock 已 closure。可选后续：真云联调、T4 镜像注册表、I1 主仓集成。详见 `docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`。*

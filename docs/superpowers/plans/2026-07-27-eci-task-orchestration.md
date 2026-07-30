@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **How to resume in a new chat:** `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md` 并说明要从哪个未完成 Task 继续。  
-> **PRD 源：** 仓库根目录 `ECI任务驱动容器编排服务产品需求文档(PRD).md` v2.0  
+> **PRD 源：** 仓库根目录 `ECI任务驱动容器编排服务产品需求文档(PRD).md` v2.0.3  
 > **工程目录：** `eci-manager/`（禁止修改 `backend/`）
 
 **Goal:** 在已完成的 D0–D3 实例管理基座上，交付任务提交、一任务一实例、云终态自动删除与 `maxRuntimeSec` 超时保护（T1–T3）。
@@ -43,7 +43,8 @@
 | **T0** | PRD 评审定稿 + 本计划批准 | ✅ 已完成（2026-07-27） |
 | **T1** | 任务持久化、提交/查询/取消、关联实例、`restartPolicy` | ✅ Task 1–4 完成 |
 | **T2** | Running 轮询、Succeeded/Failed 自动删、`maxRuntimeSec`、任务恢复 | ✅ Task 5 完成 |
-| **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | ✅ Task 6–7 完成（mock 验收；cloud 联调待凭证） |
+| **T3** | Mock 自动生命周期、文档、Linux/cloud 验收 | ✅ Task 6–7 完成（mock 验收；cloud 联调可选） |
+| **T3+** | 生命周期测试补强 | ✅ 2026-07-30 |
 | **T4 / I1** | 镜像注册表等 / 主仓联调与生产选型 | 本期不做 |
 
 ### 进度日志（2026-07-27）
@@ -58,6 +59,7 @@
 | Task 5（T2） | `TaskLifecycleWatcher`、Succeeded/Failed 自动删、`maxRuntimeSec`→TIMEOUT、启动任务补偿；`TaskLifecycleWatcherTest` PASS；**待用户要求再 commit** |
 | Task 6（T3.1） | Mock `mock-auto-complete-sec` 时间触发；`EciTaskLifecycleMockIT`；**待用户要求再 commit** |
 | Task 7（T3.2–3.3） | README/API/设计说明/AGENT/example yml；一期 mock 验收清单已勾；**待用户要求再 commit** |
+| **T3+**（2026-07-30） | `TaskLifecycleWatcherUnitTest`、`ManualInstanceNoAutoDeleteIT`、`StartupCompensationRunnerTest`；Mock 可注入时钟；Watcher 修正 Always/OnFailure 不误调 `onInstanceRunning`；`mvn test` 75 项 PASS |
 | **下一刀** | 可选：cloud 联调 / T4·I1（本期不做） |
 
 ```mermaid
@@ -403,7 +405,7 @@ EOF
 2. `application-local.yml.example` 含新配置键
 3. 3DGS 类一次性任务示例（镜像、参数、GPU、`Never`、超时）
 4. 重启策略差异与 `Always`/`OnFailure` 成本风险
-5. 与本 PRD v2.0 / 本计划文件的对应关系
+5. 与本 PRD v2.0.3 / 本计划文件的对应关系
 6. 「后续如何被 XJICloud 调用」短节；生产选型仍待定
 
 **验收清单（PRD §1.4）— 全部勾选才算一期完成:**
@@ -476,8 +478,8 @@ EOF
 
 **下次开聊示例：**
 
-> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 **Task 5**（任务终态轮询、自动删除、超时）开始。
+> 继续 `@docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`，从 **真云联调** 或 **T4·I1** 开始（一期 mock 已 closure）。
 
 ---
 
-*记录日期：2026-07-28。对应 PRD v2.0 / v2.0.1。进度：T0 + Task1–7 已完成（一期 mock）；下一刀可选 cloud / T4·I1。*
+*记录日期：2026-07-30。对应 PRD v2.0.3。进度：T0 + Task1–7 + T3+ 测试补强已完成（一期 mock closure）；下一刀可选 cloud / T4·I1。*
