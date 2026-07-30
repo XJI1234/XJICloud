@@ -72,6 +72,11 @@ export default defineConfig({
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
+      // Wayline editor iframe loads /route/* (nginx static on this VM).
+      '/route': {
+        target: 'http://192.168.63.129',
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -3,6 +3,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string
+  /** Optional absolute origin for Wayline iframe, e.g. http://192.168.63.129 */
+  readonly VITE_WAYLINE_ORIGIN?: string
 }
 
 interface ImportMeta {

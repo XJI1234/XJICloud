@@ -5,8 +5,36 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const loading = ref(true)
-/** Bust browser/iframe cache so Wayline always picks up latest /route/index.html → hashed JS. */
-const waylineSrc = `/route/index.html?v=${Date.now()}`
+
+/** Default VM host when the cloud UI is opened via Cursor port-forward (localhost). */
+const DEFAULT_WAYLINE_HOST = '192.168.63.129'
+
+/**
+ * Resolve Wayline iframe URL.
+ * Prefer nginx /route on the LAN host — never point at the developer's local
+ * machine when the parent page is localhost (SSH / Cursor port forwarding).
+ */
+function resolveWaylineSrc() {
+  const cacheBust = `v=${Date.now()}`
+  const configured = String(import.meta.env.VITE_WAYLINE_ORIGIN || '').replace(/\/$/, '')
+  if (configured) {
+    return `${configured}/route/index.html?${cacheBust}`
+  }
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location
+    const isLoopback = hostname === 'localhost' || hostname === '127.0.0.1'
+    // Dev on Vite, or any loopback parent: load Wayline from the VM nginx.
+    if (import.meta.env.DEV || isLoopback || port === '5174') {
+      const host = isLoopback ? DEFAULT_WAYLINE_HOST : hostname
+      return `${protocol}//${host}/route/index.html?${cacheBust}`
+    }
+  }
+
+  return `/route/index.html?${cacheBust}`
+}
+
+const waylineSrc = resolveWaylineSrc()
 
 onMounted(() => {
   const iframe = iframeRef.value
@@ -36,6 +64,7 @@ function backToGate() {
       :src="waylineSrc"
       title="航线规划"
       allow="fullscreen"
+      referrerpolicy="no-referrer-when-downgrade"
     />
     <p v-if="loading" class="wayline-loading">正在加载航线规划...</p>
   </div>
