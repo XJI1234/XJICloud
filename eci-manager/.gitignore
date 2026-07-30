@@ -3,6 +3,7 @@ data/
 .idea/
 *.iml
 application-local.yml
+.env
 *.log
 .classpath
 .project

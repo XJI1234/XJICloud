@@ -53,10 +53,12 @@ eci-manager/
 
 | 文件 | 作用 |
 |------|------|
-| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`mock-auto-complete-sec` / `status` |
+| `.env` / `.env.example` | **推荐**：Api-Key、网络、`ALIBABA_CLOUD_*`（`.env` gitignore） |
+| `scripts/load-env.sh` / `start.sh` | 加载 `.env` 并启动 |
+| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时 |
 | `application-dev.yml` | `mock=true` |
 | `application-cloud.yml` | `mock=false` + 推荐阿里云镜像 |
-| `application-local.yml.example` | 真实模式模板；复制为 `application-local.yml`（**gitignore，勿提交**） |
+| `application-local.yml.example` | 旧模板（推荐改用 `.env`） |
 
 仓库便携 JDK/Maven：根目录 `.tools/`（gitignore）+ `.tools/env.sh`（在 `eci-manager/` 下：`source ../.tools/env.sh`）。
 

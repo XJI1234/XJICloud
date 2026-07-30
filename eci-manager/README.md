@@ -39,6 +39,40 @@ mvn -v          # 3.9+
 source ../.tools/env.sh    # 在 eci-manager/ 下
 ```
 
+## 配置（`.env`，推荐）
+
+真云联调时，Api-Key、VPC、阿里云 AK 建议统一写在 **`eci-manager/.env`**（已加入 `.gitignore`，勿提交）。
+
+```bash
+cd eci-manager
+cp .env.example .env
+# 编辑 .env 后：
+chmod +x scripts/*.sh
+./scripts/start.sh
+```
+
+| 变量 | 说明 |
+|------|------|
+| `SPRING_PROFILES_ACTIVE` | 真云：`cloud,local`；Mock：`dev` |
+| `ECI_API_KEY` | HTTP 请求头 `X-Api-Key` |
+| `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | 调 ECI OpenAPI（yml 里 `access-key-id` **不生效**） |
+| `ECI_REGION_ID` / `ECI_VPC_ID` / `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 创建容器网络 |
+
+**脚本：**
+
+- `scripts/load-env.sh` — 加载 `.env` 并导出 `ALIBABA_CLOUD_*`；无 `.env` 时用 Mock 默认 Api-Key（便于 curl）
+- `scripts/start.sh` — 要求已有 `.env`，然后 `mvn spring-boot:run`
+
+curl 联调（另开终端）：
+
+```bash
+cd eci-manager
+source scripts/load-env.sh
+curl -s -H "X-Api-Key: $ECI_API_KEY" http://127.0.0.1:8081/actuator/health
+```
+
+仍可使用 `application-local.yml`（见 [设计与使用说明](docs/设计与使用说明.md) §4.2），但 `.env` 更省事。
+
 ## 快速开始（Mock，推荐）
 
 ```bash
@@ -144,17 +178,10 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 
 ## 真实 ECI 模式
 
-1. `cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml`  
-2. 填写网络与 `api-key`；云身份用 ECS RAM 角色或本机 `ALIBABA_CLOUD_*` 环境变量（yml AK 不建客户端）  
-3. 启动：
+1. `cp .env.example .env`，填写 Api-Key、网络、`ALIBABA_CLOUD_*`  
+2. `./scripts/start.sh`  
 
-```bash
-export SPRING_PROFILES_ACTIVE=cloud,local
-export ECI_API_KEY='<与 yml 中 api-key 一致>'
-mvn spring-boot:run
-```
-
-详解见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4.2、§6。
+详解见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4.2。
 
 ## API 摘要
 
