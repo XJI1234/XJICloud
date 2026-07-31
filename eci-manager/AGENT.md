@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-07-30（PRD v2.0.3；**T1–T3 / Task 1–7 已交付**；一期 mock 验收完成；生命周期测试补强）
+**最后更新：** 2026-07-31（PRD v2.0.3 + OSS 集成 O1–O5.2；真云 Python/OSS 冒烟已通；内网 OSS endpoint）
 
 ---
 
@@ -19,12 +19,19 @@
   - ✅ Task 6：Mock `mock-auto-complete-sec` 时间触发终态 + 端到端 IT
   - ✅ Task 7：README / API / 设计说明 / example yml / 验收清单
   - ✅ 测试补强：`TaskLifecycleWatcherUnitTest`、`EciTaskLifecycleMockIT`、`ManualInstanceNoAutoDeleteIT`、`StartupCompensationRunnerTest`；Mock 可注入时钟
+- **已交付（OSS 集成 O1–O5.2，2026-07-31）：**
+  - ✅ `eci.oss` + `OssStorageService` + `POST /tasks` 可选 `storage`
+  - ✅ 联调镜像源码 `test-images/oss-smoke/`；文档 API §3.1 / 设计说明 §4.4
+  - ✅ 真云：`python_mirror` + `storage.mode=test` + **内网** OSS endpoint → `SUCCEEDED` 且对象写入 Bucket
+  - 📋 Task 7 完整验收清单（keys/无 storage 回归等）可按 PRD 附录 B 继续
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
+- **OSS 增量 PRD：** [`ECI任务OSS对象存储集成产品需求文档(PRD).md`](../ECI任务OSS对象存储集成产品需求文档(PRD).md) **v1.0**
 - **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
+- **OSS 计划 / 续跑：** [`docs/superpowers/plans/2026-07-30-eci-oss-integration.md`](../docs/superpowers/plans/2026-07-30-eci-oss-integration.md)、[`docs/superpowers/2026-07-31-eci-oss-handoff.md`](../docs/superpowers/2026-07-31-eci-oss-handoff.md)
 - 生产最终用 ECI 还是 CCI **仍待定**（不阻塞本期）
 
-**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交。
+**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）。
 
 ---
 
@@ -35,26 +42,28 @@ eci-manager/
 ├── pom.xml
 ├── README.md
 ├── AGENT.md                         # 本文件
+├── .env.example                     # 含 ECI_OSS_*（.env gitignore）
+├── scripts/
+│   ├── load-env.sh / start.sh
+│   ├── run-hello-python.sh          # 真云：普通 Python 任务（无 storage）
+│   └── debug-oss-smoke.sh           # 真云：exit0 + storage.mode=test 冒烟
+├── test-images/oss-smoke/           # eci-oss-test 联调镜像（Dockerfile/run.py）
 ├── docs/
-│   ├── 设计与使用说明.md
-│   └── 测试说明.md                  # Mock/真云逐步命令（2026-07-27 新增）
-├── .gitignore                       # 含 application-local.yml、target/、data/
+│   ├── 设计与使用说明.md            # §4.4 eci.oss
+│   ├── API文档.md                   # §3.1 storage
+│   └── 测试说明.md
 └── src/main/java/com/xjicloud/eci/
-    ├── EciManagerApplication.java
-    ├── common/          # ApiResponse、BusinessException、GlobalExceptionHandler
-    ├── auth/            # ApiKeyAuthFilter（X-Api-Key）
-    ├── config/          # EciProperties、Security、Async（含 Scheduling）、ProviderConfig
-    ├── instance/        # Controller、Service、Entity、DTO；含 createForTask / deleteForTaskCancel
-    ├── task/            # TaskStatus、Entity、Repository、EciTaskService、EciTaskController、dto/
-    ├── provider/        # EciProvider、Mock、Aliyun、CreateSpec、CloudInstanceView
-    └── lifecycle/       # AsyncLifecycleWorker、TaskLifecycleWatcher、StartupCompensationRunner
+    ├── config/          # EciProperties、OssProperties、…
+    ├── oss/             # OssStorageService
+    ├── task/storage/    # TaskStorageResolver、DTO
+    ├── instance/ … task/ … provider/ … lifecycle/
 ```
 
 配置：
 
 | 文件 | 作用 |
 |------|------|
-| `.env` / `.env.example` | **推荐**：Api-Key、网络、`ALIBABA_CLOUD_*`（`.env` gitignore） |
+| `.env` / `.env.example` | **推荐**：Api-Key、网络、`ALIBABA_CLOUD_*`、`ECI_OSS_*`（内网 endpoint；`.env` gitignore） |
 | `scripts/load-env.sh` / `start.sh` | 加载 `.env` 并启动 |
 | `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时 |
 | `application-dev.yml` | `mock=true` |
@@ -173,12 +182,14 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 
 | 方法 | 路径 | 行为 |
 |------|------|------|
-| POST | `/tasks` | **`image` 必填**；立即返回 taskId + STARTING + instanceId |
+| POST | `/tasks` | **`image` 必填**；可选 `storage`；立即返回 taskId + STARTING + instanceId |
 | GET | `/tasks?status=` | 列表 |
 | GET | `/tasks/{id}` | 详情 |
 | POST | `/tasks/{id}/cancel` | 幂等 CANCELLED + 删关联实例 |
 
 未传规格/重启/超时 → 用配置默认值，**实际值写入任务行**。
+
+有 `storage`：须 `eci.oss.enabled` 且配置完整，否则 **400 不落库**；注入 `XJI_OUTPUT_UPLOAD_URL` 等（禁止 AK/SK 进容器）。契约见 [docs/API文档.md](docs/API文档.md) §3.1。
 
 ### 其它
 
@@ -193,7 +204,10 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | 仓库位置 | 主仓子目录 `eci-manager/`，独立 Maven |
 | 创建 HTTP | **异步受理**，非阻塞至 Running |
 | 关闭 | **删除**实例 |
-| 联调镜像 | 真实模式用**阿里云仓库**镜像（Docker Hub 易 Pending） |
+| 联调镜像 | 真实模式用**阿里云仓库**镜像（Docker Hub 易 Pending）；个人 ACR：`…/ylif4/python_mirror:3.12`（**VPC 域名**） |
+| OSS endpoint（ECI 任务） | 须 **`https://oss-cn-{region}-internal.aliyuncs.com`**；公网 endpoint 在无 NAT 的 ECI 上 PUT 会超时 → exit 1 / Failed |
+| OSS 联调 | `storage.mode=test` + 容器 PUT `XJI_OUTPUT_UPLOAD_URL`；本机探针失败（内网）属预期，以 ECI 终态为准 |
+| Failed 诊断 | `AliyunEciProvider.describe` 将 exitCode/reason/events 写入 `failureReason` |
 | 生产选型 ECI/CCI | 待定，不阻塞 |
 | 云凭证 | ECS RAM / `ALIBABA_CLOUD_*`；**yml AK 不建客户端** |
 | T1 范围 | Task 1–7 完成；一期 mock 验收 closure |
@@ -201,6 +215,41 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
 | Always/OnFailure | 忽略云 Failed/Succeeded 时**不**误调 `onInstanceRunning`（Watcher 2026-07-28 修正） |
 | 测试文档 | `docs/测试说明.md` §0.3 自动化覆盖表 |
+
+### 真云联调脚本（2026-07-31）
+
+**启动（终端 A）：**
+
+```bash
+cd ~/XJI/XJICloud/eci-manager
+source ../.tools/env.sh
+./scripts/start.sh
+```
+
+**普通 Python 任务（无 storage，终端 B）：**
+
+```bash
+cd ~/XJI/XJICloud/eci-manager
+./scripts/run-hello-python.sh
+# 或换镜像：
+# export CLOUD_IMAGE='alibaba-cloud-linux-3-registry-vpc.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.11.1'
+# ./scripts/run-hello-python.sh
+```
+
+通过：`status=SUCCEEDED`，`failureReason=null`，实例多为 `TERMINATED`。失败可：
+
+```bash
+export TASK_ID=…   # 脚本会打印
+curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API_KEY"
+```
+
+**OSS 冒烟（须 `.env`：`ECI_OSS_ENABLED=true` + 内网 endpoint）：**
+
+```bash
+./scripts/debug-oss-smoke.sh
+```
+
+手工 curl 步骤与变量约定见脚本头注释；**Api-Key 只从 `.env` / `source scripts/load-env.sh` 读取，勿写入文档或脚本。**
 
 ### 本地提交（对话中，未要求则勿 push）
 
@@ -212,30 +261,33 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 
 （Succeeded 路径等与 Task 3 同文件的小改随 feat 提交；独立 Bugfix 为 sanitize/配置校验。）
 
-### 测试执行结论（2026-07-30）
+### 测试执行结论
 
-| 项 | 结果 |
-|----|------|
-| `mvn test` | PASS（75 项，含 Watcher 单测 / Mock 自动终态 IT） |
-| Mock 手工 curl 清单 | 见 `docs/测试说明.md` §11 |
-| 真云冒烟 | **可选**；不阻塞一期 mock closure |
+| 项 | 结果 | 日期 |
+|----|------|------|
+| `mvn test` | PASS（约 99 项，含 storage API） | 2026-07-31 |
+| Mock 手工 curl | 见 `docs/测试说明.md` §11 | |
+| 真云 hello-python | `run-hello-python.sh` / 历史 SUCCEEDED | 2026-07-31 |
+| 真云 OSS `mode=test` | 内网 endpoint → SUCCEEDED + `eci-test/{id}/output.txt` | 2026-07-31 |
 
 ### 实现分期
 
 - **D0–D3** Demo 基座  
 - **T0–T3** 任务编排一期（mock 验收完成，2026-07-28）  
 - **T3+** 生命周期测试补强（2026-07-30）  
-- **下一刀（可选）** 真云联调 / T4 / I1  
+- **O1–O5.2** OSS 配置/解析/API/联调镜像/文档（2026-07-31）  
+- **下一刀** O5.3 云端验收清单收尾 / 可选推送 `eci-oss-test`  
 
 ### 代码修复备忘（历史 + 本轮）
 
 1. `sanitizeName`：同一 create 共用一次规范化名；折叠非法字符/连字符，空串回退 `eci-demo`  
 2. `refresh`：NotFound 时 CREATING/FAILED→TERMINATED；**Succeeded** 时 CREATING→RUNNING  
 3. `pollUntilRunning`：Succeeded 与 Running 同等视为创建成功路径  
-4. Describe：空 group / null status → NotFound 视图  
+4. Describe：空 group / null status → NotFound 视图；**Failed 时拼 exitCode/events 到 statusDetail**  
 5. 启动校验：轮询/超时间隔必须为正  
+6. OSS：ECI 任务用内网 endpoint；`storage` 门控 400 不落库  
 
-### 真实联调结论（2026-07-23，基座仍适用）
+### 真实联调结论（基座 + OSS）
 
 | 尝试 | 规格 / 镜像 | 结果 |
 |------|-------------|------|
@@ -243,14 +295,18 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | 2 | `eci_open/nginx:1.14.2` 1c2g | RUNNING → DELETE OK |
 | 3 | GPU 规格 + nginx | `OperationDenied.NoStock` |
 | 4 | `ALIBABA_CLOUD_*` + 小规格 | RUNNING → DELETE OK |
+| 5 | `python_mirror` + `print` | SUCCEEDED |
+| 6 | `storage=test` + 公网 OSS | Running≈120s → exit 1 Failed（无 NAT） |
+| 7 | `storage=test` + **内网** OSS | SUCCEEDED + 对象落 Bucket |
 
 ### 运维注意
 
 - 真实模式**计费**：测完必须 DELETE/cancel，并到控制台确认无残留  
-- **不要**把长期 AK / Api-Key 写入 Git  
+- **不要**把长期 AK / Api-Key 写入 Git 或 AGENT.md 明文  
 - 路径参数用真实 UUID，勿写字面量 `{id}`  
-- `ECI_API_KEY` 须与配置 `api-key` 一致  
-- 逐步命令以 [docs/测试说明.md](docs/测试说明.md) 为准；配置原理见 [docs/设计与使用说明.md](docs/设计与使用说明.md)  
+- `ECI_API_KEY` 须与配置 `api-key` 一致；新终端先 `source scripts/load-env.sh`  
+- ECI 拉个人 ACR：用 **-vpc** 域名；本机 push 用公网 ACR 域名  
+- 逐步命令：脚本优先；详解见 [docs/测试说明.md](docs/测试说明.md)、[docs/设计与使用说明.md](docs/设计与使用说明.md) §4.4  
 
 ### 启动速查
 
@@ -261,16 +317,11 @@ source ../.tools/env.sh
 # Mock:
 export ECI_API_KEY=dev-eci-api-key-change-me
 mvn spring-boot:run
-# 日志：ECI provider mode: MOCK
 
-# 真实（本机须先 export ALIBABA_CLOUD_*；并保证 8081 空闲）:
-export SPRING_PROFILES_ACTIVE=cloud,local
-export ECI_API_KEY='<与 application-local.yml 中 api-key 一致>'
-export ALIBABA_CLOUD_ACCESS_KEY_ID=...
-export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
-ss -ltnp | grep 8081 || echo "8081 free"
-mvn spring-boot:run
-# 日志：ECI provider mode: ALIYUN … credential=DEFAULT_CHAIN|INSTANCE_PROFILE
+# 真实（推荐 .env）:
+#   cp .env.example .env  # 填 ECI_*、ALIBABA_CLOUD_*、ECI_OSS_*（内网 endpoint）
+./scripts/start.sh
+# 日志：ECI provider mode: ALIYUN …；OSS enabled 时勿见 skipped（除非故意关闭）
 ```
 
 自动化：`mvn test`（Mock，不调云）。
@@ -307,12 +358,18 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | 路径 | 说明 |
 |------|------|
 | `../ECI任务驱动容器编排服务产品需求文档(PRD).md` | 需求 v2.0.3 |
-| `../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md` | 实现计划与进度 |
+| `../ECI任务OSS对象存储集成产品需求文档(PRD).md` | OSS 增量 PRD v1.0 |
+| `../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md` | 编排实现计划 |
+| `../docs/superpowers/plans/2026-07-30-eci-oss-integration.md` | OSS 实现计划 |
+| `../docs/superpowers/2026-07-31-eci-oss-handoff.md` | OSS 续跑摘要 |
+| `scripts/run-hello-python.sh` | 真云普通 Python 任务 |
+| `scripts/debug-oss-smoke.sh` | 真云 OSS storage 冒烟 |
 | `docs/测试说明.md` | Mock/真云逐步测试 |
-| `docs/设计与使用说明.md` | 结构 / 配置 / 用法 |
+| `docs/设计与使用说明.md` | 结构 / 配置 / §4.4 OSS |
+| `docs/API文档.md` | HTTP 契约 / storage |
 | `src/.../task/EciTaskService.java` | 任务业务 |
-| `src/.../task/EciTaskController.java` | 任务 HTTP |
-| `src/.../instance/EciInstanceService.java` | 实例状态机、任务钩子、cancel 删除 |
-| `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 / 任务回调 / cancel 竞态 |
-| `src/.../provider/AliyunEciProvider.java` | 真实云 SDK（凭证链） |
-| `src/.../config/ProviderConfig.java` | Mock/Aliyun 装配与启动校验 |
+| `src/.../task/storage/TaskStorageResolver.java` | storage → env |
+| `src/.../oss/OssStorageService.java` | presign |
+| `src/.../provider/AliyunEciProvider.java` | 真实云 SDK + Failed 诊断串 |
+| `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 / 任务回调 |
+| `src/.../config/ProviderConfig.java` | Mock/Aliyun 装配 |

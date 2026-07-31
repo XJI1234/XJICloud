@@ -14,29 +14,33 @@
 | O2 OssStorageService | **完成** | 精简移植；本地 presign 单测；无 MinIO |
 | O3 storage 解析 | **完成** | DTO + `TaskStorageResolver`；mode 忽略大小写；callerEnv 覆盖 |
 | O4 任务 API 接入 | **完成** | `EciTaskService.create` 在 save 前解析 storage |
-| O5 联调镜像 | **未开始** | Task 5 |
-| O5.2 文档同步 | **未开始** | Task 6（API/设计说明正式补 storage） |
+| O5 联调镜像 | **完成** | Task 5：`test-images/oss-smoke`；基座 `ylif4/python_mirror:3.12`；本地 build+run 通过 |
+| O5.2 文档同步 | **完成** | Task 6：API §3.1 storage；设计说明 §4.4；编排 PRD 链接已存在 |
 | O5.3 云端验收 | **未开始** | Task 7 |
 
-**测试基线：** `cd eci-manager && mvn test` → **99** 项 PASS（2026-07-31）。  
+**测试基线：** `cd eci-manager && mvn test` → **99** 项 PASS（2026-07-31，O4 后；Task 5–6 无 Java 改动）。  
 **JDK：** 仓库内 `.tools/jdk-17.0.13+11`（`JAVA_HOME` 指向该路径）。
 
-**下一跳：** `@docs/superpowers/plans/2026-07-30-eci-oss-integration.md` 并从 **Task 5（联调镜像）** 继续。
+**下一跳：** `@docs/superpowers/plans/2026-07-30-eci-oss-integration.md` 并从 **Task 7（云端验收）** 继续。  
+推送联调镜像（若尚未推）：公网  
+`crpi-urdof1biefqsi8uj.cn-hangzhou.personal.cr.aliyuncs.com/ylif4/eci-oss-test:latest`；  
+ECI 拉取用 VPC  
+`crpi-urdof1biefqsi8uj-vpc.cn-hangzhou.personal.cr.aliyuncs.com/ylif4/eci-oss-test:latest`。
 
 ## 已落地核心路径
 
 ```
-eci-manager/src/main/java/com/xjicloud/eci/
-├── config/OssProperties.java          # eci.oss.*；isConfigured=endpoint+bucket+AK+SK
-├── oss/OssStorageService.java         # init 门控、presign、key builders、阿里云兼容
-└── task/
-    ├── EciTaskService.java            # create()：storage≠null → resolver → 再 save
-    ├── dto/CreateTaskRequest.java     # 可选 storage
-    └── storage/
-        ├── TaskStorageRequest.java
-        ├── WorkerImageItem.java       # fileName, ossKey, downloadUrl
-        ├── ResolvedTaskStorage.java   # 一期仅 PUT URL
-        └── TaskStorageResolver.java   # 校验 + presign + env 合并
+eci-manager/
+├── test-images/oss-smoke/         # Dockerfile + run.py + requirements.txt
+├── docs/API文档.md                # §3.1 storage / env / 400
+├── docs/设计与使用说明.md         # §4.4 eci.oss + 联调 checklist
+└── src/main/java/com/xjicloud/eci/
+    ├── config/OssProperties.java
+    ├── oss/OssStorageService.java
+    └── task/
+        ├── EciTaskService.java
+        ├── dto/CreateTaskRequest.java
+        └── storage/               # TaskStorageRequest / Resolver / ...
 ```
 
 关键 API 测试：

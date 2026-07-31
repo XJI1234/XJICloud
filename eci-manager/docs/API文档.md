@@ -188,7 +188,38 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `imageSnapshotId` | string | 否 | 镜像缓存 ID（如 `imc-xxx`）；透传阿里云 `ImageSnapshotId`，加速镜像拉取 |
 | `restartPolicy` | string | 否 | `Never` / `OnFailure` / `Always`；默认 `Never` |
 | `maxRuntimeSec` | integer | 否 | 正整数；默认 `14400`。超时强制删 + `FAILED`/`TIMEOUT` |
-| `env` | object | 否 | 透传到容器的环境变量 |
+| `env` | object | 否 | 透传到容器的环境变量；与 `storage` 同时存在时，**调用方同名键覆盖** OSS 注入键 |
+| `storage` | object | 否 | OSS 读写契约；缺省或 `null` 时与无 storage 行为一致。有值时须 `eci.oss.enabled` 且配置完整，否则 **400，不落库、不建实例** |
+
+#### `storage` 子字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `mode` | string | 是（当 `storage` 存在时） | 忽略大小写：`test` / `keys`；`dataset` → 400「尚未支持」 |
+| `jobId` | UUID string | `dataset` 时必填（二期） | 一期不使用 |
+| `outputKey` | string | `keys` 必填；`test` 可省略 | 输出对象 key |
+| `outputFileName` | string | 否 | `test` 默认 `output.txt`；拼为 `eci-test/{taskId}/{fileName}` |
+| `inputKeys` | string[] | 否 | 非空时为每个 key 签发 GET presigned，写入 `XJI_INPUT_FILES_JSON` |
+
+| `mode` | 行为 | PUT Content-Type |
+|--------|------|------------------|
+| `test` | 自动 key：`eci-test/{taskId}/{outputFileName\|\|output.txt}` | `text/plain` |
+| `keys` | 使用调用方 `outputKey`；`inputKeys` 可选 | `application/octet-stream` |
+| `dataset` | 一期拒绝 | — |
+
+#### 容器 env 契约（有 `storage` 时由服务注入）
+
+| 键 | 说明 |
+|----|------|
+| `XJI_OSS_ENDPOINT` / `XJI_OSS_BUCKET` / `XJI_OSS_REGION` | 来自 `eci.oss` |
+| `XJI_TASK_ID` | 任务 UUID |
+| `XJI_OUTPUT_OSS_KEY` | 解析后的输出 key |
+| `XJI_OUTPUT_UPLOAD_URL` | 输出对象 **presigned PUT** URL |
+| `XJI_INPUT_FILES_JSON` | 仅当 `inputKeys` 非空：`[{fileName, ossKey, downloadUrl}, ...]` |
+
+合并顺序：先写上表 OSS 键，再 `putAll(callerEnv)`（调用方同名优先）。**禁止**把 AccessKey/SecretKey 注入容器 env；容器只用 presigned URL。
+
+一期响应 **不含** `storageResolved`（二期可选）。
 
 #### 请求示例
 
@@ -209,6 +240,20 @@ RUNNING → STOPPING → TERMINATED | FAILED
 }
 ```
 
+OSS 联调（`mode=test` + 联调镜像）：
+
+```json
+{
+  "name": "oss-smoke",
+  "image": "crpi-urdof1biefqsi8uj-vpc.cn-hangzhou.personal.cr.aliyuncs.com/ylif4/eci-oss-test:latest",
+  "command": ["python3", "/app/run.py"],
+  "maxRuntimeSec": 600,
+  "storage": {
+    "mode": "test"
+  }
+}
+```
+
 #### 响应 `data`（`TaskResponse`）
 
 | 字段 | 类型 | 说明 |
@@ -225,7 +270,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `imageSnapshotId` | string \| null | 镜像缓存 ID；未使用时为 `null` |
 | `restartPolicy` | string | |
 | `maxRuntimeSec` | integer | |
-| `env` | object | |
+| `env` | object | 含合并后的 OSS 注入键（若请求带了 `storage`） |
 | `failureReason` | string \| null | 失败原因 |
 | `startedAt` / `endedAt` | instant \| null | |
 | `createdAt` / `updatedAt` | instant | |
@@ -237,6 +282,11 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | 缺 `image` | 400 | `image 为必填项` |
 | 非法 `restartPolicy` | 400 | `restartPolicy 须为 Never、OnFailure 或 Always` |
 | `maxRuntimeSec≤0` | 400 | `maxRuntimeSec 须为正整数` |
+| 有 `storage` 但 OSS 未启用/配置不完整 | 400 | `OSS 未启用或配置不完整，无法处理 storage 请求`（**不落库、不建实例**） |
+| `storage.mode` 非法 | 400 | `非法的 storage.mode: ...` |
+| `mode=dataset` | 400 | `dataset 模式尚未支持` |
+| `mode=keys` 缺 `outputKey` | 400 | `keys 模式必须提供 outputKey` |
+| OSS 签发失败 | 400 | `OSS 未就绪: ...` |
 | 无/错 Key | 401 | （鉴权失败文案） |
 
 ---
@@ -480,6 +530,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | `restartPolicy` / `command` / `args` 透传创建 | 创建请求体 | **已实现** |
 | `imageSnapshotId` 镜像缓存加速 | 创建请求体；透传 `CreateContainerGroup.ImageSnapshotId` | **已实现** |
 | 任务提交（`image` 必填） | `POST /tasks` | **已实现** |
+| 可选 `storage`（OSS presign 注入 env） | `POST /tasks` | **已实现**（一期无响应 `storageResolved`） |
 | 任务列表 / 详情 | `GET /tasks`、`GET /tasks/{id}` | **已实现** |
 | 任务取消（幂等） | `POST /tasks/{id}/cancel` | **已实现** |
 | 一任务一实例绑定 | `taskId` ↔ `instanceId` | **已实现** |

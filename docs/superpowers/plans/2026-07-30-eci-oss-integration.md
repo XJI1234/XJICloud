@@ -545,7 +545,9 @@ docker run --rm \
 | 2026-07-30 | O3    | storage DTO + TaskStorageResolver；mvn test PASS |
 | 2026-07-31 | O4    | EciTaskService 接入 storage；API 测试 PASS；全量 99 PASS |
 | 2026-07-31 | 文档    | 核心类中文契约注释；续跑摘要 `docs/superpowers/2026-07-31-eci-oss-handoff.md` |
-|            | O5–O7 | 未开始（下一跳 Task 5 联调镜像） |
+| 2026-07-31 | O5.1  | 联调镜像 `test-images/oss-smoke`；FROM `ylif4/python_mirror:3.12`；本地 build+run |
+| 2026-07-31 | O5.2  | API文档 storage；设计说明 §4.4；编排 PRD 关联链接已存在 |
+|            | O5.3  | 未开始（下一跳 Task 7 云端验收；需先 push `ylif4/eci-oss-test`） |
 
 
 ---
