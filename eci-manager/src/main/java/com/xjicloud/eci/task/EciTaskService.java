@@ -10,6 +10,7 @@ import com.xjicloud.eci.instance.dto.CreateInstanceRequest;
 import com.xjicloud.eci.instance.dto.InstanceResponse;
 import com.xjicloud.eci.task.dto.CreateTaskRequest;
 import com.xjicloud.eci.task.dto.TaskResponse;
+import com.xjicloud.eci.task.storage.TaskStorageResolver;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,16 +40,19 @@ public class EciTaskService {
     private final EciInstanceService instanceService;
     private final EciProperties properties;
     private final ObjectMapper objectMapper;
+    private final TaskStorageResolver taskStorageResolver;
 
     public EciTaskService(
             EciTaskRepository repository,
             EciInstanceService instanceService,
             EciProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            TaskStorageResolver taskStorageResolver) {
         this.repository = repository;
         this.instanceService = instanceService;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.taskStorageResolver = taskStorageResolver;
     }
 
     /**
@@ -70,6 +74,10 @@ public class EciTaskService {
         Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
         Instant now = Instant.now();
         UUID taskId = UUID.randomUUID();
+        // storage 必须在 save / 创建实例之前解析：校验或 presign 失败走 BusinessException(400)，避免脏数据入库
+        if (request.getStorage() != null) {
+            env = taskStorageResolver.resolveAndBuildEnv(taskId, request.getStorage(), env);
+        }
         String name = StringUtils.hasText(request.getName())
                 ? request.getName().trim()
                 : "task-" + taskId.toString().substring(0, 8);

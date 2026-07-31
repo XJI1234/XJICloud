@@ -53,6 +53,15 @@ eci:
   # Mock：创建后 N 秒自动迁终态（Succeeded/Failed）；<=0 仅 simulateStatus 钩子
   mock-auto-complete-sec: 3
   mock-auto-complete-status: Succeeded
+  oss:
+    enabled: ${ECI_OSS_ENABLED:false}
+    endpoint: ${ECI_OSS_ENDPOINT:}
+    region: ${ECI_OSS_REGION:}
+    bucket: ${ECI_OSS_BUCKET:}
+    access-key: ${ECI_OSS_ACCESS_KEY:}
+    secret-key: ${ECI_OSS_SECRET_KEY:}
+    path-style-access: ${ECI_OSS_PATH_STYLE_ACCESS:false}
+    presign-expiration-minutes: ${ECI_OSS_PRESIGN_EXPIRATION_MINUTES:60}
 
 logging:
   level:

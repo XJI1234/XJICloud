@@ -1,5 +1,6 @@
 package com.xjicloud.eci.task.dto;
 
+import com.xjicloud.eci.task.storage.TaskStorageRequest;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +25,8 @@ public class CreateTaskRequest {
     /** 正整数；未传则用 {@code eci.default-max-runtime-sec}。 */
     private Integer maxRuntimeSec;
     private Map<String, String> env;
+    /** 可选；OSS storage 块。有值时须 OSS 已启用；解析失败则整单 400，不落库。 */
+    private TaskStorageRequest storage;
 
     public String getName() {
         return name;
@@ -119,5 +122,13 @@ public class CreateTaskRequest {
 
     public void setEnv(Map<String, String> env) {
         this.env = env;
+    }
+
+    public TaskStorageRequest getStorage() {
+        return storage;
+    }
+
+    public void setStorage(TaskStorageRequest storage) {
+        this.storage = storage;
     }
 }
