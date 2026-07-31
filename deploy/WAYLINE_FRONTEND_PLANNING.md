@@ -4,9 +4,23 @@ XJICloud「航线规划」通过 iframe 加载 VM 上的静态前端（`/route/`
 
 ## 正确架构（前端内置）
 
-- 航线计算在**浏览器内**完成：`planMissionWithObstacleAnalysis`（JavaScript），可选加速使用仓库内**已提交的预编译 WASM**（`src/wasm/generated/`）。
-- WASM 在**前端构建时**由 Vite 打包进 `/route/assets/`，访问网站的用户**无需**安装 Node、也无需本机编译 WASM。
+- 航线计算在**浏览器内**完成：`planMissionWithObstacleAnalysis`（JavaScript + 仓库内**已提交的预编译 WASM**，`src/wasm/generated/`）。
+- 编排策略：**WASM 优先，失败自动回退 JS**。覆盖模块：orbit / building / IG 补拍 / 多机扇区均分 / 白模径向绕障（高度采样仍在 JS/Cesium）。
+- WASM 在**前端构建时**由 Vite 打包进 `/route/assets/`（产物含 `wayline_planner-*.wasm`），访问网站的用户**无需**安装 Node、也无需本机编译 WASM。
+- 云嵌入：`/app/wayline` → iframe `/route/index.html`（或 `VITE_WAYLINE_ORIGIN` + `/route/`），**不**指向 `127.0.0.1:8787`。
 - 用户只需打开云平台 →「航线规划」，即可使用。
+
+## WASM 模块与对拍（开发者）
+
+| 模块 | 导出 | 对拍命令（Wayline 根目录） |
+|------|------|---------------------------|
+| orbit | `plan_orbit_json` | `pnpm run wasm:compare:orbit:wasm` |
+| building | `plan_building_json` | `pnpm run wasm:compare:building:wasm` |
+| 绕障 | `plan_obstacle_json` | `pnpm run wasm:compare:obstacle` |
+| IG | `plan_ig_json` | `pnpm run wasm:compare:ig` |
+| 多机 | `plan_multi_uav_json` | `pnpm run wasm:compare:multi` |
+
+更新 C++ 后：`pnpm run wasm:build`（需 emcc），再 `vite build` / `pnpm build`。
 
 ## 底图（在线天地图 + 离线可选）
 

@@ -27,11 +27,11 @@ routePlan（航点 / 圈层 / 统计 / KML）
 | 阶段 | 文件 | 入口 |
 |------|------|------|
 | 编排 | `src/algorithm/core/missionPlanner.js` | `planMissionWithObstacleAnalysis` |
-| 环绕种子 | `src/utils/routePlanner.js` | `planSinglePointOrbitMission` |
-| 立面种子 | `src/utils/routePlanner.js` | `planBuildingFootprintMission` |
-| IG 补拍 | `src/utils/informationGainReshootPlanner.js` | `appendInformationGainReshoot` |
-| 多机 | `src/utils/multiUavPlanner.js` | `planMultiUavFromBasePlan` |
-| 绕障 | `src/utils/routeCollisionPlanner.js` | `buildObstacleAwareMission` |
+| 环绕种子 | `src/utils/routePlanner.js` / **WASM** `native/wayline_planner.cpp` | `planSinglePointOrbitMission`；编排优先 `planOrbitMissionWithWasm`，失败回退 JS |
+| 立面种子 | `src/utils/routePlanner.js` / **WASM** `native/wayline_building.inl` | `planBuildingFootprintMission`；编排优先 `planBuildingMissionWithWasm`，失败回退 JS |
+| IG 补拍 | `src/utils/informationGainReshootPlanner.js` / **WASM** `native/wayline_ig.inl` | `appendInformationGainReshoot`；编排优先 `planIgReshootWithWasm`，失败回退 JS |
+| 多机 | `src/utils/multiUavPlanner.js` / **WASM** `native/wayline_multi_uav.inl` | `planMultiUavFromBasePlan`；编排优先 `planMultiUavWithWasm`，失败回退 JS；绕障后合并仍用 JS `assembleMultiUavPlan` |
+| 绕障 | `src/utils/routeCollisionPlanner.js` / **WASM** `native/wayline_obstacle.inl` | `buildObstacleAwareMission`；编排优先 `planObstacleMissionWithWasm`（高度采样仍在 JS），失败回退 JS |
 
 `search` / `shape` 只负责得到 footprint，**不单独成算法**，最终走 building。
 
@@ -122,9 +122,11 @@ h_{fly}=\max\bigl(h_{band}-R\tan\theta,\;10\,\mathrm{m}\bigr)
 
 ## 5. 算法 C：信息增益补拍（IG Reshoot）
 
-**函数**：`appendInformationGainReshoot`  
+**函数**：`appendInformationGainReshoot` / WASM `plan_ig_json`  
 **UI**：采样参数区 ·「信息增益补拍」开关 +「速度 ↔ 质量」β 滑条  
 **航点**：`kind: 'ig-reshoot'`（地图绿色 `IG*`）
+
+编排优先 WASM，失败回退 JS。仍为几何代理，**不是** FisherRF 源码移植。
 
 ### 5.1 定位（必读）
 
@@ -186,22 +188,22 @@ U=\frac{\mathrm{IG}}{1+(d/40)^{\alpha}}
 
 ## 6. 算法 D：多机扇区均分
 
-**函数**：`planMultiUavFromBasePlan` · `splitIndexRanges`
+**函数**：`planMultiUavFromBasePlan` / WASM `plan_multi_uav_json` · `splitIndexRanges`
 
-每环拍照点按索引均分给 N 机；**同一机跨所有高度层持有同一扇区**，降低交叉与 makespan。非多智能体 NBV。
+每环拍照点按索引均分给 N 机；**同一机跨所有高度层持有同一扇区**，降低交叉与 makespan。非多智能体 NBV。编排优先 WASM；绕障后按机合并仍用 JS `assembleMultiUavPlan`。
 
 ---
 
 ## 7. 算法 E：白模径向绕障
 
-**函数**：`buildObstacleAwareMission`
+**函数**：`buildObstacleAwareMission` / WASM `plan_obstacle_json`
 
-1. 环上相邻航点折线按约 18 m 采样白模高度  
+1. 环上相邻航点折线按约 18 m 采样白模高度（Cesium 采样在 JS；WASM 只吃 `heightSamples` 数组）  
 2. 与飞行高度比净空（默认约 12 m）  
 3. 目标 footprint 可忽略  
 4. 碰撞则中点径向外扩试探：20…220 m → `detour`；失败 → `risky`  
 
-局部几何绕行，非 A* / RRT。腾讯底图或关白模时跳过。
+局部几何绕行，非 A* / RRT。腾讯底图或关白模时跳过。编排层优先 WASM，失败回退 JS。
 
 ---
 
@@ -237,5 +239,11 @@ U=\frac{\mathrm{IG}}{1+(d/40)^{\alpha}}
 
 | 日期 | 变更 | 涉及 |
 |------|------|------|
+| 2026-07-31 | Phase 4/5：生产构建确认 `dist/assets/wayline_planner-*.wasm`；云 iframe 仍为 `/route/`、不依赖 8787；更新部署说明与 README | `deploy/WAYLINE_FRONTEND_PLANNING.md`, `Wayline/README.md`, 本文件 |
+| 2026-07-31 | WASM 多机扇区均分：`plan_multi_uav_json`；编排优先 WASM 回退 JS；`assembleMultiUavPlan` 仍 JS | `native/wayline_multi_uav.inl`, `wayline_planner.cpp`, `waylinePlannerKernel.js`, `missionPlanner.js`, `scripts/compare-multi-uav-js-wasm.mjs`, `src/wasm/generated/` |
+| 2026-07-31 | WASM IG 补拍：`plan_ig_json`；几何代理覆盖/贪心选点迁入 C++；编排优先 WASM 回退 JS；对拍 js↔wasm↔native | `native/wayline_ig.inl`, `wayline_planner.cpp`, `waylinePlannerKernel.js`, `missionPlanner.js`, `scripts/compare-ig-js-wasm.mjs`, `src/wasm/generated/` |
+| 2026-07-31 | WASM 白模径向绕障：`plan_obstacle_json`；高度采样留 JS，几何判决进 C++；编排优先 WASM 回退 JS；对拍 js↔wasm↔native | `native/wayline_obstacle.inl`, `wayline_planner.cpp`, `waylinePlannerKernel.js`, `missionPlanner.js`, `routeCollisionPlanner.js`, `scripts/compare-obstacle-js-wasm.mjs`, `src/wasm/generated/` |
+| 2026-07-31 | WASM building 立面采样：多边形外扩/立面采样迁入 C++，`plan_building_json`；编排优先 WASM 回退 JS；对拍脚本 | `native/wayline_building.inl`, `wayline_planner.cpp`, `waylinePlannerKernel.js`, `missionPlanner.js`, `scripts/compare-building-*.mjs`, `src/wasm/generated/` |
+| 2026-07-31 | WASM orbit 对齐 JS：水平重叠/自动张数/层数上限 6；编排改为优先 WASM 失败回退 JS；新增 JS↔C++/WASM 对拍脚本 | `native/wayline_planner.cpp`, `waylinePlannerKernel.js`, `missionPlanner.js`, `scripts/compare-orbit-*.mjs`, `src/wasm/generated/` |
 | 2026-07-28 | 初版：文档化 Orbit / Building / IG / 多机 / 绕障；IG 标明 FisherRF 等思想来源与几何代理实现 | 本文件 |
 | 2026-07-28 | 水平重叠默认提高、立面分段加密、环绕自动张数；新增 IG 补拍与 β；UI 置于采样参数区 | `routePlanner.js`, `informationGainReshootPlanner.js`, `missionPlanner.js`, `plannerPanel.vue`, `mapContainer.vue` |
