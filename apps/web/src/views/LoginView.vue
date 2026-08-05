@@ -49,10 +49,10 @@ async function submit() {
       <p class="login-subtitle">{{ t('login.subtitle') }}</p>
 
       <div class="login-mode-row">
-        <button class="login-mode-button" :class="{ 'is-active': mode === 'login' }" type="button" @click="mode = 'login'">
+        <button class="login-mode-button cloud-pressable" :class="{ 'is-active': mode === 'login' }" type="button" @click="mode = 'login'">
           {{ t('login.login') }}
         </button>
-        <button class="login-mode-button" :class="{ 'is-active': mode === 'register' }" type="button" @click="mode = 'register'">
+        <button class="login-mode-button cloud-pressable" :class="{ 'is-active': mode === 'register' }" type="button" @click="mode = 'register'">
           {{ t('login.register') }}
         </button>
       </div>
@@ -75,7 +75,7 @@ async function submit() {
 
         <p v-if="errorMessage" class="login-error">{{ errorMessage }}</p>
 
-        <button class="side-button primary login-submit" type="submit" :disabled="pending">
+        <button class="side-button primary login-submit cloud-pressable" type="submit" :disabled="pending">
           {{ pending ? t('common.processing') : mode === 'login' ? t('login.login') : t('login.registerAndLogin') }}
         </button>
       </form>

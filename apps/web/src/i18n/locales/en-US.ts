@@ -24,7 +24,6 @@ export default {
     searchIndex: 'Search Index',
     dualScreen: 'Dual Screen',
     userSpace: 'User Space',
-    heatmap: 'Heatmap',
   },
   tools: {
     routePlanning: 'Route\nPlanning',
@@ -61,6 +60,7 @@ export default {
   home: {
     newProject: 'New Project',
     openProject: 'Open Project',
+    heroSubtitle: 'Upload datasets, train, and view 3DGS models',
     recentProjects: 'Recent Projects ({count})',
     noRecentProjects: 'No recently opened projects',
     lastOpened: 'Last opened {date}',
@@ -171,6 +171,8 @@ export default {
     noModels: 'No models in this project',
     uploadHint: 'Upload a PLY or SPZ model on the Data Upload page first.',
     goToUpload: 'Go to Data Upload',
+    cloudModelUpload: 'Cloud Model Upload',
+    cloudModelUploadFeature: 'Cloud Model Upload',
     noProjectOpen: 'No Project Open',
     noProjectHint: 'Create or open a project on the home page before using advanced editing.',
     goToHome: 'Go to Home',

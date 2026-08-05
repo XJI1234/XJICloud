@@ -109,11 +109,11 @@ function handleDeleteProject() {
             </p>
           </template>
         </div>
-        <button class="side-button side-button--inline" type="button" @click="goHome">{{ t('projects.backHome') }}</button>
+        <button class="side-button side-button--inline cloud-pressable" type="button" @click="goHome">{{ t('projects.backHome') }}</button>
       </div>
 
       <div v-if="projectStore.activeProject" class="projects-current-actions">
-        <button class="side-button primary" type="button" :disabled="pending" @click="triggerUpload">
+        <button class="side-button primary cloud-pressable" type="button" :disabled="pending" @click="triggerUpload">
           {{ pending ? t('common.uploading') : t('projects.uploadModel') }}
         </button>
       </div>
@@ -124,7 +124,7 @@ function handleDeleteProject() {
       <div class="projects-create-grid">
         <input v-model="newProjectName" class="text-control" type="text" :placeholder="t('projects.projectNamePlaceholder')" />
         <input v-model="newProjectDescription" class="text-control" type="text" :placeholder="t('projects.projectDescPlaceholder')" />
-        <button class="side-button primary" type="button" @click="createProject">{{ t('projects.createProjectBtn') }}</button>
+        <button class="side-button primary cloud-pressable" type="button" @click="createProject">{{ t('projects.createProjectBtn') }}</button>
       </div>
     </section>
 
@@ -138,7 +138,7 @@ function handleDeleteProject() {
       <div
         v-for="project in projectStore.projects"
         :key="project.id"
-        class="project-list-row"
+        class="project-list-row cloud-pressable"
         :class="{ 'is-active': projectStore.activeProjectId === project.id }"
       >
         <button
@@ -155,7 +155,7 @@ function handleDeleteProject() {
         <div class="project-list-row__actions">
           <span v-if="projectStore.activeProjectId === project.id" class="project-list-badge">{{ t('projects.currentBadge') }}</span>
           <button
-            class="side-button side-button--inline"
+            class="side-button side-button--inline cloud-pressable"
             type="button"
             @click.stop="handleDeleteProject"
           >

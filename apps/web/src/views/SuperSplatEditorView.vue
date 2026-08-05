@@ -13,6 +13,7 @@ import {
   loadModelInIframe,
 } from '@/bridges/supersplatBridge'
 import { useProjectStore } from '@/stores/project'
+import { showComingSoon } from '@/utils/comingSoon'
 
 const route = useRoute()
 const router = useRouter()
@@ -200,18 +201,23 @@ onBeforeRouteLeave(async (_to, _from, next) => {
       <p v-if="loadingEditor" class="supersplat-loading">{{ t('supersplat.loadingEditor') }}</p>
     </section>
 
-    <section v-else-if="projectStore.activeProject && !loadingModels" class="supersplat-empty section-card">
+    <section v-else-if="projectStore.activeProject && !loadingModels" class="supersplat-empty">
       <h3 class="section-title">{{ errorMessage || t('supersplat.noModels') }}</h3>
       <p v-if="!errorMessage">{{ t('supersplat.uploadHint') }}</p>
-      <button class="side-button primary" type="button" @click="router.push('/app/upload')">{{ t('supersplat.goToUpload') }}</button>
+      <div class="supersplat-empty-actions">
+        <button class="side-button primary cloud-pressable" type="button" @click="router.push('/app/upload')">{{ t('supersplat.goToUpload') }}</button>
+        <button class="side-button cloud-pressable" type="button" @click="showComingSoon('supersplat.cloudModelUploadFeature')">
+          {{ t('supersplat.cloudModelUpload') }}
+        </button>
+      </div>
     </section>
 
-    <section v-else-if="!projectStore.activeProject && !loadingModels" class="supersplat-empty section-card">
+    <section v-else-if="!projectStore.activeProject && !loadingModels" class="supersplat-empty">
       <h3 class="section-title">{{ errorMessage || t('supersplat.noProjectOpen') }}</h3>
       <p v-if="!errorMessage">{{ t('supersplat.noProjectHint') }}</p>
       <div class="supersplat-empty-actions">
-        <button class="side-button primary" type="button" @click="goToHome">{{ t('supersplat.goToHome') }}</button>
-        <button class="side-button" type="button" @click="goToProjects">{{ t('supersplat.goToProjects') }}</button>
+        <button class="side-button primary cloud-pressable" type="button" @click="goToHome">{{ t('supersplat.goToHome') }}</button>
+        <button class="side-button cloud-pressable" type="button" @click="goToProjects">{{ t('supersplat.goToProjects') }}</button>
       </div>
     </section>
 

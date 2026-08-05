@@ -3,6 +3,7 @@ import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
+import CloudSheet from '@/components/CloudSheet.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import { useAppLocale } from '@/composables/useAppLocale'
 import { useAuthStore } from '@/stores/auth'
@@ -17,6 +18,8 @@ const { currentLocale, setLocale } = useAppLocale()
 
 const userModalVisible = ref(false)
 const langModalVisible = ref(false)
+const userTriggerRef = ref<HTMLButtonElement | null>(null)
+const langTriggerRef = ref<HTMLButtonElement | null>(null)
 
 const cameraStatus = inject(CAMERA_STATUS_KEY, ref<CameraStatus>({
   longitude: '--',
@@ -34,7 +37,6 @@ const navItems = computed(() => [
   { labelKey: 'nav.searchIndex', route: null },
   { labelKey: 'nav.dualScreen', route: null },
   { labelKey: 'nav.userSpace', route: null },
-  { labelKey: 'nav.heatmap', route: null },
 ] as const)
 
 const toolItems = computed(() => [
@@ -118,7 +120,7 @@ const isImmersiveRoute = computed(() => route.name === 'home')
   <div class="cloud-shell" :class="{ 'cloud-shell--immersive': isImmersiveRoute }">
     <div class="cloud-shell__backdrop" aria-hidden="true" />
     <div class="cloud-edge-accent" aria-hidden="true" />
-    <header class="cloud-header">
+    <header class="cloud-header cloud-scroll-edge--bottom">
       <div class="cloud-brand">
         <button class="cloud-brand-button" type="button" :title="t('nav.home')" @click="goHome">
           <img class="cloud-brand-logo" src="/logo.jpg" alt="XJI Cloud" />
@@ -150,7 +152,15 @@ const isImmersiveRoute = computed(() => route.name === 'home')
           <span class="cloud-header-tool-button__label">{{ t('header.team') }}</span>
         </button>
 
-        <button class="cloud-header-tool-button" type="button" @click="openLangModal">
+        <button
+          id="lang-trigger"
+          ref="langTriggerRef"
+          class="cloud-header-tool-button"
+          type="button"
+          :aria-expanded="langModalVisible"
+          aria-haspopup="dialog"
+          @click="openLangModal"
+        >
           <span class="cloud-header-tool-button__icon">
             <ToolIcon name="language" />
           </span>
@@ -164,7 +174,15 @@ const isImmersiveRoute = computed(() => route.name === 'home')
           <span class="cloud-header-tool-button__label">{{ t('header.help') }}</span>
         </button>
 
-        <button class="cloud-user-chip" type="button" @click="openUserModal">
+        <button
+          id="user-trigger"
+          ref="userTriggerRef"
+          class="cloud-user-chip"
+          type="button"
+          :aria-expanded="userModalVisible"
+          aria-haspopup="dialog"
+          @click="openUserModal"
+        >
           {{ t('header.mine') }}
         </button>
       </div>
@@ -197,7 +215,7 @@ const isImmersiveRoute = computed(() => route.name === 'home')
       </main>
     </div>
 
-    <footer v-if="!hideStatusBar" class="cloud-status-bar">
+    <footer v-if="!hideStatusBar" class="cloud-status-bar cloud-scroll-edge--top">
       <div class="cloud-status-metrics">
         <span>{{ t('status.longitude') }} {{ statusText.longitude }}</span>
         <span>{{ t('status.latitude') }} {{ statusText.latitude }}</span>
@@ -207,61 +225,51 @@ const isImmersiveRoute = computed(() => route.name === 'home')
       <div class="cloud-status-hint">{{ t('status.gisHint') }}</div>
     </footer>
 
-    <Teleport to="body">
-      <div
-        v-if="userModalVisible"
-        class="header-modal-backdrop app-modal-backdrop"
-        @click.self="closeUserModal"
-      >
-        <div class="app-modal header-modal" role="dialog" aria-labelledby="user-modal-title">
-          <div class="app-modal-header">
-            <h2 id="user-modal-title" class="app-modal-title">{{ t('header.mine') }}</h2>
-          </div>
-          <div class="app-modal-body">
-            <div class="cloud-user-menu-info header-modal-user-info">
-              <strong>{{ authStore.displayName || t('common.notSet') }}</strong>
-              <span>@{{ authStore.username || 'unknown' }}</span>
-            </div>
-          </div>
-          <div class="app-modal-footer header-modal-footer">
-            <button class="side-button" type="button" @click="closeUserModal">{{ t('common.close') }}</button>
-            <button class="side-button primary" type="button" @click="logout">{{ t('header.logout') }}</button>
-          </div>
-        </div>
+    <CloudSheet
+      :visible="userModalVisible"
+      mode="popover"
+      :anchor-el="userTriggerRef"
+      :title="t('header.mine')"
+      @close="closeUserModal"
+    >
+      <div class="cloud-user-menu-info header-modal-user-info">
+        <strong>{{ authStore.displayName || t('common.notSet') }}</strong>
+        <span>@{{ authStore.username || 'unknown' }}</span>
       </div>
+      <template #footer>
+        <button class="side-button" type="button" @click="closeUserModal">{{ t('common.close') }}</button>
+        <button class="side-button primary" type="button" @click="logout">{{ t('header.logout') }}</button>
+      </template>
+    </CloudSheet>
 
-      <div
-        v-if="langModalVisible"
-        class="header-modal-backdrop app-modal-backdrop"
-        @click.self="closeLangModal"
-      >
-        <div class="app-modal header-modal" role="dialog" aria-labelledby="lang-modal-title">
-          <div class="app-modal-header">
-            <h2 id="lang-modal-title" class="app-modal-title">{{ t('header.language') }}</h2>
-          </div>
-          <div class="app-modal-body header-modal-options">
-            <button
-              class="header-modal-option cloud-user-menu-item"
-              :class="{ 'is-active': currentLocale === 'zh' }"
-              type="button"
-              @click="selectLocale('zh')"
-            >
-              {{ t('header.langZh') }}
-            </button>
-            <button
-              class="header-modal-option cloud-user-menu-item"
-              :class="{ 'is-active': currentLocale === 'en' }"
-              type="button"
-              @click="selectLocale('en')"
-            >
-              {{ t('header.langEn') }}
-            </button>
-          </div>
-          <div class="app-modal-footer header-modal-footer">
-            <button class="side-button" type="button" @click="closeLangModal">{{ t('common.close') }}</button>
-          </div>
-        </div>
+    <CloudSheet
+      :visible="langModalVisible"
+      mode="popover"
+      :anchor-el="langTriggerRef"
+      :title="t('header.language')"
+      @close="closeLangModal"
+    >
+      <div class="header-modal-options">
+        <button
+          class="header-modal-option cloud-user-menu-item cloud-pressable"
+          :class="{ 'is-active': currentLocale === 'zh' }"
+          type="button"
+          @click="selectLocale('zh')"
+        >
+          {{ t('header.langZh') }}
+        </button>
+        <button
+          class="header-modal-option cloud-user-menu-item cloud-pressable"
+          :class="{ 'is-active': currentLocale === 'en' }"
+          type="button"
+          @click="selectLocale('en')"
+        >
+          {{ t('header.langEn') }}
+        </button>
       </div>
-    </Teleport>
+      <template #footer>
+        <button class="side-button" type="button" @click="closeLangModal">{{ t('common.close') }}</button>
+      </template>
+    </CloudSheet>
   </div>
 </template>

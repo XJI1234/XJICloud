@@ -24,7 +24,6 @@ export default {
     searchIndex: '搜索索引',
     dualScreen: '双屏显示',
     userSpace: '用户空间',
-    heatmap: '热力展示',
   },
   tools: {
     routePlanning: '航线规划',
@@ -61,6 +60,7 @@ export default {
   home: {
     newProject: '新建项目',
     openProject: '打开项目',
+    heroSubtitle: '上传数据集、训练与查看 3DGS 模型',
     recentProjects: '最近项目 ({count})',
     noRecentProjects: '暂无最近打开的项目',
     lastOpened: '上次打开 {date}',
@@ -171,6 +171,8 @@ export default {
     noModels: '当前工程暂无模型',
     uploadHint: '请先在「数据上传」页上传 PLY 或 SPZ 模型。',
     goToUpload: '前往数据上传',
+    cloudModelUpload: '云端模型上传',
+    cloudModelUploadFeature: '云端模型上传',
     noProjectOpen: '尚未打开工程',
     noProjectHint: '请先在主页新建或打开项目，再使用高级编辑。',
     goToHome: '前往主页',
