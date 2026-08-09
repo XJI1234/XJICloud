@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { getCaptcha, type CaptchaResponse } from '@/api/auth'
 import { ApiError } from '@/api/client'
 
 const authStore = useAuthStore()
@@ -17,20 +18,75 @@ const displayName = ref('')
 const errorMessage = ref('')
 const pending = ref(false)
 
+const showCaptcha = ref(false)
+const captcha = ref<CaptchaResponse | null>(null)
+const captchaInput = ref('')
+
+async function loadCaptcha() {
+  try {
+    captcha.value = await getCaptcha()
+    captchaInput.value = ''
+  } catch {
+    captcha.value = null
+  }
+}
+
+watch(mode, async (m) => {
+  errorMessage.value = ''
+  captchaInput.value = ''
+  if (m === 'register') {
+    showCaptcha.value = true
+    await loadCaptcha()
+  } else {
+    showCaptcha.value = false
+  }
+})
+
 async function submit() {
   errorMessage.value = ''
+  if (!username.value.trim() || !password.value) {
+    errorMessage.value = t('login.fillRequired')
+    return
+  }
+
+  if (showCaptcha.value && !captchaInput.value.trim()) {
+    errorMessage.value = t('login.captchaRequired')
+    return
+  }
+
   pending.value = true
   try {
     if (mode.value === 'register') {
-      await authStore.register(username.value.trim(), password.value, displayName.value.trim())
+      await authStore.register(
+        username.value.trim(),
+        password.value,
+        displayName.value.trim() || undefined,
+        captcha.value!.captchaKey,
+        captchaInput.value.trim(),
+      )
+      authStore.logout()
+      username.value = ''
+      password.value = ''
+      displayName.value = ''
+      mode.value = 'login'
     } else {
-      await authStore.login(username.value.trim(), password.value)
+      await authStore.login(
+        username.value.trim(),
+        password.value,
+        showCaptcha.value ? captcha.value?.captchaKey : undefined,
+        showCaptcha.value ? captchaInput.value.trim() : undefined,
+      )
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/app/home'
+      await router.push(redirect)
     }
-
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/app/home'
-    await router.push(redirect)
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : t('login.loginFailed')
+    // any login error → clear password, show captcha for retry
+    if (mode.value === 'login') {
+      password.value = ''
+      showCaptcha.value = true
+      await loadCaptcha()
+    }
   } finally {
     pending.value = false
   }
@@ -72,6 +128,15 @@ async function submit() {
           <span>{{ t('login.password') }}</span>
           <input v-model="password" class="text-control" type="password" autocomplete="current-password" required />
         </label>
+
+        <div v-if="showCaptcha" class="login-field">
+          <span>{{ t('login.captchaLabel') }}</span>
+          <div class="captcha-input-row">
+            <input v-model="captchaInput" class="text-control captcha-code-input" type="text" maxlength="4" autocomplete="off" />
+            <img v-if="captcha" class="captcha-thumb" :src="captcha.captchaImage" :alt="t('login.captchaAlt')" @click="loadCaptcha" title="点击刷新验证码" />
+            <span v-else class="captcha-loading">···</span>
+          </div>
+        </div>
 
         <p v-if="errorMessage" class="login-error">{{ errorMessage }}</p>
 

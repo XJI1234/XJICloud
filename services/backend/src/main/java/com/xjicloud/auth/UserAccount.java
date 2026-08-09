@@ -29,6 +29,9 @@ public class UserAccount {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    @Column(nullable = false)
+    private int loginCount = 0;
+
     public UUID getId() {
         return id;
     }
@@ -67,5 +70,13 @@ public class UserAccount {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public int getLoginCount() {
+        return loginCount;
+    }
+
+    public void setLoginCount(int loginCount) {
+        this.loginCount = loginCount;
     }
 }
