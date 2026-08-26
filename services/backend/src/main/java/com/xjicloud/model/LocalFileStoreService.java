@@ -14,7 +14,10 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,6 +43,8 @@ public class LocalFileStoreService {
             }
             """;
 
+    private static final Logger log = LoggerFactory.getLogger(LocalFileStoreService.class);
+
     private final StorageProperties storageProperties;
     private Path storageRoot;
 
@@ -61,6 +66,33 @@ public class LocalFileStoreService {
                 .resolve(project.getId().toString())
                 .resolve("models")
                 .resolve(modelId.toString());
+    }
+
+    /** 删除整个工程目录（含所有模型文件与 viewer.json） */
+    public void deleteProjectDirectory(UserAccount user, Project project) {
+        Path projectDir = storageRoot
+                .resolve("users")
+                .resolve(user.getId().toString())
+                .resolve("projects")
+                .resolve(project.getId().toString());
+        deleteRecursively(projectDir);
+    }
+
+    private void deleteRecursively(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return;
+        }
+        try (var stream = Files.walk(path)) {
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException e) {
+                    log.warn("Failed to delete file {}: {}", p, e.getMessage());
+                }
+            });
+        } catch (IOException e) {
+            log.warn("Failed to walk directory {}: {}", path, e.getMessage());
+        }
     }
 
     public Path modelFilePath(UserAccount user, Project project, UUID modelId, String fileName) {

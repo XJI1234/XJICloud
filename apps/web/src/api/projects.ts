@@ -17,3 +17,16 @@ export function createProject(name: string, description = '') {
     body: JSON.stringify({ name, description }),
   })
 }
+
+export function updateProject(projectId: string, name?: string, description?: string) {
+  return apiRequest<ProjectSummary>(`/api/v1/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name, description }),
+  })
+}
+
+export function deleteProject(projectId: string) {
+  return apiRequest<void>(`/api/v1/projects/${projectId}`, {
+    method: 'DELETE',
+  })
+}

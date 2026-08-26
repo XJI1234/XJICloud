@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { ApiError } from '@/api/client'
 import {
+  cancelJob as cancelJobApi,
+  deleteJob as deleteJobApi,
   getJob,
   listProjectJobs,
   subscribeJobEvents,
@@ -79,6 +81,19 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     return job
   }
 
+  async function cancelJob(jobId: string) {
+    const job = await cancelJobApi(jobId)
+    upsertJob(job)
+    stopWatching(jobId)
+    return job
+  }
+
+  async function deleteJob(jobId: string) {
+    await deleteJobApi(jobId)
+    jobs.value = jobs.value.filter((item) => item.id !== jobId)
+    stopWatching(jobId)
+  }
+
   function clearSubscriptions() {
     for (const unsubscribe of activeSubscriptions.values()) {
       unsubscribe()
@@ -102,6 +117,8 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     watchJob,
     stopWatching,
     refreshJob,
+    cancelJob,
+    deleteJob,
     clearSubscriptions,
     resetOnLogout,
   }

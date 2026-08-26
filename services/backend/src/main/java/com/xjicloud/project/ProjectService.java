@@ -2,8 +2,16 @@ package com.xjicloud.project;
 
 import com.xjicloud.auth.UserAccount;
 import com.xjicloud.common.BusinessException;
+import com.xjicloud.job.DatasetAssetRepository;
+import com.xjicloud.job.TrainingJob;
+import com.xjicloud.job.TrainingJobRepository;
+import com.xjicloud.model.LocalFileStoreService;
+import com.xjicloud.model.ModelAsset;
+import com.xjicloud.model.ModelAssetRepository;
+import com.xjicloud.model.ViewerConfigRepository;
 import com.xjicloud.project.dto.CreateProjectRequest;
 import com.xjicloud.project.dto.ProjectResponse;
+import com.xjicloud.project.dto.UpdateProjectRequest;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -14,9 +22,26 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProjectService {
 
     private final ProjectRepository projectRepository;
+    private final ModelAssetRepository modelAssetRepository;
+    private final ViewerConfigRepository viewerConfigRepository;
+    private final TrainingJobRepository trainingJobRepository;
+    private final DatasetAssetRepository datasetAssetRepository;
+    private final LocalFileStoreService localFileStoreService;
 
-    public ProjectService(ProjectRepository projectRepository) {
+    public ProjectService(
+            ProjectRepository projectRepository,
+            ModelAssetRepository modelAssetRepository,
+            ViewerConfigRepository viewerConfigRepository,
+            TrainingJobRepository trainingJobRepository,
+            DatasetAssetRepository datasetAssetRepository,
+            LocalFileStoreService localFileStoreService
+    ) {
         this.projectRepository = projectRepository;
+        this.modelAssetRepository = modelAssetRepository;
+        this.viewerConfigRepository = viewerConfigRepository;
+        this.trainingJobRepository = trainingJobRepository;
+        this.datasetAssetRepository = datasetAssetRepository;
+        this.localFileStoreService = localFileStoreService;
     }
 
     public List<ProjectResponse> listProjects(UserAccount user) {
@@ -33,6 +58,40 @@ public class ProjectService {
         project.setDescription(request.description() != null ? request.description().trim() : "");
         projectRepository.save(project);
         return toResponse(project);
+    }
+
+    @Transactional
+    public ProjectResponse updateProject(UserAccount user, UUID projectId, UpdateProjectRequest request) {
+        Project project = requireOwnedProject(user, projectId);
+        if (request.name() != null && !request.name().isBlank()) {
+            project.setName(request.name().trim());
+        }
+        if (request.description() != null) {
+            project.setDescription(request.description().trim());
+        }
+        projectRepository.save(project);
+        return toResponse(project);
+    }
+
+    /** 删除工程：级联清理模型、viewer 配置、训练任务、数据集记录与磁盘文件 */
+    @Transactional
+    public void deleteProject(UserAccount user, UUID projectId) {
+        Project project = requireOwnedProject(user, projectId);
+
+        List<ModelAsset> models = modelAssetRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
+        for (ModelAsset model : models) {
+            viewerConfigRepository.deleteById(model.getId());
+        }
+        modelAssetRepository.deleteByProjectId(projectId);
+
+        List<TrainingJob> jobs = trainingJobRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
+        for (TrainingJob job : jobs) {
+            datasetAssetRepository.deleteByJobId(job.getId());
+        }
+        trainingJobRepository.deleteByProjectId(projectId);
+
+        localFileStoreService.deleteProjectDirectory(user, project);
+        projectRepository.delete(project);
     }
 
     public Project requireOwnedProject(UserAccount user, UUID projectId) {

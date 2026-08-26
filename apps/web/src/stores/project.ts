@@ -85,6 +85,26 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  async function updateProject(projectId: string, name?: string, description?: string) {
+    const updated = await projectsApi.updateProject(projectId, name, description)
+    const index = projects.value.findIndex((project) => project.id === projectId)
+    if (index >= 0) {
+      projects.value[index] = updated
+    }
+    return updated
+  }
+
+  async function deleteProject(projectId: string) {
+    await projectsApi.deleteProject(projectId)
+    projects.value = projects.value.filter((project) => project.id !== projectId)
+    if (activeProjectId.value === projectId) {
+      activeProjectId.value = null
+      localStorage.removeItem('xjicloud_active_project_id')
+    }
+    recentEntries.value = recentEntries.value.filter((entry) => entry.id !== projectId)
+    writeRecentEntries(recentEntries.value)
+  }
+
   function openProject(projectId: string) {
     setActiveProject(projectId)
   }
@@ -106,6 +126,8 @@ export const useProjectStore = defineStore('project', () => {
     loading,
     fetchProjects,
     createProject,
+    updateProject,
+    deleteProject,
     setActiveProject,
     openProject,
     recordRecentAccess,

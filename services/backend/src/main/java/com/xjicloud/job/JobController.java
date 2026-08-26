@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -72,5 +73,22 @@ public class JobController {
     ) {
         trainingJobService.getJob(user, jobId);
         return jobProgressSseService.subscribe(jobId);
+    }
+
+    @PostMapping("/jobs/{jobId}/cancel")
+    public ApiResponse<JobResponse> cancelJob(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID jobId
+    ) {
+        return ApiResponse.ok(trainingJobService.cancelOwnedJob(user, jobId));
+    }
+
+    @DeleteMapping("/jobs/{jobId}")
+    public ApiResponse<Void> deleteJob(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID jobId
+    ) {
+        trainingJobService.deleteOwnedJob(user, jobId);
+        return ApiResponse.ok(null);
     }
 }

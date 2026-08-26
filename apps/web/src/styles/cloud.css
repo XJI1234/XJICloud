@@ -1529,6 +1529,99 @@
   white-space: nowrap;
 }
 
+.side-button--danger {
+  border-color: rgba(232, 160, 160, 0.4);
+  color: #e8a0a0;
+}
+
+.side-button--danger:hover {
+  border-color: #e8a0a0;
+  background: rgba(232, 160, 160, 0.12);
+  color: #f0c0c0;
+}
+
+.project-list-edit {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.project-list-edit__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Help page */
+.help-page {
+  height: 100%;
+  overflow: auto;
+  padding: clamp(20px, 4vw, 48px) clamp(20px, 5vw, 80px);
+  max-width: 1280px;
+}
+
+.help-title {
+  margin: 8px 0;
+  font-size: clamp(1.5rem, 2.5vw + 0.5rem, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.help-subtitle {
+  margin: 0 0 24px;
+  color: var(--cloud-text-muted);
+  font-size: var(--cloud-font-body);
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.help-card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--cloud-text-muted);
+  font-size: var(--cloud-font-body);
+  line-height: 1.6;
+}
+
+.help-text {
+  margin: 0;
+  color: var(--cloud-text-muted);
+  font-size: var(--cloud-font-body);
+  line-height: 1.7;
+}
+
+.help-shortcuts {
+  padding-left: 0;
+  list-style: none;
+}
+
+.help-shortcuts kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--cloud-border-strong);
+  border-radius: var(--cloud-radius);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--cloud-text);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+
 .projects-current-title {
   margin: 8px 0;
   font-size: clamp(1.5rem, 2.5vw + 0.5rem, 2rem);

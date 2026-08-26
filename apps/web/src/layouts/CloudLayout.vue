@@ -157,7 +157,7 @@ const isImmersiveRoute = computed(() => route.name === 'home')
           <span class="cloud-header-tool-button__label">{{ t('header.language') }}</span>
         </button>
 
-        <button class="cloud-header-tool-button" type="button" @click="showComingSoon('header.help')">
+        <button class="cloud-header-tool-button" type="button" @click="navigate('/app/help')">
           <span class="cloud-header-tool-button__icon">
             <ToolIcon name="help" />
           </span>
