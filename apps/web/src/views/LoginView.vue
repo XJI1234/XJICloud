@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { getCaptcha, type CaptchaResponse } from '@/api/auth'
+import { getCaptcha, needCaptcha, type CaptchaResponse } from '@/api/auth'
 import { ApiError } from '@/api/client'
 
 const authStore = useAuthStore()
@@ -31,14 +31,40 @@ async function loadCaptcha() {
   }
 }
 
+async function ensureCaptchaShown() {
+  showCaptcha.value = true
+  if (!captcha.value) {
+    await loadCaptcha()
+  }
+}
+
+async function checkNeedCaptcha() {
+  if (mode.value !== 'login') {
+    return
+  }
+  const name = username.value.trim()
+  if (!name) {
+    return
+  }
+  try {
+    const result = await needCaptcha(name)
+    if (result.needCaptcha) {
+      await ensureCaptchaShown()
+    }
+  } catch {
+    // ignore probe failures; login will still enforce captcha server-side
+  }
+}
+
 watch(mode, async (m) => {
   errorMessage.value = ''
   captchaInput.value = ''
   if (m === 'register') {
-    showCaptcha.value = true
-    await loadCaptcha()
+    await ensureCaptchaShown()
   } else {
     showCaptcha.value = false
+    captcha.value = null
+    await checkNeedCaptcha()
   }
 })
 
@@ -49,19 +75,36 @@ async function submit() {
     return
   }
 
-  if (showCaptcha.value && !captchaInput.value.trim()) {
-    errorMessage.value = t('login.captchaRequired')
-    return
+  if (mode.value === 'login') {
+    await checkNeedCaptcha()
+  }
+
+  if (showCaptcha.value) {
+    if (!captcha.value) {
+      errorMessage.value = t('login.captchaLoadFailed')
+      await loadCaptcha()
+      return
+    }
+    if (!captchaInput.value.trim()) {
+      errorMessage.value = t('login.captchaRequired')
+      return
+    }
   }
 
   pending.value = true
   try {
     if (mode.value === 'register') {
+      const captchaPayload = captcha.value
+      if (!captchaPayload) {
+        errorMessage.value = t('login.captchaLoadFailed')
+        await loadCaptcha()
+        return
+      }
       await authStore.register(
         username.value.trim(),
         password.value,
         displayName.value.trim() || undefined,
-        captcha.value!.captchaKey,
+        captchaPayload.captchaKey,
         captchaInput.value.trim(),
       )
       authStore.logout()
@@ -81,10 +124,9 @@ async function submit() {
     }
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : t('login.loginFailed')
-    // any login error → clear password, show captcha for retry
-    if (mode.value === 'login') {
-      password.value = ''
-      showCaptcha.value = true
+    password.value = ''
+    if (mode.value === 'login' || mode.value === 'register') {
+      await ensureCaptchaShown()
       await loadCaptcha()
     }
   } finally {
@@ -116,7 +158,14 @@ async function submit() {
       <form class="login-form" @submit.prevent="submit">
         <label class="login-field">
           <span>{{ t('login.username') }}</span>
-          <input v-model="username" class="text-control" type="text" autocomplete="username" required />
+          <input
+            v-model="username"
+            class="text-control"
+            type="text"
+            autocomplete="username"
+            required
+            @blur="checkNeedCaptcha"
+          />
         </label>
 
         <label v-if="mode === 'register'" class="login-field">
@@ -133,7 +182,14 @@ async function submit() {
           <span>{{ t('login.captchaLabel') }}</span>
           <div class="captcha-input-row">
             <input v-model="captchaInput" class="text-control captcha-code-input" type="text" maxlength="4" autocomplete="off" />
-            <img v-if="captcha" class="captcha-thumb" :src="captcha.captchaImage" :alt="t('login.captchaAlt')" @click="loadCaptcha" title="点击刷新验证码" />
+            <img
+              v-if="captcha"
+              class="captcha-thumb"
+              :src="captcha.captchaImage"
+              :alt="t('login.captchaAlt')"
+              :title="t('login.captchaRefresh')"
+              @click="loadCaptcha"
+            />
             <span v-else class="captcha-loading">···</span>
           </div>
         </div>

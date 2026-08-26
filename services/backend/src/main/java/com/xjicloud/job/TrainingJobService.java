@@ -216,6 +216,12 @@ public class TrainingJobService {
         return toResponse(job);
     }
 
+    /**
+     * 取消任务：写 CANCELLED 并从 Redis 队列移除。
+     *
+     * FIXME(H2): RUNNING 任务取消后，Worker 仍可能通过 markCompleted/updateProgress
+     * 覆盖终态。GPU Worker 中断协议未确认前暂不拦截 Worker 回写。
+     */
     @Transactional
     public JobResponse cancelJob(UUID jobId) {
         TrainingJob job = requireJob(jobId);

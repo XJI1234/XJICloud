@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import i18n from '@/i18n'
 import { ApiError } from '@/api/client'
 import {
   cancelJob as cancelJobApi,
@@ -23,7 +24,9 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     try {
       jobs.value = await listProjectJobs(projectId)
     } catch (error) {
-      errorMessage.value = error instanceof ApiError ? error.message : '加载训练任务失败'
+      errorMessage.value = error instanceof ApiError
+        ? error.message
+        : String(i18n.global.t('training.loadJobsFailed'))
       throw error
     } finally {
       loading.value = false

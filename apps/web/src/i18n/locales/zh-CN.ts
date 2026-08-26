@@ -64,6 +64,7 @@ export default {
     captchaLabel: '验证码',
     captchaRequired: '请输入验证码',
     captchaLoadFailed: '验证码加载失败，请重试',
+    captchaRefresh: '点击刷新验证码',
   },
   home: {
     newProject: '新建项目',
@@ -158,6 +159,7 @@ export default {
     refresh: '刷新',
     openProjectFirst: '请先打开项目以查看训练任务。',
     noJobs: '暂无训练任务。',
+    loadJobsFailed: '加载训练任务失败',
     deleteRecord: '删除记录',
     deleteRecordFeature: '删除上传记录',
     cancelRecord: '取消任务',

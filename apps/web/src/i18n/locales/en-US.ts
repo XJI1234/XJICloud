@@ -64,6 +64,7 @@ export default {
     captchaLabel: 'Verification Code',
     captchaRequired: 'Please enter the verification code',
     captchaLoadFailed: 'Failed to load CAPTCHA. Please try again.',
+    captchaRefresh: 'Click to refresh CAPTCHA',
   },
   home: {
     newProject: 'New Project',
@@ -158,6 +159,7 @@ export default {
     refresh: 'Refresh',
     openProjectFirst: 'Open a project to view training jobs.',
     noJobs: 'No training jobs yet.',
+    loadJobsFailed: 'Failed to load training jobs',
     deleteRecord: 'Delete Record',
     cancelRecord: 'Cancel Job',
     cancelConfirm: 'Cancel this training job?',

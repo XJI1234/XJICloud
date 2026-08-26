@@ -5,7 +5,10 @@ import com.xjicloud.auth.dto.LoginRequest;
 import com.xjicloud.auth.dto.RegisterRequest;
 import com.xjicloud.common.BusinessException;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,6 +20,20 @@ public class AuthService {
 
     private static final String FAIL_COUNT_PREFIX = "xjicloud:login-fail:";
     private static final Duration FAIL_TTL = Duration.ofMinutes(15);
+
+    /**
+     * Atomically INCR and set TTL on first hit so the fail-count key never becomes permanent.
+     */
+    private static final DefaultRedisScript<Long> FAIL_INCR_SCRIPT = new DefaultRedisScript<>(
+            """
+            local n = redis.call('INCR', KEYS[1])
+            if n == 1 then
+              redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return n
+            """,
+            Long.class
+    );
 
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
@@ -40,6 +57,9 @@ public class AuthService {
 
     /** 该用户最近是否有过密码错误 → 需要验证码 */
     public boolean needCaptcha(String username) {
+        if (username == null || username.isBlank()) {
+            return false;
+        }
         String key = FAIL_COUNT_PREFIX + username.trim();
         String val = redisTemplate.opsForValue().get(key);
         try {
@@ -47,6 +67,10 @@ public class AuthService {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    public Map<String, Boolean> needCaptchaResponse(String username) {
+        return Map.of("needCaptcha", needCaptcha(username));
     }
 
     public void validateCaptcha(String captchaKey, String captchaCode) {
@@ -68,7 +92,6 @@ public class AuthService {
                 ? request.displayName().trim()
                 : request.username().trim();
         user.setDisplayName(displayName);
-        user.setLoginCount(0);
         userAccountRepository.save(user);
         return buildAuthResponse(user);
     }
@@ -84,18 +107,17 @@ public class AuthService {
             throw new BadCredentialsException("用户名或密码错误");
         }
 
-        // 密码正确 → 清除失败计数
         clearFailCount(request.username().trim());
-
-        user.setLoginCount(user.getLoginCount() + 1);
-        userAccountRepository.save(user);
         return buildAuthResponse(user);
     }
 
     private void incrementFailCount(String username) {
         String key = FAIL_COUNT_PREFIX + username;
-        redisTemplate.opsForValue().increment(key);
-        redisTemplate.expire(key, FAIL_TTL);
+        redisTemplate.execute(
+                FAIL_INCR_SCRIPT,
+                List.of(key),
+                String.valueOf(FAIL_TTL.toSeconds())
+        );
     }
 
     private void clearFailCount(String username) {
