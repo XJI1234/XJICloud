@@ -87,7 +87,7 @@ function goToViewer() {
 
     <div class="upload-tabs" role="tablist">
       <button
-        class="upload-tab"
+        class="upload-tab cloud-pressable"
         :class="{ 'upload-tab--active': activeTab === 'dataset' }"
         type="button"
         role="tab"
@@ -97,7 +97,7 @@ function goToViewer() {
         {{ t('upload.tabDataset') }}
       </button>
       <button
-        class="upload-tab"
+        class="upload-tab cloud-pressable"
         :class="{ 'upload-tab--active': activeTab === 'model' }"
         type="button"
         role="tab"
@@ -126,10 +126,10 @@ function goToViewer() {
           </p>
 
           <div class="upload-actions">
-            <button class="side-button primary" type="button" :disabled="pending" @click="triggerUpload">
+            <button class="side-button primary cloud-pressable" type="button" :disabled="pending" @click="triggerUpload">
               {{ pending ? t('common.uploading') : t('upload.selectFileUpload') }}
             </button>
-            <button class="side-button" type="button" @click="goToViewer">{{ t('upload.goToViewer') }}</button>
+            <button class="side-button cloud-pressable" type="button" @click="goToViewer">{{ t('upload.goToViewer') }}</button>
           </div>
 
           <p v-if="statusMessage" class="upload-status">{{ statusMessage }}</p>
@@ -141,7 +141,7 @@ function goToViewer() {
     <section v-else class="upload-empty-card section-card">
       <h3 class="section-title">{{ t('upload.noProjectOpen') }}</h3>
       <p class="upload-empty-text">{{ t('upload.noProjectOpenHint') }}</p>
-      <button class="side-button primary" type="button" @click="goToProjects">{{ t('upload.goToProjects') }}</button>
+      <button class="side-button primary cloud-pressable" type="button" @click="goToProjects">{{ t('upload.goToProjects') }}</button>
     </section>
 
     <input

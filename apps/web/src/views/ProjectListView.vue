@@ -148,11 +148,11 @@ async function saveEdit(projectId: string) {
             </p>
           </template>
         </div>
-        <button class="side-button side-button--inline" type="button" @click="goHome">{{ t('projects.backHome') }}</button>
+        <button class="side-button side-button--inline cloud-pressable" type="button" @click="goHome">{{ t('projects.backHome') }}</button>
       </div>
 
       <div v-if="projectStore.activeProject" class="projects-current-actions">
-        <button class="side-button primary" type="button" :disabled="pending" @click="triggerUpload">
+        <button class="side-button primary cloud-pressable" type="button" :disabled="pending" @click="triggerUpload">
           {{ pending ? t('common.uploading') : t('projects.uploadModel') }}
         </button>
       </div>
@@ -163,7 +163,7 @@ async function saveEdit(projectId: string) {
       <div class="projects-create-grid">
         <input v-model="newProjectName" class="text-control" type="text" :placeholder="t('projects.projectNamePlaceholder')" />
         <input v-model="newProjectDescription" class="text-control" type="text" :placeholder="t('projects.projectDescPlaceholder')" />
-        <button class="side-button primary" type="button" @click="createProject">{{ t('projects.createProjectBtn') }}</button>
+        <button class="side-button primary cloud-pressable" type="button" @click="createProject">{{ t('projects.createProjectBtn') }}</button>
       </div>
     </section>
 
@@ -177,7 +177,7 @@ async function saveEdit(projectId: string) {
       <div
         v-for="project in projectStore.projects"
         :key="project.id"
-        class="project-list-row"
+        class="project-list-row cloud-pressable"
         :class="{ 'is-active': projectStore.activeProjectId === project.id }"
       >
         <template v-if="editingProjectId === project.id">
@@ -192,7 +192,7 @@ async function saveEdit(projectId: string) {
         </template>
         <template v-else>
           <button
-            class="project-list-row__select"
+            class="project-list-row__select cloud-pressable"
             type="button"
             @click="selectProject(project.id)"
           >
