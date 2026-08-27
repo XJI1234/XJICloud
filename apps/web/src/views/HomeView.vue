@@ -6,6 +6,7 @@ import CloudSheet from '@/components/CloudSheet.vue'
 import { useProjectStore } from '@/stores/project'
 import { ApiError } from '@/api/client'
 import { useFormatDateTime } from '@/composables/useAppLocale'
+import { showComingSoon } from '@/utils/comingSoon'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -102,26 +103,64 @@ function openRecentProject(projectId: string) {
         <p v-if="errorMessage && !createDialogVisible && !openDialogVisible" class="home-error">{{ errorMessage }}</p>
       </div>
 
-      <aside class="home-visual" aria-label="Recent projects">
-        <div class="home-visual__plane" aria-hidden="true" />
-        <div class="home-recent-rail">
-          <h2 class="home-recent-title">{{ t('home.recentProjects', { count: projectStore.recentProjects.length }) }}</h2>
-          <p v-if="projectStore.loading" class="home-recent-empty">{{ t('common.loading') }}</p>
-          <p v-else-if="projectStore.recentProjects.length === 0" class="home-recent-empty">{{ t('home.noRecentProjects') }}</p>
-          <ul v-else class="home-recent-list">
-            <li v-for="project in projectStore.recentProjects" :key="project.id">
-              <button class="home-recent-card cloud-pressable" type="button" @click="openRecentProject(project.id)">
-                <p class="home-recent-card__name">{{ project.name }}</p>
-                <p class="home-recent-card__desc">{{ project.description || t('common.noDescription') }}</p>
-                <p class="home-recent-card__meta">
-                  {{ t('home.lastOpened', { date: formatDateTime(project.openedAt) }) }}
-                </p>
-              </button>
-            </li>
-          </ul>
-        </div>
+      <aside class="home-visual" :aria-label="t('home.featureTitle')">
+        <article class="home-feature-card">
+          <div class="home-feature-card__copy">
+            <p class="home-feature-eyebrow">{{ t('home.featureEyebrow') }}</p>
+            <h2 class="home-feature-title">{{ t('home.featureTitle') }}</h2>
+            <p class="home-feature-desc">{{ t('home.featureDesc') }}</p>
+            <button
+              class="home-primary-button home-feature-cta cloud-pressable"
+              type="button"
+              @click="showComingSoon('tools.routePlanning')"
+            >
+              {{ t('home.featureCta') }}
+            </button>
+          </div>
+          <div class="home-feature-card__scene" aria-hidden="true">
+            <div class="home-feature-scene">
+              <div class="home-feature-scene__platform" />
+              <div class="home-feature-scene__buildings">
+                <span class="home-feature-scene__building home-feature-scene__building--a" />
+                <span class="home-feature-scene__building home-feature-scene__building--b" />
+                <span class="home-feature-scene__building home-feature-scene__building--c" />
+              </div>
+              <svg class="home-feature-scene__orbit" viewBox="0 0 240 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse
+                  class="home-feature-scene__orbit-path"
+                  cx="120"
+                  cy="78"
+                  rx="98"
+                  ry="42"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-dasharray="6 5"
+                />
+                <circle class="home-feature-scene__drone" cx="218" cy="78" r="4" fill="currentColor" />
+              </svg>
+            </div>
+            <p class="home-feature-scene__caption">{{ t('home.featureSceneCaption') }}</p>
+          </div>
+        </article>
       </aside>
     </div>
+
+    <section class="home-recent-section" :aria-label="t('home.recentProjects', { count: projectStore.recentProjects.length })">
+      <h2 class="home-recent-title">{{ t('home.recentProjects', { count: projectStore.recentProjects.length }) }}</h2>
+      <p v-if="projectStore.loading" class="home-recent-empty">{{ t('common.loading') }}</p>
+      <p v-else-if="projectStore.recentProjects.length === 0" class="home-recent-empty">{{ t('home.noRecentProjects') }}</p>
+      <ul v-else class="home-recent-list">
+        <li v-for="project in projectStore.recentProjects" :key="project.id">
+          <button class="home-recent-card cloud-pressable" type="button" @click="openRecentProject(project.id)">
+            <p class="home-recent-card__name">{{ project.name }}</p>
+            <p class="home-recent-card__desc">{{ project.description || t('common.noDescription') }}</p>
+            <p class="home-recent-card__meta">
+              {{ t('home.lastOpened', { date: formatDateTime(project.openedAt) }) }}
+            </p>
+          </button>
+        </li>
+      </ul>
+    </section>
 
     <CloudSheet
       :visible="createDialogVisible"

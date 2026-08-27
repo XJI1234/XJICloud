@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getCaptcha, needCaptcha, type CaptchaResponse } from '@/api/auth'
 import { ApiError } from '@/api/client'
+import { showComingSoon } from '@/utils/comingSoon'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -15,6 +16,8 @@ const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
 const displayName = ref('')
+const phone = ref('')
+const smsCode = ref('')
 const errorMessage = ref('')
 const pending = ref(false)
 
@@ -191,6 +194,39 @@ async function submit() {
               @click="loadCaptcha"
             />
             <span v-else class="captcha-loading">···</span>
+          </div>
+        </div>
+
+        <label class="login-field">
+          <span>{{ t('login.phone') }}</span>
+          <input
+            v-model="phone"
+            class="text-control"
+            type="tel"
+            inputmode="tel"
+            autocomplete="tel"
+            :placeholder="t('login.phone')"
+          />
+        </label>
+
+        <div class="login-field">
+          <span>{{ t('login.smsCode') }}</span>
+          <div class="login-sms-row">
+            <input
+              v-model="smsCode"
+              class="text-control"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              :placeholder="t('login.smsCode')"
+            />
+            <button
+              class="side-button cloud-pressable login-sms-send"
+              type="button"
+              @click="showComingSoon('login.smsCodeFeature')"
+            >
+              {{ t('login.sendSmsCode') }}
+            </button>
           </div>
         </div>
 

@@ -61,6 +61,15 @@ function triggerUpload() {
   uploadInputRef.value?.click()
 }
 
+function triggerCloudUpload() {
+  if (!projectStore.activeProject) {
+    errorMessage.value = t('projects.selectProjectFirst')
+    return
+  }
+
+  showComingSoon('projects.cloudModelUploadFeature')
+}
+
 async function handleUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -153,7 +162,10 @@ async function saveEdit(projectId: string) {
 
       <div v-if="projectStore.activeProject" class="projects-current-actions">
         <button class="side-button primary cloud-pressable" type="button" :disabled="pending" @click="triggerUpload">
-          {{ pending ? t('common.uploading') : t('projects.uploadModel') }}
+          {{ pending ? t('common.uploading') : t('projects.uploadLocalModel') }}
+        </button>
+        <button class="side-button cloud-pressable" type="button" :disabled="pending" @click="triggerCloudUpload">
+          {{ t('projects.uploadCloudModel') }}
         </button>
       </div>
     </section>
