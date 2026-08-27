@@ -77,6 +77,18 @@ export function getJob(jobId: string) {
   return apiRequest<JobResponse>(`/api/v1/jobs/${jobId}`)
 }
 
+export function cancelJob(jobId: string) {
+  return apiRequest<JobResponse>(`/api/v1/jobs/${jobId}/cancel`, {
+    method: 'POST',
+  })
+}
+
+export function deleteJob(jobId: string) {
+  return apiRequest<void>(`/api/v1/jobs/${jobId}`, {
+    method: 'DELETE',
+  })
+}
+
 export function putToOss(
   uploadUrl: string,
   blob: Blob,

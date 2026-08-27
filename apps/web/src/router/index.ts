@@ -50,6 +50,11 @@ const router = createRouter({
           component: () => import('@/views/SuperSplatEditorView.vue'),
           meta: { immersive: true },
         },
+        {
+          path: 'help',
+          name: 'help',
+          component: () => import('@/views/HelpView.vue'),
+        },
       ],
     },
   ],
