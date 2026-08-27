@@ -2,7 +2,7 @@
   "name": "xjicloud",
   "private": true,
   "version": "1.0.0",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@11.18.0",
   "scripts": {
     "dev": "pnpm --filter @xjicloud/web dev",
     "dev:web": "pnpm --filter @xjicloud/web dev",
@@ -14,8 +14,5 @@
     "build:wasm": "node rust/build_wasm.js",
     "copy:supersplat": "node scripts/copy-supersplat-dist.mjs",
     "preview": "pnpm --filter @xjicloud/web preview"
-  },
-  "dependencies": {
-    "pnpm": "^11.18.0"
   }
 }

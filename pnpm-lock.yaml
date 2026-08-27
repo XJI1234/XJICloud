@@ -6,11 +6,7 @@ settings:
 
 importers:
 
-  .:
-    dependencies:
-      pnpm:
-        specifier: ^11.18.0
-        version: 11.18.0
+  .: {}
 
   apps/admin:
     dependencies:
@@ -537,11 +533,6 @@ packages:
       typescript:
         optional: true
 
-  pnpm@11.18.0:
-    resolution: {integrity: sha512-M9g8d9qC9J+6g2klxvG4QRgewxMrZwY5vQEvcHX1x89jTF+HAUfBmq50ePrAHfCdiJLogEVIlu3SPumzN1dWPA==}
-    engines: {node: '>=22.13'}
-    hasBin: true
-
   postcss@8.5.25:
     resolution: {integrity: sha512-DTPx3RWSSnWyzLxQnlH0rJP+EW5ekl16ZU4/psbIhA0e53kJfdgaN5vKM+xP7yJtXVu+nfdVFmlgFDEKAe4Pyw==}
     engines: {node: ^10 || ^12 || >=14}
@@ -1017,8 +1008,6 @@ snapshots:
       typescript: 6.0.3
     transitivePeerDependencies:
       - '@vue/composition-api'
-
-  pnpm@11.18.0: {}
 
   postcss@8.5.25:
     dependencies:
