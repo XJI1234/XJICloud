@@ -2,6 +2,7 @@
 /**
  * Animated hero: building footprints light up while a planned orbit/facade
  * route traces around them — stands in for a route-planning demo GIF.
+ * Palette follows the web2 light shell (slate buildings, steel-blue route).
  */
 </script>
 
@@ -11,24 +12,24 @@
     <svg class="route-hero__svg" viewBox="0 0 640 520" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="wl-building" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#d8e4ef" />
-          <stop offset="55%" stop-color="#9eb4c8" />
-          <stop offset="100%" stop-color="#6a8499" />
+          <stop offset="0%" stop-color="#f4f7fa" />
+          <stop offset="55%" stop-color="#c5d2de" />
+          <stop offset="100%" stop-color="#8fa3b5" />
         </linearGradient>
         <linearGradient id="wl-route" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#1a8f7a" />
-          <stop offset="50%" stop-color="#3dcdc0" />
-          <stop offset="100%" stop-color="#1a6fb5" />
+          <stop offset="0%" stop-color="#2f6f4e" />
+          <stop offset="45%" stop-color="#3d6b8a" />
+          <stop offset="100%" stop-color="#5a8fb0" />
         </linearGradient>
         <filter id="wl-soft" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="6" result="b" />
+          <feGaussianBlur stdDeviation="4" result="b" />
           <feMerge>
             <feMergeNode in="b" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
         <filter id="wl-glow">
-          <feGaussianBlur stdDeviation="3.5" result="blur" />
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -37,14 +38,14 @@
       </defs>
 
       <!-- Ground plane -->
-      <ellipse class="route-hero__ground" cx="320" cy="430" rx="250" ry="48" fill="#3a4652" opacity="0.75" />
+      <ellipse class="route-hero__ground" cx="320" cy="430" rx="250" ry="48" fill="#9aabba" opacity="0.35" />
 
       <!-- Building A (main) -->
       <g class="route-hero__building route-hero__building--a" filter="url(#wl-soft)">
         <polygon points="220,360 360,320 360,160 220,200" fill="url(#wl-building)" />
-        <polygon points="360,320 430,350 430,190 360,160" fill="#7f96aa" />
-        <polygon points="220,200 360,160 430,190 290,230" fill="#e8f0f6" />
-        <g class="route-hero__windows" stroke="#eef5fb" stroke-width="1.2" opacity="0.7">
+        <polygon points="360,320 430,350 430,190 360,160" fill="#9eb0c0" />
+        <polygon points="220,200 360,160 430,190 290,230" fill="#ffffff" />
+        <g class="route-hero__windows" stroke="#e8eef3" stroke-width="1.2" opacity="0.85">
           <line x1="245" y1="230" x2="245" y2="340" />
           <line x1="275" y1="220" x2="275" y2="330" />
           <line x1="305" y1="210" x2="305" y2="320" />
@@ -54,20 +55,20 @@
 
       <!-- Building B -->
       <g class="route-hero__building route-hero__building--b" filter="url(#wl-soft)">
-        <polygon points="120,390 200,365 200,250 120,275" fill="#a8bac9" />
-        <polygon points="200,365 245,385 245,270 200,250" fill="#7d92a5" />
-        <polygon points="120,275 200,250 245,270 165,295" fill="#d7e3ed" />
+        <polygon points="120,390 200,365 200,250 120,275" fill="#d0dbe6" />
+        <polygon points="200,365 245,385 245,270 200,250" fill="#a0b2c2" />
+        <polygon points="120,275 200,250 245,270 165,295" fill="#f7fafc" />
       </g>
 
       <!-- Building C -->
       <g class="route-hero__building route-hero__building--c" filter="url(#wl-soft)">
-        <polygon points="430,380 520,350 520,240 430,270" fill="#9aafc1" />
-        <polygon points="520,350 560,370 560,260 520,240" fill="#6f869a" />
-        <polygon points="430,270 520,240 560,260 470,290" fill="#d2e0eb" />
+        <polygon points="430,380 520,350 520,240 430,270" fill="#c8d5e1" />
+        <polygon points="520,350 560,370 560,260 520,240" fill="#8fa3b5" />
+        <polygon points="430,270 520,240 560,260 470,290" fill="#f2f6f9" />
       </g>
 
       <!-- Highlight rings on facade targets -->
-      <g class="route-hero__highlights" fill="none" stroke="#1f8f7c" stroke-width="2" filter="url(#wl-glow)">
+      <g class="route-hero__highlights" fill="none" stroke="#3d6b8a" stroke-width="2" filter="url(#wl-glow)">
         <ellipse class="route-hero__pulse" cx="290" cy="250" rx="18" ry="10" />
         <ellipse class="route-hero__pulse route-hero__pulse--delay" cx="480" cy="290" rx="14" ry="8" />
         <ellipse class="route-hero__pulse route-hero__pulse--delay2" cx="175" cy="310" rx="12" ry="7" />
@@ -80,7 +81,7 @@
         fill="none"
         stroke="url(#wl-route)"
         stroke-width="10"
-        opacity="0.22"
+        opacity="0.18"
         stroke-linecap="round"
       />
       <path
@@ -96,7 +97,7 @@
       />
 
       <!-- Waypoints -->
-      <g class="route-hero__waypoints" fill="#1a6fb5" stroke="#fff" stroke-width="1.5">
+      <g class="route-hero__waypoints" fill="#3d6b8a" stroke="#fff" stroke-width="1.5">
         <circle cx="165" cy="300" r="5" />
         <circle cx="250" cy="145" r="5" />
         <circle cx="500" cy="200" r="5" />
@@ -108,8 +109,8 @@
         <animateMotion dur="7s" repeatCount="indefinite" rotate="auto">
           <mpath href="#wl-route-path" />
         </animateMotion>
-        <circle r="7" fill="#1f8f7c" stroke="#fff" stroke-width="2" />
-        <circle r="14" fill="none" stroke="#3dcdc0" stroke-width="1.5" opacity="0.7">
+        <circle r="7" fill="#3d6b8a" stroke="#fff" stroke-width="2" />
+        <circle r="14" fill="none" stroke="#5a8fb0" stroke-width="1.5" opacity="0.7">
           <animate attributeName="r" values="10;18;10" dur="1.6s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="0.8;0.15;0.8" dur="1.6s" repeatCount="indefinite" />
         </circle>
@@ -122,6 +123,7 @@
 <style scoped>
 .route-hero {
   position: relative;
+  z-index: 1;
   width: min(100%, 640px);
   aspect-ratio: 640 / 520;
   margin-inline: auto;
@@ -131,7 +133,7 @@
   position: absolute;
   inset: 12% 8% 8%;
   border-radius: 40% 40% 36% 36%;
-  background: radial-gradient(ellipse at 50% 40%, rgba(61, 205, 192, 0.2), transparent 68%);
+  background: radial-gradient(ellipse at 50% 40%, rgba(61, 107, 138, 0.16), transparent 68%);
   pointer-events: none;
 }
 
@@ -172,11 +174,11 @@
 }
 
 .route-hero__caption {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   text-align: center;
   font-size: 12px;
   letter-spacing: 0.04em;
-  color: rgba(232, 238, 243, 0.45);
+  color: var(--ink-faint, #8b919c);
 }
 
 @keyframes wl-dash {

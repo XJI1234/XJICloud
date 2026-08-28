@@ -71,50 +71,114 @@ function backToGate() {
 
 <template>
   <div class="wayline-page">
-    <button class="wayline-back" type="button" title="返回航线前置页" @click="backToGate">
-      返回
-    </button>
-    <iframe
-      ref="iframeRef"
-      class="wayline-iframe"
-      :src="waylineSrc"
-      title="航线规划"
-      allow="fullscreen"
-      referrerpolicy="no-referrer-when-downgrade"
-    />
-    <p v-if="loading" class="wayline-loading">正在加载航线规划...</p>
-    <p v-else-if="loadError" class="wayline-loading wayline-loading--error">{{ loadError }}</p>
+    <header class="wayline-editor-bar">
+      <button class="wayline-back" type="button" @click="backToGate">
+        <span class="wayline-back__icon" aria-hidden="true">←</span>
+        <span>返回前置页</span>
+      </button>
+      <div class="wayline-editor-bar__meta">
+        <strong>航线规划</strong>
+        <span>三维采样编辑器</span>
+      </div>
+    </header>
+
+    <div class="wayline-stage">
+      <iframe
+        ref="iframeRef"
+        class="wayline-iframe"
+        :src="waylineSrc"
+        title="航线规划"
+        allow="fullscreen"
+        referrerpolicy="no-referrer-when-downgrade"
+      />
+      <p v-if="loading" class="wayline-loading">正在加载航线规划...</p>
+      <p v-else-if="loadError" class="wayline-loading wayline-loading--error">{{ loadError }}</p>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .wayline-page {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: #0a0b0d;
+  background: var(--surface, #f5f6f8);
+}
+
+.wayline-editor-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line, rgba(28, 31, 36, 0.08));
+  background: var(--elevated, #ffffff);
 }
 
 .wayline-back {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
-  background: rgba(12, 14, 18, 0.72);
-  color: #e8eef3;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--line-strong, rgba(28, 31, 36, 0.14));
+  border-radius: var(--radius-ctrl, 10px);
+  background: transparent;
+  color: var(--ink, #1c1f24);
+  font: inherit;
   font-size: 13px;
+  font-weight: 550;
   cursor: pointer;
-  backdrop-filter: blur(8px);
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .wayline-back:hover {
-  border-color: rgba(61, 205, 192, 0.55);
+  background: var(--accent-soft, rgba(61, 107, 138, 0.12));
+  border-color: var(--accent, #3d6b8a);
+  color: var(--accent, #3d6b8a);
+}
+
+.wayline-back:active {
+  transform: scale(0.97);
+}
+
+.wayline-back__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.wayline-editor-bar__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.wayline-editor-bar__meta strong {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink, #1c1f24);
+}
+
+.wayline-editor-bar__meta span {
+  font-size: 12px;
+  color: var(--ink-muted, #5c6370);
+}
+
+.wayline-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--map-chrome-bg, #dfe7ee);
 }
 
 .wayline-iframe {
@@ -122,7 +186,7 @@ function backToGate() {
   width: 100%;
   height: 100%;
   border: 0;
-  background: #0a0b0d;
+  background: transparent;
 }
 
 .wayline-loading {
@@ -133,15 +197,13 @@ function backToGate() {
   margin: 0;
   padding: 24px;
   text-align: center;
-  color: rgba(232, 238, 243, 0.7);
-  background: rgba(10, 11, 13, 0.78);
+  color: var(--ink-muted, #5c6370);
+  background: color-mix(in srgb, var(--surface, #f5f6f8) 88%, transparent);
   pointer-events: none;
 }
 
 .wayline-loading--error {
-  color: #f0a8a8;
-  max-width: none;
-  place-items: center;
+  color: var(--danger, #b42318);
   line-height: 1.6;
 }
 </style>

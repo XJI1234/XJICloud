@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import AppButton from '@/presentation/components/AppButton.vue'
 import WaylineRouteHero from './components/WaylineRouteHero.vue'
 
 const router = useRouter()
@@ -26,7 +27,7 @@ function enterPlanner() {
 
 <template>
   <div class="wayline-intro">
-    <div class="wayline-intro__panel">
+    <div class="wayline-intro__grid">
       <div class="wayline-intro__copy">
         <p class="wayline-intro__eyebrow">
           <img class="wayline-intro__logo" src="/logo.jpg" alt="" />
@@ -40,12 +41,13 @@ function enterPlanner() {
         <p class="wayline-intro__desc">
           环绕与立面采样、信息增益补拍，为 3D 高斯泼溅采集高质量视角素材。
         </p>
-        <button class="wayline-intro__cta" type="button" @click="enterPlanner">
-          开始规划
-        </button>
+        <div class="wayline-intro__actions">
+          <AppButton variant="primary" @click="enterPlanner">开始规划</AppButton>
+        </div>
       </div>
 
       <div class="wayline-intro__visual">
+        <div class="wayline-intro__visual-mist" aria-hidden="true" />
         <img
           v-if="heroGifReady"
           class="wayline-intro__gif"
@@ -55,45 +57,40 @@ function enterPlanner() {
         <WaylineRouteHero v-else />
       </div>
     </div>
+    <img class="wayline-intro__mark" src="/logo_nw.png" alt="" aria-hidden="true" />
   </div>
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Sora:wght@500;600&display=swap');
-
 .wayline-intro {
-  --intro-accent: #3dcdc0;
-  --intro-accent-deep: #2aa899;
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: clamp(16px, 2.2vw, 28px);
-  overflow: auto;
-  font-family: 'Noto Sans SC', 'Sora', sans-serif;
+  overflow: hidden;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--surface);
 }
 
-.wayline-intro__panel {
-  box-sizing: border-box;
+.wayline-intro__grid {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(240px, 0.92fr) minmax(260px, 1.08fr);
+  grid-template-columns: minmax(240px, 0.95fr) minmax(280px, 1.05fr);
   align-items: center;
-  gap: clamp(20px, 3vw, 40px);
+  gap: clamp(28px, 4.5vw, 56px);
   width: 100%;
-  min-height: min(100%, 640px);
   max-width: 1180px;
+  min-height: min(100%, 640px);
   margin: 0 auto;
-  padding: clamp(20px, 3vw, 36px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background:
-    radial-gradient(ellipse 70% 80% at 88% 42%, rgba(61, 205, 192, 0.1), transparent 58%),
-    linear-gradient(160deg, rgba(30, 34, 42, 0.96), rgba(18, 20, 26, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: clamp(28px, 4.5vw, 48px) clamp(28px, 5vw, 56px) 100px;
 }
 
 .wayline-intro__copy {
   min-width: 0;
+  padding-top: 4px;
 }
 
 .wayline-intro__eyebrow {
@@ -101,10 +98,15 @@ function enterPlanner() {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--elevated);
+  box-shadow: var(--shadow-soft);
   font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.06em;
-  color: var(--intro-accent);
+  letter-spacing: 0.04em;
+  color: var(--accent);
 }
 
 .wayline-intro__logo {
@@ -112,80 +114,103 @@ function enterPlanner() {
   width: 22px;
   height: 22px;
   object-fit: cover;
-  border-radius: 5px;
-  opacity: 0.88;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line);
 }
 
 .wayline-intro__title {
   margin: 0;
   display: grid;
-  gap: 0.06em;
-  font-size: clamp(32px, 4.2vw, 52px);
-  font-weight: 900;
-  line-height: 1.1;
-  letter-spacing: 0.02em;
-  color: #f3f6f8;
+  gap: 0.04em;
+  max-width: 10em;
+  font-size: clamp(2rem, 2.4vw + 1rem, 3rem);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
 .wayline-intro__desc {
   margin: 16px 0 0;
   max-width: 32em;
-  font-size: 14px;
-  line-height: 1.7;
-  color: rgba(232, 238, 243, 0.62);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink-muted);
 }
 
-.wayline-intro__cta {
+.wayline-intro__actions {
+  display: flex;
+  gap: 10px;
   margin-top: 28px;
-  min-width: 148px;
-  min-height: 44px;
-  padding: 0 22px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--intro-accent);
-  color: #0b1214;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: background 160ms ease, transform 160ms ease;
-}
-
-.wayline-intro__cta:hover {
-  background: var(--intro-accent-deep);
-  color: #fff;
-  transform: translateY(-1px);
 }
 
 .wayline-intro__visual {
+  position: relative;
   display: grid;
   place-items: center;
   min-width: 0;
-  padding: 8px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  min-height: 280px;
+  padding: clamp(16px, 2.5vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sheet);
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(61, 107, 138, 0.18), transparent 52%),
+    linear-gradient(160deg, #e8eef3 0%, #d5e0e9 45%, #f2f4f6 100%);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.wayline-intro__visual-mist {
+  position: absolute;
+  inset: 10% 14% auto 10%;
+  height: 42%;
+  border-radius: 40% 60% 50% 50%;
+  background: rgba(255, 255, 255, 0.55);
+  filter: blur(22px);
+  pointer-events: none;
 }
 
 .wayline-intro__gif {
+  position: relative;
+  z-index: 1;
   display: block;
   width: min(100%, 520px);
   height: auto;
-  border-radius: 8px;
+  border-radius: var(--radius-ctrl);
   object-fit: cover;
 }
 
+.wayline-intro__mark {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(40px, 7vh, 80px);
+  z-index: 0;
+  width: min(38vw, 320px);
+  height: auto;
+  transform: translateX(-50%);
+  opacity: 0.1;
+  pointer-events: none;
+  user-select: none;
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .wayline-intro__mark {
+    mix-blend-mode: normal;
+    opacity: 0.05;
+  }
+}
+
 @media (max-width: 960px) {
-  .wayline-intro__panel {
+  .wayline-intro__grid {
     grid-template-columns: 1fr;
     min-height: 0;
+    padding-bottom: 72px;
   }
 
   .wayline-intro__visual {
     order: -1;
-    max-width: 480px;
+    max-width: 520px;
     margin-inline: auto;
   }
 }
