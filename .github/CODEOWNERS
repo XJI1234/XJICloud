@@ -8,6 +8,9 @@
 /rust/ @QBM3-ai
 /vendors/supersplat/ @QBM3-ai
 
+# User frontend DDD rewrite
+/apps/web2/ @QBM3-ai
+
 # Admin frontend
 /apps/admin/ @QBM3-ai
 
