@@ -18,6 +18,8 @@ jobs:
           cache: pnpm
       - run: pnpm install
       - run: pnpm --filter @xjicloud/web build
+      - run: pnpm --filter @xjicloud/web2 test
+      - run: pnpm --filter @xjicloud/web2 build
       - run: pnpm --filter @xjicloud/admin build
 
   backend:

@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 /** Prebuilt SuperSplat static assets (committed; no source build). */
 const source = path.join(root, 'vendors', 'supersplat')
-const target = path.join(root, 'apps', 'web', 'public', 'supersplat')
+const targets = [
+  path.join(root, 'apps', 'web', 'public', 'supersplat'),
+  path.join(root, 'apps', 'web2', 'public', 'supersplat'),
+]
 
 function copyRecursive(from, to) {
   fs.mkdirSync(to, { recursive: true })
@@ -30,9 +33,10 @@ if (!fs.existsSync(source) || !fs.existsSync(path.join(source, 'index.html'))) {
   process.exit(1)
 }
 
-if (fs.existsSync(target)) {
-  fs.rmSync(target, { recursive: true, force: true })
+for (const target of targets) {
+  if (fs.existsSync(target)) {
+    fs.rmSync(target, { recursive: true, force: true })
+  }
+  copyRecursive(source, target)
+  console.log(`Copied SuperSplat assets → ${target}`)
 }
-
-copyRecursive(source, target)
-console.log(`Copied SuperSplat assets → ${target}`)

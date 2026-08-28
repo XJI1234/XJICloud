@@ -12,6 +12,7 @@ dist
 dist-ssr
 # Generated at web predev/prebuild from vendors/supersplat
 apps/web/public/supersplat
+apps/web2/public/supersplat
 release
 *.local
 rust/target

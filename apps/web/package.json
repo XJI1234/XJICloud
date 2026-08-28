@@ -14,6 +14,7 @@
     "@xjicloud/shared": "workspace:*",
     "@xjicloud/spark": "workspace:*",
     "fflate": "^0.8.2",
+    "motion": "^12.43.0",
     "pinia": "^2.3.1",
     "three": "^0.180.0",
     "three-mesh-bvh": "^0.9.10",

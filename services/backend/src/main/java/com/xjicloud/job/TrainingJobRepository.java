@@ -11,4 +11,6 @@ public interface TrainingJobRepository extends JpaRepository<TrainingJob, UUID> 
     List<TrainingJob> findAllByOrderByCreatedAtDesc();
 
     long countByStatus(JobStatus status);
+
+    void deleteByProjectId(UUID projectId);
 }

@@ -51,6 +51,7 @@ const router = createRouter({
           meta: { immersive: true },
         },
         {
+<<<<<<< HEAD
           path: 'wayline',
           name: 'wayline',
           component: () => import('@/views/WaylineLandingView.vue'),
@@ -60,6 +61,11 @@ const router = createRouter({
           name: 'wayline-editor',
           component: () => import('@/views/WaylineEditorView.vue'),
           meta: { immersive: true },
+=======
+          path: 'help',
+          name: 'help',
+          component: () => import('@/views/HelpView.vue'),
+>>>>>>> origin/main
         },
       ],
     },

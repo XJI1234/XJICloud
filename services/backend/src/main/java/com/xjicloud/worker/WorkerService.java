@@ -123,6 +123,10 @@ public class WorkerService {
         trainingJobService.updateProgress(jobId, JobStatus.RUNNING, request.percent(), request.stage(), request.message());
     }
 
+    /**
+     * FIXME(H2): 与 TrainingJobService.cancelJob 同源问题——任务已被用户/管理员取消后，
+     * 此处仍会 markCompleted 覆盖终态。待 Worker 中断协议确认后再拦截。
+     */
     @Transactional
     public void completeJob(WorkerNode worker, UUID jobId, JobCompleteRequest request) {
         requireWorkerJob(worker, jobId);

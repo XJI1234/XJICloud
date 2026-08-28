@@ -17,19 +17,20 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = response.username
     displayName.value = response.displayName
     setToken(response.accessToken)
+    localStorage.setItem('xjicloud_token', response.accessToken)
     localStorage.setItem('xjicloud_user_id', response.userId)
     localStorage.setItem('xjicloud_username', response.username)
     localStorage.setItem('xjicloud_display_name', response.displayName)
   }
 
-  async function login(loginUsername: string, password: string) {
-    const response = await authApi.login(loginUsername, password)
+  async function login(loginUsername: string, password: string, captchaKey?: string, captchaCode?: string) {
+    const response = await authApi.login(loginUsername, password, captchaKey, captchaCode)
     persistSession(response)
     return response
   }
 
-  async function register(loginUsername: string, password: string, name?: string) {
-    const response = await authApi.register(loginUsername, password, name)
+  async function register(loginUsername: string, password: string, name: string | undefined, captchaKey: string, captchaCode: string) {
+    const response = await authApi.register(loginUsername, password, name, captchaKey, captchaCode)
     persistSession(response)
     return response
   }
@@ -40,6 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = null
     displayName.value = null
     setToken(null)
+    localStorage.removeItem('xjicloud_token')
     localStorage.removeItem('xjicloud_user_id')
     localStorage.removeItem('xjicloud_username')
     localStorage.removeItem('xjicloud_display_name')

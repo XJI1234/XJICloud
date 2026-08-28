@@ -3,7 +3,7 @@
 > 供 Cursor / 其他 AI Agent 快速理解本仓库的结构、已实现功能、扩展点与约束。  
 > 用户面向文档见 [../README.md](../README.md)；部署见 [Deploy.md](Deploy.md)。
 
-**最后更新：** 2026-07-29（企业级 monorepo：apps / services / packages / vendors）
+**最后更新：** 2026-08-28（web2 已是完整 DDD 用户端，见 [WEB2_FRONTEND.md](./WEB2_FRONTEND.md)）
 
 ---
 
@@ -26,6 +26,7 @@
 ```
 XJICloud/
 ├── apps/web/                 # 用户前端 @xjicloud/web（:5174）
+├── apps/web2/                # DDD 用户前端 @xjicloud/web2（:5176）
 ├── apps/admin/               # 管理前端 @xjicloud/admin（:5175，base /admin/）
 ├── packages/spark/           # Spark 2.0 TS 渲染库 @xjicloud/spark
 ├── packages/shared/          # 共享 ApiResponse / ApiError
@@ -48,6 +49,7 @@ XJICloud/
 flowchart TB
   subgraph clients [Clients]
     UserFE[apps_web_5174]
+    Web2FE[apps_web2_5176]
     AdminFE[apps_admin_5175]
   end
 
@@ -75,14 +77,17 @@ flowchart TB
   end
 
   UserFE --> Nginx
+  Web2FE --> Nginx
   AdminFE --> Nginx
   Nginx --> API
   UserFE -->|presigned_PUT| OSS
+  Web2FE -->|presigned_PUT| OSS
   API --> PG
   API --> Redis
   API --> OSSSvc --> OSS
   API --> LocalStore --> Disk
   SSE --> UserFE
+  SSE --> Web2FE
   Queue --> Redis
   Worker -->|register_heartbeat_jobs| API
   Worker --> OSS
@@ -227,6 +232,17 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 路由与组件见 `apps/web/src/router`；训练流见 `DatasetUploadPanel` / `TrainingJobPanel` / `api/datasets.ts`。
 
+## 7.1 用户前端 DDD（`apps/web2/`）
+
+完整架构知识库：[WEB2_FRONTEND.md](./WEB2_FRONTEND.md)。包说明：[apps/web2/README.md](../apps/web2/README.md)。Agent 硬规则：[apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。
+
+- 包名 `@xjicloud/web2`，端口 **5176**，`/api` 代理到 8080
+- 分层：`features/{bc}/{domain,application,infrastructure,presentation}` + `app/create-container.ts` 组合根
+- BC：identity、project、dataset-training、model-asset、viewer、editor
+- 浅色产品壳；`/app/layer` 为原生 Spark 查看；`/app/supersplat` 允许无云端模型进入并打开本地文件
+- 测试：`pnpm test:web2`（含 architecture / parity）；构建：`pnpm build:web2`；开发：`pnpm dev:web2`
+- 默认 `pnpm dev` 仍指向 `apps/web`
+
 ## 8. 管理面板（`apps/admin/`）
 
 - `base: /admin/`，端口 5175，包名 `@xjicloud/admin`
@@ -244,6 +260,7 @@ pnpm install
 cd services/backend && mvn spring-boot:run
 
 pnpm dev:web
+pnpm dev:web2
 pnpm dev:admin
 docker build -t xjicloud/gpu-worker services/gpu-worker/
 ```
@@ -261,7 +278,7 @@ docker build -t xjicloud/gpu-worker services/gpu-worker/
 ## 12. Agent 约定
 
 - 不改 `packages/spark/`、`rust/`（除非任务要求）
-- 用户前端改 `apps/web`；管理端改 `apps/admin`；后端改 `services/backend`
+- 用户前端改 `apps/web`；**DDD 用户端改 `apps/web2`**（先读 `apps/web2/AGENTS.md`）；管理端改 `apps/admin`；后端改 `services/backend`
 - 关键配置：`services/backend/src/main/resources/application.yml`、`pnpm-workspace.yaml`、`apps/*/vite.config.ts`
 
 ## 13. 实体与 Redis

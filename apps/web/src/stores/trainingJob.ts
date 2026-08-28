@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import i18n from '@/i18n'
 import { ApiError } from '@/api/client'
 import {
+  cancelJob as cancelJobApi,
+  deleteJob as deleteJobApi,
   getJob,
   listProjectJobs,
   subscribeJobEvents,
@@ -21,7 +24,9 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     try {
       jobs.value = await listProjectJobs(projectId)
     } catch (error) {
-      errorMessage.value = error instanceof ApiError ? error.message : '加载训练任务失败'
+      errorMessage.value = error instanceof ApiError
+        ? error.message
+        : String(i18n.global.t('training.loadJobsFailed'))
       throw error
     } finally {
       loading.value = false
@@ -79,6 +84,19 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     return job
   }
 
+  async function cancelJob(jobId: string) {
+    const job = await cancelJobApi(jobId)
+    upsertJob(job)
+    stopWatching(jobId)
+    return job
+  }
+
+  async function deleteJob(jobId: string) {
+    await deleteJobApi(jobId)
+    jobs.value = jobs.value.filter((item) => item.id !== jobId)
+    stopWatching(jobId)
+  }
+
   function clearSubscriptions() {
     for (const unsubscribe of activeSubscriptions.values()) {
       unsubscribe()
@@ -102,6 +120,8 @@ export const useTrainingJobStore = defineStore('trainingJob', () => {
     watchJob,
     stopWatching,
     refreshJob,
+    cancelJob,
+    deleteJob,
     clearSubscriptions,
     resetOnLogout,
   }

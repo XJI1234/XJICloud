@@ -5,7 +5,6 @@ import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { ApiError } from '@/api/client'
 import { uploadModel } from '@/api/models'
-import { showComingSoon } from '@/utils/comingSoon'
 import { useFormatDateTime } from '@/composables/useAppLocale'
 
 const router = useRouter()
@@ -18,6 +17,11 @@ const newProjectDescription = ref('')
 const errorMessage = ref('')
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const pending = ref(false)
+
+// inline edit state
+const editingProjectId = ref<string | null>(null)
+const editName = ref('')
+const editDescription = ref('')
 
 onMounted(async () => {
   try {
@@ -81,8 +85,43 @@ function goHome() {
   router.push('/app/home')
 }
 
-function handleDeleteProject() {
-  showComingSoon('projects.deleteProjectFeature')
+async function handleDeleteProject(projectId: string) {
+  if (!window.confirm(t('projects.deleteConfirm'))) {
+    return
+  }
+  try {
+    await projectStore.deleteProject(projectId)
+    errorMessage.value = ''
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('projects.deleteProjectFailed')
+  }
+}
+
+function startEdit(projectId: string, name: string, description: string) {
+  editingProjectId.value = projectId
+  editName.value = name
+  editDescription.value = description
+  errorMessage.value = ''
+}
+
+function cancelEdit() {
+  editingProjectId.value = null
+  editName.value = ''
+  editDescription.value = ''
+}
+
+async function saveEdit(projectId: string) {
+  if (!editName.value.trim()) {
+    errorMessage.value = t('projects.enterProjectName')
+    return
+  }
+  try {
+    await projectStore.updateProject(projectId, editName.value.trim(), editDescription.value.trim())
+    cancelEdit()
+    errorMessage.value = ''
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('projects.updateProjectFailed')
+  }
 }
 </script>
 
@@ -109,11 +148,11 @@ function handleDeleteProject() {
             </p>
           </template>
         </div>
-        <button class="side-button side-button--inline" type="button" @click="goHome">{{ t('projects.backHome') }}</button>
+        <button class="side-button side-button--inline cloud-pressable" type="button" @click="goHome">{{ t('projects.backHome') }}</button>
       </div>
 
       <div v-if="projectStore.activeProject" class="projects-current-actions">
-        <button class="side-button primary" type="button" :disabled="pending" @click="triggerUpload">
+        <button class="side-button primary cloud-pressable" type="button" :disabled="pending" @click="triggerUpload">
           {{ pending ? t('common.uploading') : t('projects.uploadModel') }}
         </button>
       </div>
@@ -124,7 +163,7 @@ function handleDeleteProject() {
       <div class="projects-create-grid">
         <input v-model="newProjectName" class="text-control" type="text" :placeholder="t('projects.projectNamePlaceholder')" />
         <input v-model="newProjectDescription" class="text-control" type="text" :placeholder="t('projects.projectDescPlaceholder')" />
-        <button class="side-button primary" type="button" @click="createProject">{{ t('projects.createProjectBtn') }}</button>
+        <button class="side-button primary cloud-pressable" type="button" @click="createProject">{{ t('projects.createProjectBtn') }}</button>
       </div>
     </section>
 
@@ -138,30 +177,49 @@ function handleDeleteProject() {
       <div
         v-for="project in projectStore.projects"
         :key="project.id"
-        class="project-list-row"
+        class="project-list-row cloud-pressable"
         :class="{ 'is-active': projectStore.activeProjectId === project.id }"
       >
-        <button
-          class="project-list-row__select"
-          type="button"
-          @click="selectProject(project.id)"
-        >
-          <div class="project-list-copy">
-            <h4 class="project-card-title">{{ project.name }}</h4>
-            <p class="project-card-description">{{ project.description || t('common.noDescription') }}</p>
-            <p class="project-card-meta">{{ formatDateTime(project.createdAt) }}</p>
+        <template v-if="editingProjectId === project.id">
+          <div class="project-list-edit">
+            <input v-model="editName" class="text-control" type="text" :placeholder="t('projects.projectNamePlaceholder')" />
+            <input v-model="editDescription" class="text-control" type="text" :placeholder="t('projects.projectDescPlaceholder')" />
+            <div class="project-list-edit__actions">
+              <button class="side-button primary" type="button" @click="saveEdit(project.id)">{{ t('common.save') }}</button>
+              <button class="side-button" type="button" @click="cancelEdit">{{ t('common.cancel') }}</button>
+            </div>
           </div>
-        </button>
-        <div class="project-list-row__actions">
-          <span v-if="projectStore.activeProjectId === project.id" class="project-list-badge">{{ t('projects.currentBadge') }}</span>
+        </template>
+        <template v-else>
           <button
-            class="side-button side-button--inline"
+            class="project-list-row__select cloud-pressable"
             type="button"
-            @click.stop="handleDeleteProject"
+            @click="selectProject(project.id)"
           >
-            {{ t('projects.deleteProject') }}
+            <div class="project-list-copy">
+              <h4 class="project-card-title">{{ project.name }}</h4>
+              <p class="project-card-description">{{ project.description || t('common.noDescription') }}</p>
+              <p class="project-card-meta">{{ formatDateTime(project.createdAt) }}</p>
+            </div>
           </button>
-        </div>
+          <div class="project-list-row__actions">
+            <span v-if="projectStore.activeProjectId === project.id" class="project-list-badge">{{ t('projects.currentBadge') }}</span>
+            <button
+              class="side-button side-button--inline"
+              type="button"
+              @click.stop="startEdit(project.id, project.name, project.description)"
+            >
+              {{ t('projects.editProject') }}
+            </button>
+            <button
+              class="side-button side-button--inline side-button--danger"
+              type="button"
+              @click.stop="handleDeleteProject(project.id)"
+            >
+              {{ t('projects.deleteProject') }}
+            </button>
+          </div>
+        </template>
       </div>
     </section>
 

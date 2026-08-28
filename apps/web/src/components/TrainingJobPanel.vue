@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTrainingJobStore } from '@/stores/trainingJob'
+import { ApiError } from '@/api/client'
 import type { JobStatus } from '@/api/datasets'
-import { showComingSoon } from '@/utils/comingSoon'
 import { useFormatDateTime } from '@/composables/useAppLocale'
 
 const props = defineProps<{
@@ -13,6 +13,8 @@ const props = defineProps<{
 const trainingJobStore = useTrainingJobStore()
 const { t } = useI18n()
 const { formatDateTime } = useFormatDateTime()
+
+const actionError = ref('')
 
 const statusLabel = computed<Record<JobStatus, string>>(() => ({
   PENDING: t('training.status.pending'),
@@ -38,13 +40,16 @@ const badgeClass = computed(() => (status: JobStatus) => {
   }
 })
 
+const isActiveJob = (status: JobStatus) =>
+  status === 'PENDING' || status === 'UPLOADING' || status === 'QUEUED' || status === 'RUNNING'
+
 async function loadJobs() {
   if (!props.projectId) {
     return
   }
   await trainingJobStore.fetchJobs(props.projectId)
   for (const job of trainingJobStore.jobs) {
-    if (job.status === 'QUEUED' || job.status === 'RUNNING' || job.status === 'UPLOADING') {
+    if (isActiveJob(job.status)) {
       trainingJobStore.watchJob(job.id)
     }
   }
@@ -66,8 +71,28 @@ onBeforeUnmount(() => {
   trainingJobStore.clearSubscriptions()
 })
 
-function handleDeleteRecord() {
-  showComingSoon('training.deleteRecordFeature')
+async function handleCancel(jobId: string) {
+  actionError.value = ''
+  if (!window.confirm(t('training.cancelConfirm'))) {
+    return
+  }
+  try {
+    await trainingJobStore.cancelJob(jobId)
+  } catch (error) {
+    actionError.value = error instanceof ApiError ? error.message : t('training.cancelFailed')
+  }
+}
+
+async function handleDelete(jobId: string) {
+  actionError.value = ''
+  if (!window.confirm(t('training.deleteConfirm'))) {
+    return
+  }
+  try {
+    await trainingJobStore.deleteJob(jobId)
+  } catch (error) {
+    actionError.value = error instanceof ApiError ? error.message : t('training.deleteFailed')
+  }
 }
 </script>
 
@@ -98,9 +123,18 @@ function handleDeleteRecord() {
           <div class="training-job-item__header-actions">
             <span class="cloud-badge" :class="badgeClass(job.status)">{{ statusLabel[job.status] }}</span>
             <button
+              v-if="isActiveJob(job.status)"
               class="cloud-btn cloud-btn--ghost cloud-btn--compact"
               type="button"
-              @click="handleDeleteRecord"
+              @click="handleCancel(job.id)"
+            >
+              {{ t('training.cancelRecord') }}
+            </button>
+            <button
+              v-else
+              class="cloud-btn cloud-btn--ghost cloud-btn--compact"
+              type="button"
+              @click="handleDelete(job.id)"
             >
               {{ t('training.deleteRecord') }}
             </button>
@@ -126,5 +160,7 @@ function handleDeleteRecord() {
         </div>
       </article>
     </div>
+
+    <p v-if="actionError" class="upload-error">{{ actionError }}</p>
   </section>
 </template>

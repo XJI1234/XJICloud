@@ -216,6 +216,12 @@ public class TrainingJobService {
         return toResponse(job);
     }
 
+    /**
+     * 取消任务：写 CANCELLED 并从 Redis 队列移除。
+     *
+     * FIXME(H2): RUNNING 任务取消后，Worker 仍可能通过 markCompleted/updateProgress
+     * 覆盖终态。GPU Worker 中断协议未确认前暂不拦截 Worker 回写。
+     */
     @Transactional
     public JobResponse cancelJob(UUID jobId) {
         TrainingJob job = requireJob(jobId);
@@ -230,6 +236,26 @@ public class TrainingJobService {
         redisQueueService.remove(jobId);
         publishProgress(job);
         return toResponse(job);
+    }
+
+    /** 用户侧取消：校验所有权后复用取消逻辑 */
+    @Transactional
+    public JobResponse cancelOwnedJob(UserAccount user, UUID jobId) {
+        requireOwnedJob(user, jobId);
+        return cancelJob(jobId);
+    }
+
+    /** 用户侧删除记录：仅终态（完成/失败/已取消）可删除 */
+    @Transactional
+    public void deleteOwnedJob(UserAccount user, UUID jobId) {
+        TrainingJob job = requireOwnedJob(user, jobId);
+        if (job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.UPLOADING
+                || job.getStatus() == JobStatus.QUEUED || job.getStatus() == JobStatus.RUNNING) {
+            throw new BusinessException("进行中的任务请先取消，再删除");
+        }
+        redisQueueService.remove(jobId);
+        datasetAssetRepository.deleteByJobId(jobId);
+        trainingJobRepository.delete(job);
     }
 
     public List<JobResponse> listAllJobs() {
