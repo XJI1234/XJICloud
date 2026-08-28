@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="ground-top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#bbf7d0"/>
+      <stop offset="100%" stop-color="#86efac"/>
+    </linearGradient>
+    <linearGradient id="ground-left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="ground-right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="tower-front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="tower-left" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="tower-right" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="accent-glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#34c759" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.35"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#14532d" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- isometric platform -->
+  <g filter="url(#soft-shadow)">
+    <polygon points="240,300 80,220 240,140 400,220" fill="url(#ground-top)"/>
+    <polygon points="80,220 240,300 240,340 80,260" fill="url(#ground-left)"/>
+    <polygon points="400,220 240,300 240,340 400,260" fill="url(#ground-right)"/>
+  </g>
+
+  <!-- grid lines on platform -->
+  <g stroke="#16a34a" stroke-opacity="0.18" stroke-width="1">
+    <line x1="120" y1="250" x2="360" y2="250"/>
+    <line x1="160" y1="230" x2="320" y2="270"/>
+    <line x1="200" y1="210" x2="280" y2="290"/>
+    <line x1="140" y1="270" x2="340" y2="230"/>
+  </g>
+
+  <!-- main tower -->
+  <g filter="url(#soft-shadow)">
+    <!-- left face -->
+    <polygon points="168,188 208,168 208,88 168,108" fill="url(#tower-left)"/>
+    <!-- right face -->
+    <polygon points="208,168 272,200 272,120 208,88" fill="url(#tower-right)"/>
+    <!-- front face -->
+    <polygon points="168,108 208,88 272,120 232,140" fill="url(#tower-front)"/>
+    <!-- roof cap -->
+    <polygon points="168,108 208,88 272,120 232,140" fill="#34c759" fill-opacity="0.22"/>
+    <!-- windows left -->
+    <g fill="#34c759" fill-opacity="0.35">
+      <rect x="174" y="118" width="10" height="14" rx="1" transform="skewY(-18)"/>
+      <rect x="174" y="140" width="10" height="14" rx="1" transform="skewY(-18)"/>
+      <rect x="174" y="162" width="10" height="14" rx="1" transform="skewY(-18)"/>
+    </g>
+    <!-- windows front -->
+    <g fill="#34c759" fill-opacity="0.45">
+      <rect x="218" y="102" width="12" height="16" rx="1" transform="skewX(26)"/>
+      <rect x="238" y="112" width="12" height="16" rx="1" transform="skewX(26)"/>
+      <rect x="218" y="124" width="12" height="16" rx="1" transform="skewX(26)"/>
+      <rect x="238" y="134" width="12" height="16" rx="1" transform="skewX(26)"/>
+    </g>
+  </g>
+
+  <!-- secondary building -->
+  <g filter="url(#soft-shadow)">
+    <polygon points="288,214 318,200 318,152 288,166" fill="#94a3b8"/>
+    <polygon points="318,200 352,218 352,170 318,152" fill="#cbd5e1"/>
+    <polygon points="288,166 318,152 352,170 322,184" fill="#f8fafc"/>
+    <polygon points="294,172 308,165 308,185 294,192" fill="url(#accent-glass)"/>
+    <polygon points="308,165 328,175 328,195 308,185" fill="#34c759" fill-opacity="0.28"/>
+    <polygon points="328,175 342,182 342,202 328,195" fill="#22c55e" fill-opacity="0.22"/>
+  </g>
+
+  <!-- small annex -->
+  <g filter="url(#soft-shadow)">
+    <polygon points="132,206 158,192 158,168 132,182" fill="#cbd5e1"/>
+    <polygon points="158,192 182,206 182,182 158,168" fill="#e2e8f0"/>
+    <polygon points="132,182 158,168 182,182 156,196" fill="#ffffff"/>
+  </g>
+
+  <!-- flight orbit -->
+  <ellipse cx="240" cy="218" rx="118" ry="46" stroke="#34c759" stroke-width="1.5" stroke-dasharray="6 5" stroke-opacity="0.55"/>
+  <circle cx="352" cy="218" r="5" fill="#34c759"/>
+  <circle cx="352" cy="218" r="9" fill="#34c759" fill-opacity="0.18"/>
+
+  <!-- highlight building edge -->
+  <path d="M168 108 L208 88 L272 120 L232 140 Z" stroke="#34c759" stroke-width="1.2" stroke-opacity="0.35" fill="none"/>
+</svg>
