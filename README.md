@@ -12,6 +12,7 @@
 XJICloud/
 ├── apps/
 │   ├── web/                 # 用户前端 @xjicloud/web（:5174）
+│   ├── web2/                # 用户前端 DDD 重写 @xjicloud/web2（:5176）
 │   └── admin/               # 管理面板 @xjicloud/admin（:5175，base /admin/）
 ├── packages/
 │   ├── spark/               # Spark 2.0 渲染库 @xjicloud/spark
@@ -32,6 +33,7 @@ XJICloud/
 | 角色 | 目录 | 日常命令 |
 |------|------|----------|
 | 用户前端 | `apps/web`, `packages/spark`, `rust` | `pnpm --filter @xjicloud/web dev` |
+| 用户前端 DDD | `apps/web2` | `pnpm dev:web2` / `pnpm test:web2` |
 | 管理前端 | `apps/admin` | `pnpm --filter @xjicloud/admin dev` |
 | 后端 | `services/backend` | `cd services/backend && mvn spring-boot:run` |
 | Worker | `services/gpu-worker` | `docker build -t xjicloud/gpu-worker services/gpu-worker` |
@@ -77,6 +79,8 @@ mvn spring-boot:run
 # 仓库根目录
 pnpm dev:web      # :5174，/api → 8080
 pnpm dev:admin    # :5175
+pnpm dev:web2     # :5176，DDD 用户端（架构说明见 apps/web2/README.md）
+pnpm test:web2    # web2 单测 + 分层门禁
 ```
 
 ### 5. GPU Worker（可选）
@@ -96,6 +100,7 @@ docker run --rm \
 ```bash
 pnpm build:wasm          # Rust WASM
 pnpm build:web           # 自动复制 vendors/supersplat → public/supersplat
+pnpm build:web2          # DDD 用户端
 pnpm build:admin
 pnpm build:all           # web + admin
 
@@ -105,6 +110,7 @@ cd services/backend && mvn -DskipTests package
 产物：
 
 - 用户前端 → `apps/web/dist/`
+- 用户前端 DDD → `apps/web2/dist/`
 - 管理面板 → `apps/admin/dist/`
 - 后端 → `services/backend/target/*.jar`
 
@@ -143,7 +149,10 @@ sudo ./deploy/deploy-backend.sh
 ## 文档
 
 - [docs/Deploy.md](docs/Deploy.md) — 分机部署
-- [docs/AGENT_CONTEXT.md](docs/AGENT_CONTEXT.md) — 架构与 API 速查（给开发 / Agent）
+- [docs/AGENT_CONTEXT.md](docs/AGENT_CONTEXT.md) — 全仓架构与 API 速查（给开发 / Agent）
+- [docs/WEB2_FRONTEND.md](docs/WEB2_FRONTEND.md) — web2 DDD 前端架构知识库
+- [apps/web2/README.md](apps/web2/README.md) — web2 包说明
+- [apps/web2/AGENTS.md](apps/web2/AGENTS.md) — 改 web2 时的 Agent 硬规则
 - [vendors/README.md](vendors/README.md) — SuperSplat 预编译资源说明
 
 ---
