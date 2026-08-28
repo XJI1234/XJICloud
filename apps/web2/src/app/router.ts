@@ -37,6 +37,17 @@ const router = createRouter({
           component: () => import('@/features/editor/presentation/SuperSplatEditorView.vue'),
           meta: { immersive: true },
         },
+        {
+          path: 'wayline',
+          name: 'wayline',
+          component: () => import('@/features/wayline/presentation/WaylineLandingView.vue'),
+        },
+        {
+          path: 'wayline/editor',
+          name: 'wayline-editor',
+          component: () => import('@/features/wayline/presentation/WaylineEditorView.vue'),
+          meta: { immersive: true },
+        },
         { path: 'help', name: 'help', component: () => import('@/presentation/views/HelpView.vue') },
       ],
     },

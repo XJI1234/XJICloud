@@ -125,8 +125,11 @@ export function mapHttpError(error: unknown): DomainError {
     return error
   }
   if (error instanceof ApiError) {
-    if (error.status === 401) {
-      return new DomainError('AUTH_UNAUTHORIZED', error.message, { status: error.status })
+    // Empty 403 bodies (gateway / Spring Security) often look like "network" in the UI.
+    if (error.status === 401 || error.status === 403) {
+      const safeAuthMessage =
+        error.message && !isTechnicalNetworkMessage(error.message) ? error.message : undefined
+      return new DomainError('AUTH_UNAUTHORIZED', safeAuthMessage, { status: error.status })
     }
     const safeMessage = error.message && !isTechnicalNetworkMessage(error.message) ? error.message : undefined
     return new DomainError('NETWORK', safeMessage, { status: error.status })

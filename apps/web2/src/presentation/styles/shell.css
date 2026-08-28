@@ -262,6 +262,10 @@ a {
   display: none;
 }
 
+.cloud-shell:has(.wayline-page) .cloud-body {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .cloud-header {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);

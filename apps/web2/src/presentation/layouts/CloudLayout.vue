@@ -33,14 +33,14 @@ const navItems = computed(() => [
 ] as const)
 
 const toolItems = computed(() => [
-  { labelKey: 'tools.routePlanning', route: null, icon: 'route' as const },
+  { labelKey: 'tools.routePlanning', route: '/app/wayline', icon: 'route' as const },
   { labelKey: 'tools.dataUpload', route: '/app/upload', icon: 'upload' as const },
   { labelKey: 'tools.modelView', route: '/app/layer', icon: 'view' as const },
   { labelKey: 'tools.advancedEdit', route: '/app/supersplat', icon: 'edit' as const },
 ] as const)
 
 function isActiveNav(path: string | null) {
-  return Boolean(path && route.path === path)
+  return Boolean(path && (route.path === path || route.path.startsWith(`${path}/`)))
 }
 
 function navigate(path: string | null) {
@@ -89,8 +89,16 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onDocumentKeydown)
 })
 
-const fillMain = computed(() => route.name === 'layer' || route.name === 'supersplat')
-const isImmersive = computed(() => route.name === 'home' || !activeProjectId.value)
+const fillMain = computed(
+  () =>
+    route.name === 'layer' ||
+    route.name === 'supersplat' ||
+    route.name === 'wayline' ||
+    route.name === 'wayline-editor',
+)
+const isImmersive = computed(
+  () => route.name === 'home' || route.name === 'wayline-editor' || !activeProjectId.value,
+)
 </script>
 
 <template>
@@ -161,7 +169,7 @@ const isImmersive = computed(() => route.name === 'home' || !activeProjectId.val
           :class="{ 'is-active': isActiveNav(item.route) }"
           type="button"
           :title="t(item.labelKey)"
-          @click="item.route ? navigate(item.route) : announceComingSoon(item.labelKey)"
+          @click="navigate(item.route)"
         >
           <ToolIcon :name="item.icon" />
           <span class="cloud-tool-label">{{ t(item.labelKey) }}</span>
