@@ -2,11 +2,12 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import CloudSheet from '@/components/CloudSheet.vue'
-import { useProjectStore } from '@/stores/project'
-import { ApiError } from '@/api/client'
-import { useFormatDateTime } from '@/composables/useAppLocale'
-import { showComingSoon } from '@/utils/comingSoon'
+import CloudSheet from '@/shared/presentation/CloudSheet.vue'
+import { useProjectStore } from '@/domains/project/stores/project'
+import { ApiError } from '@/shared/infrastructure/http/client'
+import { useFormatDateTime } from '@/shared/composables/useAppLocale'
+import { showComingSoon } from '@/shared/kernel/comingSoon'
+import buildingIllustration from '@/assets/building-isometric.svg'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -119,25 +120,15 @@ function openRecentProject(projectId: string) {
           </div>
           <div class="home-feature-card__scene" aria-hidden="true">
             <div class="home-feature-scene">
-              <div class="home-feature-scene__platform" />
-              <div class="home-feature-scene__buildings">
-                <span class="home-feature-scene__building home-feature-scene__building--a" />
-                <span class="home-feature-scene__building home-feature-scene__building--b" />
-                <span class="home-feature-scene__building home-feature-scene__building--c" />
-              </div>
-              <svg class="home-feature-scene__orbit" viewBox="0 0 240 140" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <ellipse
-                  class="home-feature-scene__orbit-path"
-                  cx="120"
-                  cy="78"
-                  rx="98"
-                  ry="42"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-dasharray="6 5"
-                />
-                <circle class="home-feature-scene__drone" cx="218" cy="78" r="4" fill="currentColor" />
-              </svg>
+              <img
+                class="home-feature-scene__illustration"
+                :src="buildingIllustration"
+                alt=""
+                width="480"
+                height="360"
+                loading="eager"
+                decoding="async"
+              />
             </div>
             <p class="home-feature-scene__caption">{{ t('home.featureSceneCaption') }}</p>
           </div>

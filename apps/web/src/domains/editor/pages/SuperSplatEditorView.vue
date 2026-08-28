@@ -2,8 +2,8 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { ApiError } from '@/api/client'
-import { createDownloadToken, listModels, uploadExport, type ModelSummary } from '@/api/models'
+import { ApiError } from '@/shared/infrastructure/http/client'
+import { createDownloadToken, listModels, uploadExport, type ModelSummary } from '@/domains/model/api/models'
 import {
   CLOUD_SAVE_DONE,
   CLOUD_SAVE_ERROR,
@@ -11,9 +11,9 @@ import {
   isDirty,
   isTrustedIframeMessage,
   loadModelInIframe,
-} from '@/bridges/supersplatBridge'
-import { useProjectStore } from '@/stores/project'
-import { showComingSoon } from '@/utils/comingSoon'
+} from '@/domains/editor/bridges/supersplatBridge'
+import { useProjectStore } from '@/domains/project/stores/project'
+import { showComingSoon } from '@/shared/kernel/comingSoon'
 
 const route = useRoute()
 const router = useRouter()

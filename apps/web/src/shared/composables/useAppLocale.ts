@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import i18n, { applyDocumentLang, resolveStoredLocale, toI18nLocale, type AppLocaleCode } from '@/i18n'
+import i18n, { applyDocumentLang, resolveStoredLocale, toI18nLocale, type AppLocaleCode } from '@/app/i18n'
 
 const LOCALE_STORAGE_KEY = 'xjicloud_locale'
 

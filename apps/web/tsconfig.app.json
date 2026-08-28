@@ -7,6 +7,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
+      "@/app/*": ["src/app/*"],
+      "@/shared/*": ["src/shared/*"],
+      "@/domains/*": ["src/domains/*"],
       "@xjicloud/spark": ["../../packages/spark/src/index.ts"],
       "@xjicloud/spark/*": ["../../packages/spark/src/*"],
       "@xjicloud/shared": ["../../packages/shared/src/index.ts"],

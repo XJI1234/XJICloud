@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import * as authApi from '@/api/auth'
-import { setToken } from '@/api/client'
+import * as authApi from '@/domains/identity/api/auth'
+import { setToken } from '@/shared/infrastructure/http/client'
 
 export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref<string | null>(localStorage.getItem('xjicloud_token'))

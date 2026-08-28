@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { VIEWER_STORAGE_KEY } from '@/modules/viewer/viewerStorage'
+import { VIEWER_STORAGE_KEY } from '@/domains/viewer/infrastructure/viewerStorage'
 import * as THREE from 'three'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
@@ -207,10 +207,10 @@ const MIN_CUBE_SIZE_FALLBACK = 0.03
 const CUBE_LABEL_OFFSET_FACTOR = 0.65
 const EDIT_HISTORY_LIMIT = 24
 const PROJECT_INFO_BUILTIN_FIELDS = [
-  { key: 'coordinates', label: '经纬度' },
-  { key: 'buildingName', label: '建筑名称' },
-  { key: 'floorCount', label: '楼层数' },
-  { key: 'height', label: '高度' },
+  { key: 'coordinates', label: 'çťçşŹĺşŚ' },
+  { key: 'buildingName', label: 'ĺťşç­ĺç§°' },
+  { key: 'floorCount', label: 'ćĽźĺąć°' },
+  { key: 'height', label: 'éŤĺşŚ' },
 ] as const
 const currentProjectInfo = ref<ProjectInfoConfig>(createEmptyProjectInfo())
 
@@ -350,7 +350,7 @@ function coerceProjectInfoConfig(rawValue: unknown): ProjectInfoConfig {
       const builtinDefinition = PROJECT_INFO_BUILTIN_FIELDS.find((field) => field.key === key)
       const label = typeof fieldRecord.label === 'string' && fieldRecord.label.trim()
         ? fieldRecord.label.trim()
-        : builtinDefinition?.label ?? '自定义字段'
+        : builtinDefinition?.label ?? 'čŞĺŽäšĺ­ćŽľ'
       const value = typeof fieldRecord.value === 'string' ? fieldRecord.value : ''
 
       if (builtinDefinition) {
@@ -579,7 +579,7 @@ async function writeActiveViewerConfigFile(config: ViewerConfigFile) {
     return
   }
 
-  throw new Error('当前没有可写入的配置文件（需使用云模型或本地目录权限）')
+  throw new Error('ĺ˝ĺć˛ĄćĺŻĺĺĽçéç˝Žćäťśďźéä˝żç¨äşć¨ĄĺććŹĺ°çŽĺ˝ćéďź')
 }
 
 async function ensureViewerConfigFile(file = currentFile, directoryHandle = props.directoryHandle) {
@@ -636,7 +636,7 @@ async function ensureViewerConfigFile(file = currentFile, directoryHandle = prop
 async function saveViewerConfig(successMessage: string, failureMessage: string) {
   if (props.cloudModelId && storage) {
     try {
-      await storage.saveViewerConfig(props.cloudModelId, createViewerConfigSnapshot() as import('@/types/viewer').ViewerConfigFile)
+      await storage.saveViewerConfig(props.cloudModelId, createViewerConfigSnapshot() as import('@/domains/viewer/types/viewer').ViewerConfigFile)
       configDirty = false
       emit('status', successMessage)
       return true
@@ -664,19 +664,19 @@ async function saveViewerConfig(successMessage: string, failureMessage: string) 
 async function saveCurrentViewAsDefault() {
   const currentView = captureCurrentView()
   if (!currentView || !currentMesh) {
-    emit('status', '当前没有可保存的默认视角')
+    emit('status', 'ĺ˝ĺć˛ĄćĺŻäżĺ­çéťčŽ¤č§č§')
     return
   }
 
   currentDefaultView = currentView
   markConfigDirty()
-  await saveViewerConfig('已将当前视角保存为该模型的默认视角', '默认视角保存失败')
+  await saveViewerConfig('ĺˇ˛ĺ°ĺ˝ĺč§č§äżĺ­ä¸şčŻĽć¨ĄĺçéťčŽ¤č§č§', 'éťčŽ¤č§č§äżĺ­ĺ¤ąč´Ľ')
 }
 
 async function saveProjectInfo() {
   currentProjectInfo.value = coerceProjectInfoConfig(props.projectInfo)
   markConfigDirty()
-  await saveViewerConfig('已保存项目信息', '项目信息保存失败')
+  await saveViewerConfig('ĺˇ˛äżĺ­éĄšçŽäżĄćŻ', 'éĄšçŽäżĄćŻäżĺ­ĺ¤ąč´Ľ')
 }
 
 function applyPreferredView() {
@@ -705,7 +705,7 @@ function applyViewRollStep(angle: number) {
 
 function queueViewRotation(direction: 'clockwise' | 'counterclockwise') {
   queuedViewRollRadians += direction === 'clockwise' ? VIEW_ROLL_STEP_RADIANS : -VIEW_ROLL_STEP_RADIANS
-  pendingRotationCompletionMessage = direction === 'clockwise' ? '视角已完成顺时针旋转' : '视角已完成逆时针旋转'
+  pendingRotationCompletionMessage = direction === 'clockwise' ? 'č§č§ĺˇ˛ĺŽćéĄşćśéćč˝Ź' : 'č§č§ĺˇ˛ĺŽćéćśéćč˝Ź'
   return true
 }
 
@@ -987,7 +987,7 @@ function stopPointAnnotationDrag(event?: PointerEvent) {
   setSceneInteractionEnabled(true)
   if (pointDragDidMove) {
     persistPointAnnotations()
-    emit('status', '标注位置已更新')
+    emit('status', 'ć ćł¨ä˝ç˝Žĺˇ˛ć´ć°')
   }
   pointDragDidMove = false
 }
@@ -1355,10 +1355,10 @@ function openPointAnnotationCreateDialog(point: THREE.Vector3) {
   setAnnotationPlacementActive(false)
   openAnnotationDialog(
     { kind: 'create-point', position: [point.x, point.y, point.z] },
-    '新增气泡标注',
-    `标注 ${pointAnnotations.value.length + 1}`,
+    'ć°ĺ˘ć°ćłĄć ćł¨',
+    `ć ćł¨ ${pointAnnotations.value.length + 1}`,
   )
-  emit('status', '请填写气泡标注内容')
+  emit('status', 'čŻˇĺĄŤĺć°ćłĄć ćł¨ĺĺŽš')
 }
 
 function openPointAnnotationEditDialog(annotationId: string) {
@@ -1368,7 +1368,7 @@ function openPointAnnotationEditDialog(annotationId: string) {
   }
 
   selectPointAnnotation(annotationId)
-  openAnnotationDialog({ kind: 'edit-point', id: annotationId }, '编辑气泡标注', annotation.text)
+  openAnnotationDialog({ kind: 'edit-point', id: annotationId }, 'çźčžć°ćłĄć ćł¨', annotation.text)
 }
 
 function openCubeAnnotationDialog(cubeId: string) {
@@ -1378,7 +1378,7 @@ function openCubeAnnotationDialog(cubeId: string) {
   }
 
   selectCube(cubeId)
-  openAnnotationDialog({ kind: 'cube-label', cubeId }, '编辑立方体标注', cube.annotationText || '')
+  openAnnotationDialog({ kind: 'cube-label', cubeId }, 'çźčžçŤćšä˝ć ćł¨', cube.annotationText || '')
 }
 
 function submitAnnotationDialog() {
@@ -1389,27 +1389,27 @@ function submitAnnotationDialog() {
 
   const text = annotationDialogText.value.trim()
   if (!text) {
-    emit('status', '标注内容不能为空')
+    emit('status', 'ć ćł¨ĺĺŽšä¸č˝ä¸şçŠş')
     return
   }
 
   if (target.kind === 'create-point') {
     createPointAnnotation(text, target.position)
-    emit('status', '已创建气泡标注')
+    emit('status', 'ĺˇ˛ĺĺťşć°ćłĄć ćł¨')
     closeAnnotationDialog()
     return
   }
 
   if (target.kind === 'edit-point') {
     if (updatePointAnnotationText(target.id, text)) {
-      emit('status', '已更新气泡标注文本')
+      emit('status', 'ĺˇ˛ć´ć°ć°ćłĄć ćł¨ććŹ')
     }
     closeAnnotationDialog()
     return
   }
 
   if (updateCubeAnnotationText(target.cubeId, text)) {
-    emit('status', '已更新立方体标注文本')
+    emit('status', 'ĺˇ˛ć´ć°çŤćšä˝ć ćł¨ććŹ')
   }
   closeAnnotationDialog()
 }
@@ -1422,7 +1422,7 @@ function deleteAnnotationDialogTarget() {
 
   if (target.kind === 'edit-point') {
     if (removePointAnnotation(target.id)) {
-      emit('status', '已删除气泡标注')
+      emit('status', 'ĺˇ˛ĺ é¤ć°ćłĄć ćł¨')
     }
     closeAnnotationDialog()
     return
@@ -1430,7 +1430,7 @@ function deleteAnnotationDialogTarget() {
 
   if (target.kind === 'cube-label') {
     if (clearCubeAnnotationText(target.cubeId)) {
-      emit('status', '已删除立方体标注文本')
+      emit('status', 'ĺˇ˛ĺ é¤çŤćšä˝ć ćł¨ććŹ')
     }
     closeAnnotationDialog()
   }
@@ -1474,7 +1474,7 @@ function handlePointAnnotationDelete(annotationId: string, event?: Event) {
   event?.preventDefault()
   event?.stopPropagation()
   if (removePointAnnotation(annotationId)) {
-    emit('status', '已删除气泡标注')
+    emit('status', 'ĺˇ˛ĺ é¤ć°ćłĄć ćł¨')
   }
 }
 
@@ -1500,7 +1500,7 @@ function handleCubeAnnotationDelete(cubeId: string, event?: Event) {
   event?.preventDefault()
   event?.stopPropagation()
   if (clearCubeAnnotationText(cubeId)) {
-    emit('status', '已删除立方体标注文本')
+    emit('status', 'ĺˇ˛ĺ é¤çŤćšä˝ć ćł¨ććŹ')
   }
 }
 
@@ -1571,7 +1571,7 @@ function finishCubeDrawing(event?: PointerEvent) {
       selectCube(cube.id)
       persistCubeMarkers()
       updateCubeMarkerScreenPositions()
-      emit('status', '已创建立方体标记，可拖拽重新放置')
+      emit('status', 'ĺˇ˛ĺĺťşçŤćšä˝ć čŽ°ďźĺŻćć˝éć°ćžç˝Ž')
     }
   }
 
@@ -1658,7 +1658,7 @@ function stopCubeDrag(event?: PointerEvent) {
   setSceneInteractionEnabled(true)
   if (cubeDragDidMove) {
     persistCubeMarkers()
-    emit('status', '立方体位置已更新')
+    emit('status', 'çŤćšä˝ä˝ç˝Žĺˇ˛ć´ć°')
   }
   cubeDragDidMove = false
 }
@@ -1697,12 +1697,12 @@ function nudgeActiveCubeDragDepth(deltaY: number) {
 
 function deleteSelectedOverlay() {
   if (selectedPointId.value && removePointAnnotation(selectedPointId.value)) {
-    emit('status', '已删除气泡标注')
+    emit('status', 'ĺˇ˛ĺ é¤ć°ćłĄć ćł¨')
     return
   }
 
   if (selectedCubeId.value && removeCubeMarker(selectedCubeId.value)) {
-    emit('status', '已删除立方体标记')
+    emit('status', 'ĺˇ˛ĺ é¤çŤćšä˝ć čŽ°')
   }
 }
 
@@ -1887,7 +1887,7 @@ function captureUndoSnapshot() {
 
 function undoLastEdit() {
   if (!currentMesh || undoHistory.length === 0) {
-    emit('status', '当前没有可撤回的更改')
+    emit('status', 'ĺ˝ĺć˛ĄćĺŻć¤ĺçć´ćš')
     return false
   }
 
@@ -1896,7 +1896,7 @@ function undoLastEdit() {
   if (!currentSnapshot || !previousSnapshot) {
     currentSnapshot?.dispose()
     syncEditHistoryAvailability()
-    emit('status', '撤回失败')
+    emit('status', 'ć¤ĺĺ¤ąč´Ľ')
     return false
   }
 
@@ -1906,13 +1906,13 @@ function undoLastEdit() {
   currentMesh.splatRgba = previousSnapshot
   currentMesh.updateGenerator()
   syncEditHistoryAvailability()
-  emit('status', '已撤回上一次更改')
+  emit('status', 'ĺˇ˛ć¤ĺä¸ä¸ćŹĄć´ćš')
   return true
 }
 
 function redoLastEdit() {
   if (!currentMesh || redoHistory.length === 0) {
-    emit('status', '当前没有可重做的更改')
+    emit('status', 'ĺ˝ĺć˛ĄćĺŻéĺçć´ćš')
     return false
   }
 
@@ -1921,7 +1921,7 @@ function redoLastEdit() {
   if (!currentSnapshot || !nextSnapshot) {
     currentSnapshot?.dispose()
     syncEditHistoryAvailability()
-    emit('status', '重做失败')
+    emit('status', 'éĺĺ¤ąč´Ľ')
     return false
   }
 
@@ -1931,7 +1931,7 @@ function redoLastEdit() {
   currentMesh.splatRgba = nextSnapshot
   currentMesh.updateGenerator()
   syncEditHistoryAvailability()
-  emit('status', '已重做上一次撤回的更改')
+  emit('status', 'ĺˇ˛éĺä¸ä¸ćŹĄć¤ĺçć´ćš')
   return true
 }
 
@@ -1981,7 +1981,7 @@ async function loadFile(file: File) {
     return
   }
 
-  emit('status', `正在解析 ${file.name}`)
+  emit('status', `ć­Łĺ¨č§Łć ${file.name}`)
   disposeCurrentMesh()
 
   currentFile = file
@@ -1998,7 +1998,7 @@ async function loadFile(file: File) {
   try {
     await nextMesh.initialized
     if (!renderer || !nextMesh.packedSplats) {
-      throw new Error('模型未能正确初始化')
+      throw new Error('ć¨ĄĺćŞč˝ć­ŁçĄŽĺĺ§ĺ')
     }
 
     currentOriginalRgba = new RgbaArray()
@@ -2026,11 +2026,11 @@ async function loadFile(file: File) {
     emit('project-info-loaded', cloneProjectInfo(currentProjectInfo.value))
     emit('loaded', { fileName: file.name, splatCount: nextMesh.packedSplats.numSplats })
     if (preferredViewState === 'default') {
-      emit('status', '已应用该模型保存的默认视角')
+      emit('status', 'ĺˇ˛ĺşç¨čŻĽć¨Ąĺäżĺ­çéťčŽ¤č§č§')
     }
   } catch (error) {
     disposeCurrentMesh()
-    emit('failed', error instanceof Error ? error.message : '模型载入失败')
+    emit('failed', error instanceof Error ? error.message : 'ć¨Ąĺč˝˝ĺĽĺ¤ąč´Ľ')
   }
 }
 
@@ -2055,7 +2055,7 @@ function getExportConfigFilePath(exportModelPath: string) {
 
 async function exportCurrentMesh() {
   if (!renderer || !currentMesh || !currentMesh.packedSplats) {
-    emit('export-failed', '当前没有可导出的模型')
+    emit('export-failed', 'ĺ˝ĺć˛ĄćĺŻĺŻźĺşçć¨Ąĺ')
     return
   }
 
@@ -2076,7 +2076,7 @@ async function exportCurrentMesh() {
     const sourceSplats = currentMesh.packedSplats
     const sourcePackedArray = sourceSplats.packedArray
     if (!sourcePackedArray) {
-      throw new Error('当前模型缺少 packed splat 缓冲区')
+      throw new Error('ĺ˝ĺć¨Ąĺçźşĺ° packed splat çźĺ˛ĺş')
     }
 
     let visibleCount = 0
@@ -2116,7 +2116,7 @@ async function exportCurrentMesh() {
 
     const bakedPackedArray = bakedSplats.packedArray
     if (!bakedPackedArray) {
-      throw new Error('导出过程中未能生成 packed splat 缓冲区')
+      throw new Error('ĺŻźĺşčżç¨ä¸­ćŞč˝çć packed splat çźĺ˛ĺş')
     }
 
     for (let index = 0; index < visibleCount; index += 1) {
@@ -2135,7 +2135,7 @@ async function exportCurrentMesh() {
 
     if (props.cloudModelId && storage) {
       await storage.saveExport(props.cloudModelId, exportBytes, exportName)
-      await storage.saveViewerConfig(props.cloudModelId, createViewerConfigSnapshot() as import('@/types/viewer').ViewerConfigFile)
+      await storage.saveViewerConfig(props.cloudModelId, createViewerConfigSnapshot() as import('@/domains/viewer/types/viewer').ViewerConfigFile)
       emit('exported', {
         fileName: exportName,
         splatCount: visibleCount,
@@ -2156,7 +2156,7 @@ async function exportCurrentMesh() {
       sphericalHarmonicsDegree: 0,
     })
   } catch (error) {
-    emit('export-failed', error instanceof Error ? error.message : '导出 SPZ 失败')
+    emit('export-failed', error instanceof Error ? error.message : 'ĺŻźĺş SPZ ĺ¤ąč´Ľ')
   }
 }
 
@@ -2170,7 +2170,7 @@ function onPointerDownCapture(event: PointerEvent) {
     event.stopImmediatePropagation()
     const anchorPoint = pickModelPointFromClientPosition(event.clientX, event.clientY)
     if (!anchorPoint) {
-      emit('status', '请在模型表面拖拽以绘制立方体')
+      emit('status', 'čŻˇĺ¨ć¨ĄĺčĄ¨é˘ćć˝äťĽçťĺśçŤćšä˝')
       return
     }
     beginCubeDrawing(event, anchorPoint)
@@ -2182,7 +2182,7 @@ function onPointerDownCapture(event: PointerEvent) {
     event.stopImmediatePropagation()
     const point = pickModelPointFromClientPosition(event.clientX, event.clientY)
     if (!point) {
-      emit('status', '请直接点击模型表面以添加气泡标注')
+      emit('status', 'čŻˇç´ćĽçšĺťć¨ĄĺčĄ¨é˘äťĽćˇťĺ ć°ćłĄć ćł¨')
       return
     }
     openPointAnnotationCreateDialog(point)
@@ -2209,7 +2209,7 @@ function onPointerDownCapture(event: PointerEvent) {
   event.preventDefault()
   event.stopImmediatePropagation()
   if (!captureUndoSnapshot()) {
-    emit('status', '无法为当前编辑创建撤回快照')
+    emit('status', 'ć ćłä¸şĺ˝ĺçźčžĺĺťşć¤ĺĺżŤç§')
     return
   }
   activePaintPointerId = event.pointerId
@@ -2496,7 +2496,7 @@ watch(
   (value, previousValue) => {
     if (value > 0 && value !== previousValue) {
       const preferredViewState = applyPreferredView()
-      emit('status', preferredViewState === 'default' ? '相机已重置到该模型的默认视角' : '相机已重置到模型默认取景')
+      emit('status', preferredViewState === 'default' ? 'ç¸ćşĺˇ˛éç˝Žĺ°čŻĽć¨ĄĺçéťčŽ¤č§č§' : 'ç¸ćşĺˇ˛éç˝Žĺ°ć¨ĄĺéťčŽ¤ĺćŻ')
     }
   },
 )
@@ -2523,7 +2523,7 @@ watch(
   () => props.saveMarkersToken,
   (value, previousValue) => {
     if (value > 0 && value !== previousValue) {
-      void saveViewerConfig('已保存当前标记配置', '标记配置保存失败')
+      void saveViewerConfig('ĺˇ˛äżĺ­ĺ˝ĺć čŽ°éç˝Ž', 'ć čŽ°éç˝Žäżĺ­ĺ¤ąč´Ľ')
     }
   },
 )
@@ -2532,7 +2532,7 @@ watch(
   () => props.rotateClockwiseToken,
   (value, previousValue) => {
     if (value > 0 && value !== previousValue && queueViewRotation('clockwise')) {
-      emit('status', '视角开始顺时针线性旋转')
+      emit('status', 'č§č§ĺźĺ§éĄşćśéçşżć§ćč˝Ź')
     }
   },
 )
@@ -2541,7 +2541,7 @@ watch(
   () => props.rotateCounterclockwiseToken,
   (value, previousValue) => {
     if (value > 0 && value !== previousValue && queueViewRotation('counterclockwise')) {
-      emit('status', '视角开始逆时针线性旋转')
+      emit('status', 'č§č§ĺźĺ§éćśéçşżć§ćč˝Ź')
     }
   },
 )
@@ -2633,20 +2633,20 @@ watch(
           class="annotation-dialog-input"
           rows="4"
           maxlength="240"
-          placeholder="请输入标注内容"
+          placeholder="čŻˇčžĺĽć ćł¨ĺĺŽš"
         ></textarea>
 
         <footer class="annotation-dialog-footer">
-          <button class="annotation-dialog-button" type="button" @click="closeAnnotationDialog">取消</button>
+          <button class="annotation-dialog-button" type="button" @click="closeAnnotationDialog">ĺćś</button>
           <button
             v-if="canDeleteAnnotationDialogTarget()"
             class="annotation-dialog-button danger"
             type="button"
             @click="deleteAnnotationDialogTarget"
           >
-            删除
+            ĺ é¤
           </button>
-          <button class="annotation-dialog-button primary" type="submit">保存</button>
+          <button class="annotation-dialog-button primary" type="submit">äżĺ­</button>
         </footer>
       </form>
     </div>

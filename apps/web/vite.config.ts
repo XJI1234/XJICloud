@@ -47,6 +47,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'src'),
+      '@/app': path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'src/app'),
+      '@/shared': path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'src/shared'),
+      '@/domains': path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'src/domains'),
       '@xjicloud/spark': path.resolve(rootDir, 'packages/spark/src'),
       '@xjicloud/shared': path.resolve(rootDir, 'packages/shared/src'),
       'spark-rs': path.resolve(rootDir, 'rust/spark-rs/pkg'),

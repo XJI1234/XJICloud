@@ -1,6 +1,6 @@
-import { useAuthStore } from '@/stores/auth'
-import { useProjectStore } from '@/stores/project'
-import { useTrainingJobStore } from '@/stores/trainingJob'
+import { useAuthStore } from '@/domains/identity/stores/auth'
+import { useProjectStore } from '@/domains/project/stores/project'
+import { useTrainingJobStore } from '@/domains/training/stores/trainingJob'
 
 export function clearUserSession() {
   const trainingJobStore = useTrainingJobStore()

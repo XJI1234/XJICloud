@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ApiError } from '@/api/client'
+import { ApiError } from '@/shared/infrastructure/http/client'
 import {
   completeDataset,
   createDataset,
   putToOss,
   type CreateDatasetResponse,
-} from '@/api/datasets'
-import { useTrainingJobStore } from '@/stores/trainingJob'
-import { buildDatasetArchive, formatBytes, type DatasetArchive } from '@/utils/datasetArchive'
-import { useFormatDateTime } from '@/composables/useAppLocale'
+} from '@/domains/training/api/datasets'
+import { useTrainingJobStore } from '@/domains/training/stores/trainingJob'
+import { buildDatasetArchive, formatBytes, type DatasetArchive } from '@/domains/training/utils/datasetArchive'
+import { useFormatDateTime } from '@/shared/composables/useAppLocale'
 
 const props = defineProps<{
   projectId: string
@@ -184,7 +184,7 @@ async function uploadArchive() {
       <p>{{ t('dataset.selectedSummary', { count: archive.files.length, size: formatBytes(totalUploadBytes) }) }}</p>
       <ul class="dataset-file-list">
         <li v-for="file in archive.files.slice(0, 8)" :key="file.archivedName">
-          {{ file.archivedName }} ← {{ file.originalName }}
+          {{ file.archivedName }} â†� {{ file.originalName }}
         </li>
         <li v-if="archive.files.length > 8">{{ t('dataset.moreFiles', { count: archive.files.length - 8 }) }}</li>
       </ul>

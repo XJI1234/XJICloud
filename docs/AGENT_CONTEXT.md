@@ -228,9 +228,13 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 ## 7. 用户前端（`apps/web/`）
 
-包名 `@xjicloud/web`。业务源码在 `apps/web/src/`；渲染库通过 `@xjicloud/spark`（`packages/spark`）。
+包名 `@xjicloud/web`。业务源码在 `apps/web/src/`，按 **限界上下文** 组织（详见 `apps/web/src/README.md`）：
 
-路由与组件见 `apps/web/src/router`；训练流见 `DatasetUploadPanel` / `TrainingJobPanel` / `api/datasets.ts`。
+- **`app/`** — 启动、路由（`app/router`）、布局、i18n、全局样式
+- **`shared/`** — HTTP client（`shared/infrastructure/http/client.ts`）、session、通用 UI
+- **`domains/`** — `identity`、`project`、`model`、`training`、`viewer`、`editor`、`support`
+
+渲染库通过 `@xjicloud/spark`（`packages/spark`）。训练流见 `domains/training/`（`DatasetUploadPanel`、`TrainingJobPanel`、`api/datasets.ts`）；模型 API 见 `domains/model/api/models.ts`。
 
 ## 7.1 用户前端 DDD（`apps/web2/`）
 

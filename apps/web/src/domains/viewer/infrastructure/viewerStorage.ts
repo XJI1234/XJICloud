@@ -5,11 +5,11 @@ import {
   saveViewerConfig,
   uploadExport,
   type ModelSummary as ApiModelSummary,
-} from '@/api/models'
-import { downloadModelBytes } from '@/api/client'
-import type { ModelSummary, ViewerConfigFile } from '@/types/viewer'
+} from '@/domains/model/api/models'
+import { downloadModelBytes } from '@/shared/infrastructure/http/client'
+import type { ModelSummary, ViewerConfigFile } from '@/domains/viewer/types/viewer'
 
-export type { ModelSummary } from '@/types/viewer'
+export type { ModelSummary } from '@/domains/viewer/types/viewer'
 
 export interface ViewerStoragePort {
   listModels(projectId: string): Promise<ModelSummary[]>

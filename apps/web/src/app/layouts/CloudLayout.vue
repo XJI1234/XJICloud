@@ -2,13 +2,13 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
-import CloudSheet from '@/components/CloudSheet.vue'
-import ToolIcon from '@/components/ToolIcon.vue'
-import { useAppLocale } from '@/composables/useAppLocale'
-import { useAuthStore } from '@/stores/auth'
-import { clearUserSession } from '@/utils/session'
-import { showComingSoon } from '@/utils/comingSoon'
+import { CAMERA_STATUS_KEY, type CameraStatus } from '@/domains/viewer/constants/cameraStatus'
+import CloudSheet from '@/shared/presentation/CloudSheet.vue'
+import ToolIcon from '@/shared/presentation/ToolIcon.vue'
+import { useAppLocale } from '@/shared/composables/useAppLocale'
+import { useAuthStore } from '@/domains/identity/stores/auth'
+import { clearUserSession } from '@/shared/kernel/session'
+import { showComingSoon } from '@/shared/kernel/comingSoon'
 
 const route = useRoute()
 const router = useRouter()

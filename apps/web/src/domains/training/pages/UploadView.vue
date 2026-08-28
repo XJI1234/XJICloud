@@ -2,11 +2,11 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { useProjectStore } from '@/stores/project'
-import { ApiError } from '@/api/client'
-import { uploadModel } from '@/api/models'
-import DatasetUploadPanel from '@/components/DatasetUploadPanel.vue'
-import TrainingJobPanel from '@/components/TrainingJobPanel.vue'
+import { useProjectStore } from '@/domains/project/stores/project'
+import { ApiError } from '@/shared/infrastructure/http/client'
+import { uploadModel } from '@/domains/model/api/models'
+import DatasetUploadPanel from '@/domains/training/components/DatasetUploadPanel.vue'
+import TrainingJobPanel from '@/domains/training/components/TrainingJobPanel.vue'
 
 type UploadTab = 'dataset' | 'model'
 

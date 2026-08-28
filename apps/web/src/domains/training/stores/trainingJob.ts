@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import i18n from '@/i18n'
-import { ApiError } from '@/api/client'
+import i18n from '@/app/i18n'
+import { ApiError } from '@/shared/infrastructure/http/client'
 import {
   cancelJob as cancelJobApi,
   deleteJob as deleteJobApi,
@@ -10,7 +10,7 @@ import {
   subscribeJobEvents,
   type JobProgressEvent,
   type JobResponse,
-} from '@/api/datasets'
+} from '@/domains/training/api/datasets'
 
 export const useTrainingJobStore = defineStore('trainingJob', () => {
   const jobs = ref<JobResponse[]>([])

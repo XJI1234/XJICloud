@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ApiError } from '@/api/client'
-import { uploadModel } from '@/api/models'
-import SparkViewport from '@/modules/viewer/components/SparkViewport.vue'
-import { CAMERA_STATUS_KEY, type CameraStatus } from '@/constants/cameraStatus'
+import { ApiError } from '@/shared/infrastructure/http/client'
+import { uploadModel } from '@/domains/model/api/models'
+import SparkViewport from '@/domains/viewer/components/SparkViewport.vue'
+import { CAMERA_STATUS_KEY, type CameraStatus } from '@/domains/viewer/constants/cameraStatus'
 import {
   createCloudViewerStorage,
   rememberModelMeta,
   VIEWER_STORAGE_KEY,
   type ModelSummary,
-} from '@/modules/viewer/viewerStorage'
-import { useProjectStore } from '@/stores/project'
+} from '@/domains/viewer/infrastructure/viewerStorage'
+import { useProjectStore } from '@/domains/project/stores/project'
 import clockwiseRotateIcon from '@/assets/clockwise-rotate.svg'
 import counterclockwiseRotateIcon from '@/assets/counterclockwise-rotate.svg'
 

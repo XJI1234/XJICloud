@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { prefersReducedMotion } from '@/composables/useCloudSpring'
+import { prefersReducedMotion } from '@/shared/composables/useCloudSpring'
 
 const props = withDefaults(
   defineProps<{

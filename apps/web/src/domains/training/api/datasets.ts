@@ -1,4 +1,4 @@
-import { apiRequest, getAuthToken } from '@/api/client'
+import { apiRequest, getAuthToken } from '@/shared/infrastructure/http/client'
 
 export type JobStatus =
   | 'PENDING'
@@ -111,13 +111,13 @@ export function putToOss(
         resolve()
         return
       }
-      reject(new Error(`OSS 上传失败 (${xhr.status})`))
+      reject(new Error(`OSS ä¸ä¼ å¤±è´¥ (${xhr.status})`))
     }
 
     xhr.onerror = () =>
       reject(
         new Error(
-          'OSS 上传网络错误：多为 Bucket 未配置浏览器跨域（CORS）。请在 OSS 控制台为 Bucket 添加前端 Origin（含协议，如 http://192.168.230.132），允许 PUT/GET/HEAD 与 Headers *。后端「测试连接」仅验证服务端，不覆盖此项。',
+          'OSS ä¸ä¼ ç½ç»éè¯¯ï¼å¤ä¸º Bucket æªéç½®æµè§å¨è·¨åï¼CORSï¼ãè¯·å¨ OSS æ§å¶å°ä¸º Bucket æ·»å åç«¯ Originï¼å«åè®®ï¼å¦ http://192.168.230.132ï¼ï¼åè®¸ PUT/GET/HEAD ä¸ Headers *ãåç«¯ãæµè¯è¿æ¥ãä»éªè¯æå¡ç«¯ï¼ä¸è¦çæ­¤é¡¹ã',
         ),
       )
     xhr.send(blob)
@@ -136,7 +136,7 @@ export function subscribeJobEvents(jobId: string, onEvent: (event: JobProgressEv
       })
 
       if (!response.ok || !response.body) {
-        throw new Error('无法连接任务进度流')
+        throw new Error('æ æ³è¿æ¥ä»»å¡è¿åº¦æµ')
       }
 
       const reader = response.body.getReader()

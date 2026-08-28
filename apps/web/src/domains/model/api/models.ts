@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest } from '@/shared/infrastructure/http/client'
 
 export interface ModelSummary {
   id: string

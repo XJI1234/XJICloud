@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/domains/identity/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -7,7 +7,7 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: () => import('@/views/LoginView.vue'),
+      component: () => import('@/domains/identity/pages/LoginView.vue'),
       meta: { public: true },
     },
     {
@@ -16,7 +16,7 @@ const router = createRouter({
     },
     {
       path: '/app',
-      component: () => import('@/layouts/CloudLayout.vue'),
+      component: () => import('@/app/layouts/CloudLayout.vue'),
       meta: { requiresAuth: true },
       children: [
         {
@@ -26,34 +26,34 @@ const router = createRouter({
         {
           path: 'home',
           name: 'home',
-          component: () => import('@/views/HomeView.vue'),
+          component: () => import('@/domains/project/pages/HomeView.vue'),
         },
         {
           path: 'projects',
           name: 'projects',
-          component: () => import('@/views/ProjectListView.vue'),
+          component: () => import('@/domains/project/pages/ProjectListView.vue'),
         },
         {
           path: 'upload',
           name: 'upload',
-          component: () => import('@/views/UploadView.vue'),
+          component: () => import('@/domains/training/pages/UploadView.vue'),
         },
         {
           path: 'layer',
           name: 'layer',
-          component: () => import('@/modules/viewer/LayerViewerView.vue'),
+          component: () => import('@/domains/viewer/pages/LayerViewerView.vue'),
           meta: { transition: 'cloud-fade' },
         },
         {
           path: 'supersplat',
           name: 'supersplat',
-          component: () => import('@/views/SuperSplatEditorView.vue'),
+          component: () => import('@/domains/editor/pages/SuperSplatEditorView.vue'),
           meta: { immersive: true },
         },
         {
           path: 'help',
           name: 'help',
-          component: () => import('@/views/HelpView.vue'),
+          component: () => import('@/domains/support/pages/HelpView.vue'),
         },
       ],
     },

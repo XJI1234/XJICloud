@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import * as projectsApi from '@/api/projects'
-import type { ProjectSummary } from '@/api/projects'
+import * as projectsApi from '@/domains/project/api/projects'
+import type { ProjectSummary } from '@/domains/project/api/projects'
 
 const RECENT_PROJECTS_KEY = 'xjicloud_recent_projects'
 const MAX_RECENT_PROJECTS = 8

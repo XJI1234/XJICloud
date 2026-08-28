@@ -2,10 +2,10 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { getCaptcha, needCaptcha, type CaptchaResponse } from '@/api/auth'
-import { ApiError } from '@/api/client'
-import { showComingSoon } from '@/utils/comingSoon'
+import { useAuthStore } from '@/domains/identity/stores/auth'
+import { getCaptcha, needCaptcha, type CaptchaResponse } from '@/domains/identity/api/auth'
+import { ApiError } from '@/shared/infrastructure/http/client'
+import buildingIllustration from '@/assets/building-isometric.svg'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -16,8 +16,6 @@ const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
 const displayName = ref('')
-const phone = ref('')
-const smsCode = ref('')
 const errorMessage = ref('')
 const pending = ref(false)
 
@@ -144,7 +142,9 @@ async function submit() {
     <div class="cloud-grain" aria-hidden="true" />
     <div class="login-page__orb login-page__orb--blue" aria-hidden="true" />
     <div class="login-page__orb login-page__orb--amber" aria-hidden="true" />
-    <div class="login-card">
+
+    <div class="login-page__layout">
+      <div class="login-card">
       <p class="login-eyebrow">{{ t('brand.title') }}</p>
       <h1 class="login-title">{{ t('brand.subtitle') }}</h1>
       <p class="login-subtitle">{{ t('login.subtitle') }}</p>
@@ -197,45 +197,25 @@ async function submit() {
           </div>
         </div>
 
-        <label class="login-field">
-          <span>{{ t('login.phone') }}</span>
-          <input
-            v-model="phone"
-            class="text-control"
-            type="tel"
-            inputmode="tel"
-            autocomplete="tel"
-            :placeholder="t('login.phone')"
-          />
-        </label>
-
-        <div class="login-field">
-          <span>{{ t('login.smsCode') }}</span>
-          <div class="login-sms-row">
-            <input
-              v-model="smsCode"
-              class="text-control"
-              type="text"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              :placeholder="t('login.smsCode')"
-            />
-            <button
-              class="side-button cloud-pressable login-sms-send"
-              type="button"
-              @click="showComingSoon('login.smsCodeFeature')"
-            >
-              {{ t('login.sendSmsCode') }}
-            </button>
-          </div>
-        </div>
-
         <p v-if="errorMessage" class="login-error">{{ errorMessage }}</p>
 
         <button class="side-button primary login-submit cloud-pressable" type="submit" :disabled="pending">
           {{ pending ? t('common.processing') : mode === 'login' ? t('login.login') : t('login.registerAndLogin') }}
         </button>
       </form>
+      </div>
+
+      <aside class="login-visual" aria-hidden="true">
+        <img
+          class="login-visual__illustration"
+          :src="buildingIllustration"
+          alt=""
+          width="480"
+          height="360"
+          loading="eager"
+          decoding="async"
+        />
+      </aside>
     </div>
   </div>
 </template>

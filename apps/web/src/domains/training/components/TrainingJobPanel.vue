@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useTrainingJobStore } from '@/stores/trainingJob'
-import { ApiError } from '@/api/client'
-import type { JobStatus } from '@/api/datasets'
-import { useFormatDateTime } from '@/composables/useAppLocale'
+import { useTrainingJobStore } from '@/domains/training/stores/trainingJob'
+import { ApiError } from '@/shared/infrastructure/http/client'
+import type { JobStatus } from '@/domains/training/api/datasets'
+import { useFormatDateTime } from '@/shared/composables/useAppLocale'
 
 const props = defineProps<{
   projectId: string | null
