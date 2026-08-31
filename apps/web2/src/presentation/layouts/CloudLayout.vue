@@ -98,11 +98,8 @@ const isImmersive = computed(() => route.name === 'home' || !activeProjectId.val
     <header class="cloud-header">
       <div class="cloud-brand">
         <button class="cloud-brand-button" type="button" :title="t('nav.home')" @click="goHome">
-          <img class="cloud-brand-logo" src="/logo.jpg" alt="XJI Cloud" />
-          <div>
-            <h1 class="cloud-brand-title">{{ t('brand.title') }}</h1>
-            <p class="cloud-brand-subtitle">{{ t('brand.subtitle') }}</p>
-          </div>
+          <img class="cloud-brand-logo" src="/logo_nw.png" alt="" />
+          <span class="cloud-brand-title">{{ t('brand.title') }}</span>
         </button>
       </div>
 

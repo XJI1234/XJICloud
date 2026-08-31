@@ -870,7 +870,7 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 ```bash
 cd deploy && docker compose up -d --build
-pnpm dev:web      # 用户前端 :5174
+pnpm dev          # 当前用户前端 web2 :5176
 pnpm dev:admin    # 管理面板 :5175
 ```
 

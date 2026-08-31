@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { PhEye, PhEyeSlash } from '@phosphor-icons/vue'
 import AppButton from '@/presentation/components/AppButton.vue'
 import { formatDomainError } from '@/presentation/errors'
 import { useAuthSession } from '@/features/identity/presentation/composables/useAuthSession'
+import LoginCreatures from '@/features/identity/presentation/components/LoginCreatures.vue'
+import LocaleToggle from '@/presentation/components/LocaleToggle.vue'
 import type { CaptchaChallenge } from '@/features/identity/domain/entities/captcha.entity'
+import './login-page.css'
 
 const auth = useAuthSession()
 const router = useRouter()
@@ -21,6 +25,27 @@ const pending = ref(false)
 const showCaptcha = ref(false)
 const captcha = ref<CaptchaChallenge | null>(null)
 const captchaInput = ref('')
+const showPassword = ref(false)
+const curious = ref(false)
+const hiding = ref(false)
+
+const layoutTick = computed(() => (mode.value === 'register' ? 1 : 0) + (showCaptcha.value ? 2 : 0))
+
+function onFormFocus(event: FocusEvent) {
+  const target = event.target
+  if (!(target instanceof HTMLInputElement)) return
+  hiding.value = target.name === 'password'
+  curious.value = target.name !== 'password'
+}
+
+function onFormBlur(event: FocusEvent) {
+  const next = event.relatedTarget
+  if (next instanceof HTMLInputElement && event.currentTarget instanceof HTMLElement && event.currentTarget.contains(next)) {
+    return
+  }
+  curious.value = false
+  hiding.value = false
+}
 
 async function loadCaptcha() {
   const [error, data] = await auth.getCaptcha()
@@ -134,53 +159,106 @@ async function submit() {
 
 <template>
   <div class="login-page">
-    <section class="login-form-pane">
-      <h1 class="login-title">{{ t('brand.subtitle') }}</h1>
-      <p class="login-subtitle">{{ t('login.subtitle') }}</p>
-
-      <div class="login-mode-row">
-        <button class="login-mode-button" :class="{ 'is-active': mode === 'login' }" type="button" @click="mode = 'login'">
-          {{ t('login.login') }}
-        </button>
-        <button class="login-mode-button" :class="{ 'is-active': mode === 'register' }" type="button" @click="mode = 'register'">
-          {{ t('login.register') }}
-        </button>
+    <aside class="login-visual">
+      <div class="login-visual__brand">
+        <img class="login-visual__logo" src="/logo_nw.png" width="28" height="28" alt="" />
+        {{ t('brand.title') }}
       </div>
-
-      <form class="login-fields" @submit.prevent="submit">
-        <label class="cloud-field">
-          <span>{{ t('login.username') }}</span>
-          <input v-model="username" class="cloud-input" type="text" autocomplete="username" @blur="checkNeedCaptcha" />
-        </label>
-        <label v-if="mode === 'register'" class="cloud-field">
-          <span>{{ t('login.displayName') }}</span>
-          <input v-model="displayName" class="cloud-input" type="text" autocomplete="nickname" />
-        </label>
-        <label class="cloud-field">
-          <span>{{ t('login.password') }}</span>
-          <input v-model="password" class="cloud-input" type="password" autocomplete="current-password" />
-        </label>
-        <label v-if="showCaptcha" class="cloud-field">
-          <span>{{ t('login.captchaLabel') }}</span>
-          <div class="captcha-row">
-            <input v-model="captchaInput" class="cloud-input" type="text" />
-            <img
-              v-if="captcha"
-              class="captcha-image"
-              :src="captcha.captchaImage"
-              alt=""
-              @click="loadCaptcha"
-            />
-          </div>
-        </label>
-        <p v-if="errorMessage" class="login-error">{{ errorMessage }}</p>
-        <AppButton variant="primary" type="submit" :disabled="pending">
-          {{ pending ? t('common.processing') : (mode === 'login' ? t('login.login') : t('login.registerAndLogin')) }}
-        </AppButton>
-      </form>
-    </section>
-    <aside class="login-visual" aria-hidden="true">
-      <div class="login-visual__mist" />
+      <LoginCreatures :curious="curious" :hiding="hiding" :layout-tick="layoutTick" />
     </aside>
+
+    <section class="login-form-pane">
+      <div class="login-pane-inner">
+        <div class="login-head">
+          <h1 class="login-title">{{ mode === 'register' ? t('login.welcomeRegister') : t('login.welcomeBack') }}</h1>
+          <p class="login-subtitle">{{ mode === 'register' ? t('login.leadRegister') : t('login.leadLogin') }}</p>
+        </div>
+
+        <form
+          class="login-fields"
+          @submit.prevent="submit"
+          @focusin="onFormFocus"
+          @focusout="onFormBlur"
+        >
+          <label class="cloud-field">
+            <span>{{ t('login.username') }}</span>
+            <input
+              v-model="username"
+              class="cloud-input"
+              name="username"
+              type="text"
+              autocomplete="username"
+              :placeholder="t('login.usernamePlaceholder')"
+              @blur="checkNeedCaptcha"
+            />
+          </label>
+          <label v-if="mode === 'register'" class="cloud-field">
+            <span>{{ t('login.displayName') }}</span>
+            <input
+              v-model="displayName"
+              class="cloud-input"
+              name="displayName"
+              type="text"
+              autocomplete="nickname"
+              :placeholder="t('login.displayNamePlaceholder')"
+            />
+          </label>
+          <label class="cloud-field">
+            <span>{{ t('login.password') }}</span>
+            <div class="login-input-wrap">
+              <input
+                v-model="password"
+                class="cloud-input"
+                name="password"
+                :type="showPassword ? 'text' : 'password'"
+                :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+                :placeholder="t('login.passwordPlaceholder')"
+              />
+              <button
+                class="login-eye"
+                type="button"
+                :aria-label="showPassword ? t('login.hidePassword') : t('login.showPassword')"
+                @click="showPassword = !showPassword"
+              >
+                <PhEyeSlash v-if="showPassword" :size="18" />
+                <PhEye v-else :size="18" />
+              </button>
+            </div>
+          </label>
+          <label v-if="showCaptcha" class="cloud-field">
+            <span>{{ t('login.captchaLabel') }}</span>
+            <div class="login-captcha-row">
+              <input
+                v-model="captchaInput"
+                class="cloud-input"
+                name="captcha"
+                type="text"
+                :placeholder="t('login.captchaPlaceholder')"
+              />
+              <img
+                v-if="captcha"
+                class="captcha-image"
+                :src="captcha.captchaImage"
+                :alt="t('login.captchaAlt')"
+                :title="t('login.captchaRefresh')"
+                @click="loadCaptcha"
+              />
+            </div>
+          </label>
+          <p v-if="errorMessage" class="login-error">{{ errorMessage }}</p>
+          <AppButton class="login-submit" variant="ghost" type="submit" :disabled="pending">
+            {{ pending ? t('common.processing') : (mode === 'login' ? t('login.login') : t('login.registerAndLogin')) }}
+          </AppButton>
+        </form>
+
+        <p class="login-switch">
+          {{ mode === 'register' ? t('login.hasAccount') : t('login.noAccount') }}
+          <button type="button" @click="mode = mode === 'login' ? 'register' : 'login'">
+            {{ mode === 'register' ? t('login.login') : t('login.register') }}
+          </button>
+        </p>
+      </div>
+    </section>
+    <LocaleToggle class="login-locale" />
   </div>
 </template>

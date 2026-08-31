@@ -6,9 +6,10 @@
 
 ## 任务边界
 
-- 用户前端 DDD 产品面：只动 `apps/web2/`，除非用户点名改 `apps/web` 或后端。
+- **当前用户前端就是本包。** 用户产品面只动 `apps/web2/`，除非用户点名改后端或管理端。
+- `apps/web` 已弃用。不要为新功能改它，除非任务明确要求改旧版。
+- 根目录 `pnpm dev` / `pnpm build` 指向 web2。旧版用 `pnpm dev:web-legacy`。
 - 不要把 PLY/SPZ 迁到 OSS。
-- 不要把默认 `pnpm dev` 改成 web2，除非用户要求。
 - 不要改 `packages/spark`、`rust/`，除非任务要求。
 
 ## 分层（必须）
@@ -41,7 +42,8 @@
 
 ## 产品约定（web2）
 
-- 浅色壳 + 暗 3D 画布。按钮只有 Primary / Ghost / Destructive。
+- **浅色壳 + 暗 3D 画布。** 纸白 surface、单一 accent `#3d6b8a`。不要把旧版 Twilight Amber 暗色壳抄回来。
+- 按钮只有 Primary / Ghost / Destructive。
 - 查看器 `/app/layer`：`NativeSplatViewport` + SparkControls；涂抹/标注/导出在 SuperSplat。
 - 高级编辑 `/app/supersplat`：无云端模型也要能进；本地 PLY/SPZ 合法即可打开。
 - i18n 在 `src/app/i18n/locales/`；用户可见文案不要用 `—`。

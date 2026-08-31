@@ -4,18 +4,20 @@
   "version": "1.0.0",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "pnpm --filter @xjicloud/web dev",
-    "dev:web": "pnpm --filter @xjicloud/web dev",
+    "dev": "pnpm --filter @xjicloud/web2 dev",
+    "dev:web": "pnpm --filter @xjicloud/web2 dev",
+    "dev:web-legacy": "pnpm --filter @xjicloud/web dev",
     "dev:admin": "pnpm --filter @xjicloud/admin dev",
     "dev:web2": "pnpm --filter @xjicloud/web2 dev",
-    "build": "pnpm --filter @xjicloud/web build",
-    "build:web": "pnpm --filter @xjicloud/web build",
+    "build": "pnpm --filter @xjicloud/web2 build",
+    "build:web": "pnpm --filter @xjicloud/web2 build",
+    "build:web-legacy": "pnpm --filter @xjicloud/web build",
     "build:web2": "pnpm --filter @xjicloud/web2 build",
     "test:web2": "pnpm --filter @xjicloud/web2 test",
     "build:admin": "pnpm --filter @xjicloud/admin build",
-    "build:all": "pnpm run build:web && pnpm run build:admin",
+    "build:all": "pnpm run build:web2 && pnpm run build:admin",
     "build:wasm": "node rust/build_wasm.js",
     "copy:supersplat": "node scripts/copy-supersplat-dist.mjs",
-    "preview": "pnpm --filter @xjicloud/web preview"
+    "preview": "pnpm --filter @xjicloud/web2 preview"
   }
 }

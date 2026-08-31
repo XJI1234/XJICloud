@@ -4,6 +4,8 @@
 
 > 本仓库为 **pnpm monorepo**：根目录仅做编排，业务代码在 `apps/`、`services/`、`packages/`。
 
+**当前用户前端是 `apps/web2`**（Vue 3 + Vite，前端 DDD：Domain / Application / Infrastructure / Presentation）。`apps/web` 是旧版产品面，已弃用，仅作对照；不要在新功能里改它。UI 为主题：**浅色产品壳 + 暗色 3D 画布**，不是旧版 Twilight Amber 暗色壳。
+
 ---
 
 ## 仓库结构
@@ -11,8 +13,8 @@
 ```text
 XJICloud/
 ├── apps/
-│   ├── web/                 # 用户前端 @xjicloud/web（:5174）
-│   ├── web2/                # 用户前端 DDD 重写 @xjicloud/web2（:5176）
+│   ├── web2/                # 当前用户前端 @xjicloud/web2（:5176，DDD）
+│   ├── web/                 # 已弃用：旧用户前端 @xjicloud/web（:5174）
 │   └── admin/               # 管理面板 @xjicloud/admin（:5175，base /admin/）
 ├── packages/
 │   ├── spark/               # Spark 2.0 渲染库 @xjicloud/spark
@@ -24,7 +26,7 @@ XJICloud/
 ├── vendors/
 │   └── supersplat/          # SuperSplat 预编译静态资源（构建时复制到 public）
 ├── deploy/                  # Compose / Nginx / systemd / K8s
-├── docs/                    # Deploy.md、AGENT_CONTEXT.md
+├── docs/                    # Deploy.md、AGENT_CONTEXT.md、WEB2_FRONTEND.md
 ├── scripts/                 # 构建辅助脚本
 ├── package.json             # pnpm workspace 入口
 └── pnpm-workspace.yaml
@@ -32,12 +34,12 @@ XJICloud/
 
 | 角色 | 目录 | 日常命令 |
 |------|------|----------|
-| 用户前端 | `apps/web`, `packages/spark`, `rust` | `pnpm --filter @xjicloud/web dev` |
-| 用户前端 DDD | `apps/web2` | `pnpm dev:web2` / `pnpm test:web2` |
+| 用户前端（当前） | `apps/web2`, `packages/spark`, `rust` | `pnpm dev` / `pnpm test:web2` |
+| 用户前端（已弃用） | `apps/web` | `pnpm dev:web-legacy` |
 | 管理前端 | `apps/admin` | `pnpm --filter @xjicloud/admin dev` |
 | 后端 | `services/backend` | `cd services/backend && mvn spring-boot:run` |
 | Worker | `services/gpu-worker` | `docker build -t xjicloud/gpu-worker services/gpu-worker` |
-| SuperSplat | `vendors/supersplat`（预编译） | web `predev`/`prebuild` 自动复制 |
+| SuperSplat | `vendors/supersplat`（预编译） | web2 `predev`/`prebuild` 自动复制 |
 
 ---
 
@@ -64,7 +66,7 @@ cd deploy
 docker compose up redis minio minio-init -d
 ```
 
-社区版 MinIO 需配置全局 CORS（Origin 含 `http://127.0.0.1:5174`），见 [docs/Deploy.md](docs/Deploy.md)。
+社区版 MinIO 需配置全局 CORS（Origin 含 `http://127.0.0.1:5176`），见 [docs/Deploy.md](docs/Deploy.md)。
 
 ### 3. 后端
 
@@ -77,11 +79,15 @@ mvn spring-boot:run
 
 ```bash
 # 仓库根目录
-pnpm dev:web      # :5174，/api → 8080
-pnpm dev:admin    # :5175
-pnpm dev:web2     # :5176，DDD 用户端（架构说明见 apps/web2/README.md）
-pnpm test:web2    # web2 单测 + 分层门禁
+pnpm dev           # :5176，当前用户端（apps/web2）
+pnpm test:web2     # web2 单测 + 分层门禁
+pnpm dev:admin     # :5175
+pnpm dev:web-legacy  # :5174，仅旧版对照
 ```
+
+`pnpm dev:web` / `pnpm build:web` 与 `pnpm dev` 一样指向 **web2**。旧包请用 `dev:web-legacy` / `build:web-legacy`。
+
+架构说明见 [apps/web2/README.md](apps/web2/README.md) 与 [docs/WEB2_FRONTEND.md](docs/WEB2_FRONTEND.md)。
 
 ### 5. GPU Worker（可选）
 
@@ -99,18 +105,18 @@ docker run --rm \
 
 ```bash
 pnpm build:wasm          # Rust WASM
-pnpm build:web           # 自动复制 vendors/supersplat → public/supersplat
-pnpm build:web2          # DDD 用户端
+pnpm build               # 当前用户端 web2（含复制 vendors/supersplat）
 pnpm build:admin
-pnpm build:all           # web + admin
+pnpm build:all           # web2 + admin
+pnpm build:web-legacy    # 仅旧版 apps/web
 
 cd services/backend && mvn -DskipTests package
 ```
 
 产物：
 
-- 用户前端 → `apps/web/dist/`
-- 用户前端 DDD → `apps/web2/dist/`
+- 用户前端（当前） → `apps/web2/dist/`
+- 用户前端（已弃用） → `apps/web/dist/`
 - 管理面板 → `apps/admin/dist/`
 - 后端 → `services/backend/target/*.jar`
 
@@ -120,7 +126,7 @@ cd services/backend && mvn -DskipTests package
 
 | 端 | 能力 |
 |----|------|
-| 用户端 | 工程管理、图片数据集 OSS 直传训练、PLY/SPZ 上传、Spark 查看、SuperSplat iframe 编辑 |
+| 用户端（web2） | 工程管理、图片数据集 OSS 直传训练、PLY/SPZ 上传、Spark 查看、SuperSplat iframe 编辑 |
 | 管理端 | OSS 配置、Worker / 任务监控、仪表盘 |
 | Worker | 注册 / 心跳 / 领任务；当前为 mock 训练（可替换 `mock_trainer.py`） |
 
@@ -150,7 +156,7 @@ sudo ./deploy/deploy-backend.sh
 
 - [docs/Deploy.md](docs/Deploy.md) — 分机部署
 - [docs/AGENT_CONTEXT.md](docs/AGENT_CONTEXT.md) — 全仓架构与 API 速查（给开发 / Agent）
-- [docs/WEB2_FRONTEND.md](docs/WEB2_FRONTEND.md) — web2 DDD 前端架构知识库
+- [docs/WEB2_FRONTEND.md](docs/WEB2_FRONTEND.md) — 当前用户前端 DDD 架构知识库
 - [apps/web2/README.md](apps/web2/README.md) — web2 包说明
 - [apps/web2/AGENTS.md](apps/web2/AGENTS.md) — 改 web2 时的 Agent 硬规则
 - [vendors/README.md](vendors/README.md) — SuperSplat 预编译资源说明

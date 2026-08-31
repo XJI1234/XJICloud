@@ -1,8 +1,10 @@
 # @xjicloud/web2
 
-XJICloud **用户端 DDD 重写**：Vue 3 + Vite，端口 **5176**。与 `apps/web`（:5174，Pinia + 直连 API）能力对齐，但业务规则在 Domain / Application，页面只消费已经安全的结果。
+XJICloud **当前用户前端**：Vue 3 + Vite，端口 **5176**。在旧版 `apps/web` 的产品能力上，用前端 DDD 重构（Domain / Application / Infrastructure / Presentation）。页面只消费已经安全的结果，不直连 DTO。
 
-默认 `pnpm dev` 仍指向 `@xjicloud/web`。web2 是并行产品面，不是临时脚手架。
+根目录 **`pnpm dev` / `pnpm build` 指向本包**。`apps/web` 已弃用。
+
+UI 主题：**浅色产品壳 + 暗色 3D 画布**（纸白 `--surface #f5f6f8`，强调色 `--accent #3d6b8a`），不是旧版 Twilight Amber 暗色壳。
 
 | 文档 | 给谁 |
 |------|------|
@@ -14,9 +16,9 @@ XJICloud **用户端 DDD 重写**：Vue 3 + Vite，端口 **5176**。与 `apps/w
 
 ---
 
-## 为什么有 web2
+## 为什么是 DDD
 
-`apps/web` 把 fetch、DTO、校验、UI 状态混在 view / store 里。web2 按前端 Clean Architecture 拆开：
+旧版 `apps/web` 把 fetch、DTO、校验、UI 状态混在 view / store 里。本包按前端 Clean Architecture 拆开：
 
 - **Domain** 稳定：实体、不变量、仓库接口。零 Vue、零 `fetch`。
 - **Application** 编排用例：登录、提交数据集、打开编辑器。
@@ -32,14 +34,14 @@ XJICloud **用户端 DDD 重写**：Vue 3 + Vite，端口 **5176**。与 `apps/w
 ```bash
 # 仓库根
 pnpm install
-pnpm dev:web2          # http://localhost:5176  /api → :8080
+pnpm dev               # http://localhost:5176  /api → :8080
 pnpm test:web2
-pnpm build:web2
+pnpm build
 ```
 
 后端需 `services/backend` 在 **8080**。验证码、登录、项目、模型都走代理。没有后端时页面能开，业务请求会 `ECONNREFUSED`。
 
-`predev` / `prebuild` 会把 `vendors/supersplat` 复制到 `apps/web` 与 `apps/web2` 的 `public/supersplat`。
+`predev` / `prebuild` 会把 `vendors/supersplat` 复制到 `apps/web2/public/supersplat`。
 
 ---
 
@@ -107,14 +109,16 @@ Vitest 使用独立的 `vitest.config.ts`（不要并进 `vite.config.ts`，插�
 
 ---
 
-## 和 apps/web 的关系
+## 和已弃用的 apps/web
 
-| | `apps/web` | `apps/web2` |
+| | `apps/web`（弃用） | `apps/web2`（当前） |
 |--|------------|-------------|
 | 包名 | `@xjicloud/web` | `@xjicloud/web2` |
 | 端口 | 5174 | 5176 |
+| 命令 | `pnpm dev:web-legacy` | `pnpm dev` |
 | 状态 | Pinia + `api/` | 容器 + 用例 + composable |
+| 主题 | Twilight Amber 暗色壳 | 浅色壳 + 暗画布 |
 | 查看器 | 厚 Spark 编辑视口 | `NativeSplatViewport`（查看） |
 | 高级编辑 | 无云端模型则拦截 | 空白 SuperSplat + 本地打开 |
 
-改 web2 **不要**顺手改 `apps/web`，除非任务明确要求两边一起改。
+新功能只改 web2，**不要**顺手改 `apps/web`。
