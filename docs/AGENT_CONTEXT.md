@@ -3,7 +3,7 @@
 > 供 Cursor / 其他 AI Agent 快速理解本仓库的结构、已实现功能、扩展点与约束。  
 > 用户面向文档见 [../README.md](../README.md)；部署见 [Deploy.md](Deploy.md)。
 
-**最后更新：** 2026-08-28（web2 已是完整 DDD 用户端，见 [WEB2_FRONTEND.md](./WEB2_FRONTEND.md)）
+**最后更新：** 2026-08-31（**当前用户前端是 `apps/web2`**；`apps/web` 已弃用。见 [WEB2_FRONTEND.md](./WEB2_FRONTEND.md)）
 
 ---
 
@@ -15,7 +15,7 @@
 - 用户上传 / 管理 **PLY/SPZ** 模型，用 **Spark 2.0** 查看标注，用 **SuperSplat** iframe 做高级编辑
 - 管理员通过独立 **Vue Admin 面板** 配置 OSS、监控 Worker 与训练任务
 
-技术栈：**Vue 3.5 + Vite + Pinia + pnpm workspace**（前端）、**Spring Boot 3.3 + Java 17**（后端）、**Redis**（任务队列）、**S3 兼容 OSS**（MinIO / 阿里云 OSS）、**Python GPU Worker 容器**（Alibaba Cloud Linux 3）、**Rust/WASM**（浏览器端 Spark）。
+技术栈：**Vue 3.5 + Vite + pnpm workspace**（当前用户端为 `apps/web2`，前端 DDD，无 Pinia 作为业务源）；**Spring Boot 3.3 + Java 17**（后端）、**Redis**（任务队列）、**S3 兼容 OSS**（MinIO / 阿里云 OSS）、**Python GPU Worker 容器**（Alibaba Cloud Linux 3）、**Rust/WASM**（浏览器端 Spark）。
 
 **桌面端（Electron/Tauri）已移除**，仅保留 Web。
 
@@ -25,8 +25,8 @@
 
 ```
 XJICloud/
-├── apps/web/                 # 用户前端 @xjicloud/web（:5174）
-├── apps/web2/                # DDD 用户前端 @xjicloud/web2（:5176）
+├── apps/web2/                # 当前用户前端 @xjicloud/web2（:5176，DDD）
+├── apps/web/                 # 已弃用：旧用户前端 @xjicloud/web（:5174）
 ├── apps/admin/               # 管理前端 @xjicloud/admin（:5175，base /admin/）
 ├── packages/spark/           # Spark 2.0 TS 渲染库 @xjicloud/spark
 ├── packages/shared/          # 共享 ApiResponse / ApiError
@@ -48,8 +48,8 @@ XJICloud/
 ```mermaid
 flowchart TB
   subgraph clients [Clients]
-    UserFE[apps_web_5174]
-    Web2FE[apps_web2_5176]
+    UserFE[apps_web2_5176]
+    LegacyFE[apps_web_5174_deprecated]
     AdminFE[apps_admin_5175]
   end
 
@@ -77,17 +77,15 @@ flowchart TB
   end
 
   UserFE --> Nginx
-  Web2FE --> Nginx
+  LegacyFE --> Nginx
   AdminFE --> Nginx
   Nginx --> API
   UserFE -->|presigned_PUT| OSS
-  Web2FE -->|presigned_PUT| OSS
   API --> PG
   API --> Redis
   API --> OSSSvc --> OSS
   API --> LocalStore --> Disk
   SSE --> UserFE
-  SSE --> Web2FE
   Queue --> Redis
   Worker -->|register_heartbeat_jobs| API
   Worker --> OSS
@@ -226,22 +224,22 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 ---
 
-## 7. 用户前端（`apps/web/`）
+## 7. 当前用户前端（`apps/web2/`）
 
-包名 `@xjicloud/web`。业务源码在 `apps/web/src/`；渲染库通过 `@xjicloud/spark`（`packages/spark`）。
-
-路由与组件见 `apps/web/src/router`；训练流见 `DatasetUploadPanel` / `TrainingJobPanel` / `api/datasets.ts`。
-
-## 7.1 用户前端 DDD（`apps/web2/`）
-
-完整架构知识库：[WEB2_FRONTEND.md](./WEB2_FRONTEND.md)。包说明：[apps/web2/README.md](../apps/web2/README.md)。Agent 硬规则：[apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。
+**这是唯一的用户产品面。** 完整架构知识库：[WEB2_FRONTEND.md](./WEB2_FRONTEND.md)。包说明：[apps/web2/README.md](../apps/web2/README.md)。Agent 硬规则：[apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。
 
 - 包名 `@xjicloud/web2`，端口 **5176**，`/api` 代理到 8080
-- 分层：`features/{bc}/{domain,application,infrastructure,presentation}` + `app/create-container.ts` 组合根
+- 在旧版 `apps/web` 的产品能力之上，用前端 DDD 重构：`features/{bc}/{domain,application,infrastructure,presentation}` + `app/create-container.ts` 组合根
 - BC：identity、project、dataset-training、model-asset、viewer、editor
-- 浅色产品壳；`/app/layer` 为原生 Spark 查看；`/app/supersplat` 允许无云端模型进入并打开本地文件
-- 测试：`pnpm test:web2`（含 architecture / parity）；构建：`pnpm build:web2`；开发：`pnpm dev:web2`
-- 默认 `pnpm dev` 仍指向 `apps/web`
+- **UI 主题：** 浅色产品壳（`--surface #f5f6f8`，强调色 `--accent #3d6b8a`，`system-ui`）+ 暗色 3D 画布。不是旧版 Twilight Amber 暗色壳。
+- `/app/layer` 为原生 Spark 查看；`/app/supersplat` 允许无云端模型进入并打开本地文件
+- 测试：`pnpm test:web2`；构建：`pnpm build` / `pnpm build:web2`；开发：`pnpm dev`（指向 web2）
+
+## 7.1 已弃用：旧用户前端（`apps/web/`）
+
+包名 `@xjicloud/web`，端口 **5174**。Pinia + `src/api` 直连。仅作对照与历史构建：`pnpm dev:web-legacy` / `pnpm build:web-legacy`。
+
+**不要**在此包开发新功能，除非任务明确要求改旧版。渲染库仍通过 `@xjicloud/spark`。
 
 ## 8. 管理面板（`apps/admin/`）
 
@@ -259,9 +257,9 @@ pnpm install
 
 cd services/backend && mvn spring-boot:run
 
-pnpm dev:web
-pnpm dev:web2
+pnpm dev
 pnpm dev:admin
+pnpm dev:web-legacy
 docker build -t xjicloud/gpu-worker services/gpu-worker/
 ```
 
@@ -269,7 +267,7 @@ docker build -t xjicloud/gpu-worker services/gpu-worker/
 
 ## 11. 已知限制
 
-1. SuperSplat：使用 `vendors/supersplat` 预编译资源；web `predev`/`prebuild` 自动复制到 `public/supersplat`
+1. SuperSplat：使用 `vendors/supersplat` 预编译资源；web2（及旧版 web）`predev`/`prebuild` 自动复制到各自 `public/supersplat`
 2. OSS CORS / 用户 PC 网段防火墙（Deploy.md §5.1.5）
 3. SSE 需 Nginx `proxy_buffering off`
 4. Worker 密钥须与后端一致
@@ -278,7 +276,7 @@ docker build -t xjicloud/gpu-worker services/gpu-worker/
 ## 12. Agent 约定
 
 - 不改 `packages/spark/`、`rust/`（除非任务要求）
-- 用户前端改 `apps/web`；**DDD 用户端改 `apps/web2`**（先读 `apps/web2/AGENTS.md`）；管理端改 `apps/admin`；后端改 `services/backend`
+- **用户前端只改 `apps/web2`**（先读 `apps/web2/AGENTS.md`）。不要改已弃用的 `apps/web`，除非任务点名旧版。管理端改 `apps/admin`；后端改 `services/backend`
 - 关键配置：`services/backend/src/main/resources/application.yml`、`pnpm-workspace.yaml`、`apps/*/vite.config.ts`
 
 ## 13. 实体与 Redis

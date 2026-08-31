@@ -1,10 +1,10 @@
 # web2 前端架构（DDD）
 
-> 给开发者与 AI Agent 的 **web2 知识库**。包级入门见 [apps/web2/README.md](../apps/web2/README.md)；改代码时的硬规则见 [apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。  
+> 给开发者与 AI Agent 的 **当前用户前端知识库**。包级入门见 [apps/web2/README.md](../apps/web2/README.md)；改代码时的硬规则见 [apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。  
 > 全仓后端 / Worker / 部署仍以 [AGENT_CONTEXT.md](./AGENT_CONTEXT.md) 为准。  
-> **最后更新：** 2026-08-28
+> **最后更新：** 2026-08-31
 
-本文记录的是 **已经落地的** 结构，不是愿景。与 `apps/web` 并行：同一后端，不同前端分层。
+本文记录的是 **已经落地的** 结构，不是愿景。**`apps/web2` 是当前用户产品面**；`apps/web` 已弃用。同一套 `/api/v1` 后端。UI 为浅色壳 + 暗画布，不是旧版暗色 Twilight Amber。
 
 ---
 
@@ -276,10 +276,11 @@ LoginView
 
 ---
 
-## 10. 与 apps/web、后端的关系
+## 10. 与已弃用的 apps/web、后端的关系
 
-- API 契约、JWT、SSE、OSS 直传、本地盘模型：与 web 相同，见 AGENT_CONTEXT §3–§6。
-- SuperSplat 静态资源：`vendors/supersplat` → 两边 `public/supersplat`。
+- **`apps/web` 已弃用。** 新功能只进 web2。旧包可作行为对照，不要双写。
+- API 契约、JWT、SSE、OSS 直传、本地盘模型：与旧版相同，见 AGENT_CONTEXT §3–§6。
+- SuperSplat 静态资源：`vendors/supersplat` → `apps/web2/public/supersplat`（旧版 web 仍可复制一份）。
 - Spark：`@xjicloud/spark` workspace 包。web2 查看器只使用渲染与 `SparkControls`，不把 Spark 当成领域 port。
 - 功能对齐靠 `parity.spec.ts` 的用例文件清单，不是靠复制 Vue。
 
@@ -302,8 +303,9 @@ LoginView
 
 ## 12. 已知产品事实（避免 Agent 回退）
 
-- 默认开发入口仍是 `apps/web` :5174。
-- web2 :5176，`strictPort: true`。
+- **默认开发入口是 `apps/web2` :5176**（根目录 `pnpm dev`）。
+- 旧版 `apps/web` :5174 已弃用，仅 `pnpm dev:web-legacy`。
+- web2 `strictPort: true`。
 - 查看器已删除厚 `SparkViewport` 与 throwing storage adapter。
 - 高级编辑不再用「无模型空状态」挡住 iframe。
 - Phosphor 图标必须 `Ph*` 导出，否则生产构建失败。
