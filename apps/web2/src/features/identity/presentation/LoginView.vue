@@ -7,6 +7,7 @@ import AppButton from '@/presentation/components/AppButton.vue'
 import { formatDomainError } from '@/presentation/errors'
 import { useAuthSession } from '@/features/identity/presentation/composables/useAuthSession'
 import LoginCreatures from '@/features/identity/presentation/components/LoginCreatures.vue'
+import LocaleToggle from '@/presentation/components/LocaleToggle.vue'
 import type { CaptchaChallenge } from '@/features/identity/domain/entities/captcha.entity'
 import './login-page.css'
 
@@ -161,7 +162,7 @@ async function submit() {
     <aside class="login-visual">
       <div class="login-visual__brand">
         <img class="login-visual__logo" src="/logo_nw.png" width="28" height="28" alt="" />
-        {{ t('login.brandName') }}
+        {{ t('brand.title') }}
       </div>
       <LoginCreatures :curious="curious" :hiding="hiding" :layout-tick="layoutTick" />
     </aside>
@@ -258,5 +259,6 @@ async function submit() {
         </p>
       </div>
     </section>
+    <LocaleToggle class="login-locale" />
   </div>
 </template>

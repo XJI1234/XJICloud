@@ -15,7 +15,7 @@ export default {
     comingSoon: '{feature} 功能即将推出',
   },
   brand: {
-    title: 'XJI Cloud',
+    title: '玄境建模云平台',
     subtitle: '建模解决方案云平台',
   },
   nav: {
@@ -39,6 +39,7 @@ export default {
     logout: '退出登录',
     langZh: '中文',
     langEn: 'English',
+    switchLanguage: '切换语言',
   },
   login: {
     brandName: '玄境建模云平台',

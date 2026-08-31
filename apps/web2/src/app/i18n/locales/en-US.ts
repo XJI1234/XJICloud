@@ -15,7 +15,7 @@ export default {
     comingSoon: '{feature} is coming soon',
   },
   brand: {
-    title: 'XJI Cloud',
+    title: 'Xuanjing Modeling Cloud',
     subtitle: 'Modeling Solution Cloud Platform',
   },
   nav: {
@@ -39,6 +39,7 @@ export default {
     logout: 'Log Out',
     langZh: '中文',
     langEn: 'English',
+    switchLanguage: 'Switch language',
   },
   login: {
     brandName: 'Xuanjing Modeling Cloud',
