@@ -1,4 +1,0 @@
-# 已废弃 — 请使用 deploy/config/application-prod.yml.example
-# 推荐: sudo ./deploy/deploy-backend.sh configure
-#
-# 本文件仅保留最小字段供快速参考；完整模板见 deploy/config/

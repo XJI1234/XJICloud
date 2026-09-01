@@ -10,7 +10,7 @@ cd /path/to/XJICloud
 # 登录 ACR（替换为你的 registry 地址）
 docker login registry.cn-hangzhou.aliyuncs.com
 
-docker build -t xjicloud/gpu-worker gpu-worker/
+docker build -t xjicloud/gpu-worker services/gpu-worker/
 docker tag xjicloud/gpu-worker:latest \
   registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest
 docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest

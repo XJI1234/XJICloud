@@ -6,18 +6,17 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
+demos
 node_modules
 dist
 dist-ssr
-modules/supersplat/node_modules
-modules/supersplat/dist
-public/supersplat
-supersplat/
+# Generated at web predev/prebuild from vendors/supersplat
+apps/web/public/supersplat
+apps/web2/public/supersplat
 release
 *.local
 rust/target
-backend/data/
+services/backend/data/
 data/
 .tools/
 deploy/config/application-prod.yml

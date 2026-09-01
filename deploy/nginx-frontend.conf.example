@@ -1,4 +1,7 @@
 # 前端专用 Nginx（前端与后端分机部署）
+# 静态资源来自：
+#   apps/web/dist   → /var/www/xjicloud/
+#   apps/admin/dist → /var/www/xjicloud/admin/
 # 安装：/etc/nginx/conf.d/xjicloud-frontend.conf
 #
 # 替换：
@@ -10,7 +13,7 @@ server {
     listen 80;
     server_name your-domain.example;
 
-    root /var/www/xjicloud/dist;
+    root /var/www/xjicloud;
     index index.html;
 
     client_max_body_size 2048m;
@@ -24,7 +27,7 @@ server {
     }
 
     location /supersplat/ {
-        alias /var/www/xjicloud/dist/supersplat/;
+        alias /var/www/xjicloud/supersplat/;
         try_files $uri $uri/ /supersplat/index.html;
     }
 
