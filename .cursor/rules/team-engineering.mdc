@@ -1,0 +1,16 @@
+---
+description: 全仓强制门槛——读记忆文档、最小改动、验证与自我 Code Review
+alwaysApply: true
+---
+
+# 强制门槛
+
+本仓库多人分板块维护，改动多为 AI 生成。未验证、未审查的代码等于未完成。
+
+开场必读：`docs/TEAM_ENGINEERING.md`、`docs/AGENT_CONTEXT.md`。改 `apps/web2` 再读 `apps/web2/AGENTS.md`。
+
+- 只改任务点名的板块。禁止改弃用的 `apps/web`、默认禁止改 `packages/spark` 与 `rust/`。禁止把 PLY/SPZ 迁到 OSS。
+- 最小 diff。禁止臆造 API、空 catch、假 mock、密钥入库、顺手重构。
+- 结束前必须实跑验证：web2 → `pnpm test:web2`（必要则 `pnpm build:web2`）；admin → `pnpm build:admin`；backend → `mvn -B test` 或说明测试缺口后的 `package`。UI 走真实用户路径；无浏览器须写明未做 E2E。
+- 结束前必须对本次 diff 做 Code Review（正确性、安全、回归、测试）。High/Critical 先修再结束。
+- 给用户的回复必须含 `## 验证` 与 `## Code Review`。缺一块视为交付不合格。

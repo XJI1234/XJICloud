@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -114,12 +115,21 @@ public class ModelService {
     @Transactional
     public ModelResponse completeUploadSession(UserAccount user, UUID sessionId) {
         UploadSessionMeta meta = modelUploadSessionService.requireOwned(user.getId(), sessionId);
+        Optional<ModelAsset> existingAsset = modelAssetRepository.findById(meta.modelId());
+        if (meta.completed() || existingAsset.isPresent()) {
+            ModelAsset existing = existingAsset.orElseThrow(() -> new BusinessException("模型不存在", HttpStatus.NOT_FOUND));
+            projectService.requireOwnedProject(user, existing.getProjectId());
+            if (!meta.completed()) {
+                modelUploadSessionService.markCompleted(user.getId(), sessionId);
+            }
+            return toResponse(existing);
+        }
         if (meta.receivedBytes() != meta.sizeBytes()) {
             throw new BusinessException("文件尚未上传完成", HttpStatus.BAD_REQUEST);
         }
         Project project = projectService.requireOwnedProject(user, meta.projectId());
         ModelFormat format = detectFormat(meta.fileName());
-        UUID modelId = UUID.randomUUID();
+        UUID modelId = meta.modelId();
         String storedFileName = "original." + format.name().toLowerCase(Locale.ROOT);
         Path payload = modelUploadSessionService.payloadPathFor(user.getId(), sessionId);
         Path storedPath = localFileStoreService.finalizeUploadedModel(user, project, modelId, payload, storedFileName);
@@ -134,7 +144,7 @@ public class ModelService {
         asset.setVersion(1);
         modelAssetRepository.save(asset);
         syncViewerConfigEntity(asset, user, project);
-        modelUploadSessionService.deleteSession(user.getId(), sessionId);
+        modelUploadSessionService.markCompleted(user.getId(), sessionId);
         return toResponse(asset);
     }
 

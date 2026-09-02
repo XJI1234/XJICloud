@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { detectModelFormat, assertModelFile } from './model-format.service'
 import { deleteModelUseCase, uploadModelUseCase } from '../../application/use-cases/model-asset.usecase'
-import { ok } from '@/shared/result'
+import { err, ok } from '@/shared/result'
+import { DomainError } from '@/shared/domain-error'
 import type { ModelAssetRepository } from '../repositories/model-asset.repository'
 import { MODEL_MAX_SIZE_BYTES } from './chunk-range.service'
 
@@ -58,6 +59,40 @@ describe('upload model use case', () => {
     expect(error).toBeNull()
     expect(model?.id).toBe('m1')
     expect(putChunk).toHaveBeenCalledTimes(3)
+  })
+
+  it('retries complete after a transient failure', async () => {
+    const file = new File(['abcd'], 'a.ply')
+    const completeUpload = vi
+      .fn()
+      .mockResolvedValueOnce(err(new DomainError('NETWORK')))
+      .mockResolvedValueOnce(
+        ok({
+          id: 'm1',
+          projectId: 'p1',
+          fileName: 'a.ply',
+          format: 'PLY' as const,
+          sizeBytes: file.size,
+          version: 1,
+          createdAt: '',
+          updatedAt: '',
+        }),
+      )
+    const models = {
+      createUploadSession: async () =>
+        ok({ sessionId: 's1', chunkSizeBytes: 8, receivedBytes: 0, sizeBytes: file.size }),
+      putChunk: async (_id: string, _chunk: Blob, range: { endInclusive: number }) =>
+        ok({ receivedBytes: range.endInclusive + 1 }),
+      completeUpload,
+      getUploadSession: async () =>
+        ok({ sessionId: 's1', chunkSizeBytes: 8, receivedBytes: file.size, sizeBytes: file.size }),
+      abortUpload: async () => ok(undefined),
+    } as unknown as ModelAssetRepository
+
+    const [error, model] = await uploadModelUseCase({ models }, { projectId: 'p1', file })
+    expect(error).toBeNull()
+    expect(model?.id).toBe('m1')
+    expect(completeUpload).toHaveBeenCalledTimes(2)
   })
 })
 

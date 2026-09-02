@@ -59,6 +59,28 @@ class ModelUploadSessionServiceTest {
     }
 
     @Test
+    void replayDrainsUnreadBody() throws Exception {
+        ModelUploadSessionService sessions = service();
+        UUID userId = UUID.randomUUID();
+        UploadSessionMeta created = sessions.create(userId, UUID.randomUUID(), "a.ply", "ply", 6);
+        sessions.writeChunk(
+                userId,
+                created.sessionId(),
+                ContentRange.parse("bytes 0-3/6"),
+                new ByteArrayInputStream(new byte[] {1, 2, 3, 4})
+        );
+        ByteArrayInputStream replay = new ByteArrayInputStream(new byte[] {1, 2, 3, 4, 9, 9});
+        UploadSessionMeta skipped = sessions.writeChunk(
+                userId,
+                created.sessionId(),
+                ContentRange.parse("bytes 0-3/6"),
+                replay
+        );
+        assertEquals(4, skipped.receivedBytes());
+        assertEquals(0, replay.available());
+    }
+
+    @Test
     void rejectsHoles() throws Exception {
         ModelUploadSessionService sessions = service();
         UUID userId = UUID.randomUUID();

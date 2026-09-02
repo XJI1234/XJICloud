@@ -5,6 +5,7 @@ import com.xjicloud.common.BusinessException;
 import com.xjicloud.config.StorageProperties;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -52,12 +53,14 @@ public class ModelUploadSessionService {
                 sessionId,
                 userId,
                 projectId,
+                UUID.randomUUID(),
                 fileName,
                 storedExtension,
                 sizeBytes,
                 0,
                 now,
-                now
+                now,
+                false
         );
         Path directory = sessionDirectory(userId, sessionId);
         Files.createDirectories(directory);
@@ -88,6 +91,9 @@ public class ModelUploadSessionService {
             try {
                 UploadSessionMeta meta = requireOwned(userId, sessionId);
                 Path directory = sessionDirectory(userId, sessionId);
+                if (meta.completed()) {
+                    return meta;
+                }
                 if (range.total() != meta.sizeBytes()) {
                     throw new BusinessException("上传范围与文件大小不一致", HttpStatus.BAD_REQUEST);
                 }
@@ -107,6 +113,21 @@ public class ModelUploadSessionService {
                 return updated;
             } catch (BusinessException ex) {
                 throw ex;
+            } catch (IOException ex) {
+                throw new BusinessException("模型文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+            } finally {
+                discardBody(body);
+            }
+        }
+    }
+
+    public void markCompleted(UUID userId, UUID sessionId) {
+        Object lock = sessionLocks.computeIfAbsent(sessionId, ignored -> new Object());
+        synchronized (lock) {
+            Path directory = sessionDirectory(userId, sessionId);
+            try {
+                UploadSessionMeta meta = requireOwned(userId, sessionId);
+                writeMeta(directory, meta.withCompleted());
             } catch (IOException ex) {
                 throw new BusinessException("模型文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
             }
@@ -181,9 +202,16 @@ public class ModelUploadSessionService {
                 }
                 written += read;
             }
-            channel.force(true);
         }
         return written;
+    }
+
+    private void discardBody(InputStream body) {
+        try {
+            body.transferTo(OutputStream.nullOutputStream());
+        } catch (IOException ignored) {
+            // Client may already have abandoned the connection.
+        }
     }
 
     private Path uploadsRoot() {

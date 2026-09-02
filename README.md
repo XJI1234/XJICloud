@@ -154,6 +154,8 @@ sudo ./deploy/deploy-backend.sh
 
 ## 文档
 
+- [AGENTS.md](AGENTS.md) — Agent 入口（强制验证与 Code Review）
+- [docs/TEAM_ENGINEERING.md](docs/TEAM_ENGINEERING.md) — 团队编程规则、强制功能验证、强制 Code Review
 - [docs/Deploy.md](docs/Deploy.md) — 分机部署
 - [docs/AGENT_CONTEXT.md](docs/AGENT_CONTEXT.md) — 全仓架构与 API 速查（给开发 / Agent）
 - [docs/WEB2_FRONTEND.md](docs/WEB2_FRONTEND.md) — 当前用户前端 DDD 架构知识库

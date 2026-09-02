@@ -1,5 +1,5 @@
 import { DomainError } from '@/shared/domain-error'
-import { err, type Result } from '@/shared/result'
+import { err, ok, type Result } from '@/shared/result'
 import type { ModelAsset } from '../../domain/entities/model-asset.entity'
 import type { ModelAssetRepository } from '../../domain/repositories/model-asset.repository'
 import { nextChunkRange } from '../../domain/services/chunk-range.service'
@@ -67,7 +67,12 @@ export async function uploadModelUseCase(
           blob,
           { start: range.start, endInclusive: range.endInclusive, total: input.file.size },
           (loaded) => {
-            input.onProgress?.({ loaded: range.start + loaded, total: input.file.size })
+            const total = input.file.size
+            const sent = range.start + loaded
+            input.onProgress?.({
+              loaded: sent >= total && total > 0 ? total - 1 : sent,
+              total,
+            })
           },
           input.signal,
         )
@@ -93,12 +98,33 @@ export async function uploadModelUseCase(
       if (lastError) {
         return err(lastError)
       }
-      input.onProgress?.({ loaded: session.receivedBytes, total: input.file.size })
+      const total = input.file.size
+      input.onProgress?.({
+        loaded: session.receivedBytes >= total && total > 0 ? total - 1 : session.receivedBytes,
+        total,
+      })
     }
 
-    return deps.models.completeUpload(session.sessionId)
+    if (input.signal?.aborted) {
+      await abortSession()
+      return err(new DomainError('NETWORK'))
+    }
+
+    let completeError: DomainError | null = null
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const [error, model] = await deps.models.completeUpload(session.sessionId)
+      if (!error && model) {
+        input.onProgress?.({ loaded: input.file.size, total: input.file.size })
+        return ok(model)
+      }
+      completeError = error ?? new DomainError('NETWORK')
+      await wait(500 * 2 ** attempt)
+    }
+    return err(completeError ?? new DomainError('NETWORK'))
   } catch (error) {
-    await abortSession()
+    if (session.receivedBytes < input.file.size) {
+      await abortSession()
+    }
     return err(error instanceof DomainError ? error : new DomainError('NETWORK'))
   }
 }

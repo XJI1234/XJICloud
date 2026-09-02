@@ -87,7 +87,11 @@ public class LocalFileStoreService {
             Path directory = modelDirectory(user, project, modelId);
             Files.createDirectories(directory);
             Path target = directory.resolve(storedFileName);
-            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            if (Files.exists(source)) {
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            } else if (!Files.exists(target)) {
+                throw new BusinessException("模型文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
             Path viewerConfig = viewerConfigPath(user, project, modelId);
             if (!Files.exists(viewerConfig)) {
                 Files.writeString(viewerConfig, DEFAULT_VIEWER_CONFIG, StandardOpenOption.CREATE_NEW);

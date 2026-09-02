@@ -190,8 +190,8 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 | POST | `/projects/{id}/models/upload` | multipart PLY/SPZ → 本地盘（兼容旧客户端） |
 | POST | `/projects/{id}/models/upload-sessions` | 创建分片上传会话 |
 | GET | `/models/upload-sessions/{sessionId}` | 查询已收字节（续传） |
-| PUT | `/models/upload-sessions/{sessionId}/chunks` | `Content-Range` 原始分片写入本地盘 |
-| POST | `/models/upload-sessions/{sessionId}/complete` | 收齐后入库为 ModelAsset |
+| PUT | `/models/upload-sessions/{sessionId}/chunks` | `Content-Range` 原始分片写入本地盘；已写入范围重放会读完请求体后直接返回，避免连接被重置 |
+| POST | `/models/upload-sessions/{sessionId}/complete` | 收齐后入库为 ModelAsset；可重复调用（幂等） |
 | DELETE | `/models/upload-sessions/{sessionId}` | 取消未完成上传 |
 | DELETE | `/models/{id}` | 删除模型记录、viewer 配置与磁盘目录 |
 | POST | `/models/{id}/download-token` | SuperSplat 短期下载 token |
