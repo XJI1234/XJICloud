@@ -151,6 +151,23 @@ async function selectCloudModel(model: ModelAsset) {
   await loadCloudEditor(model)
 }
 
+async function deletePickedModel(model: ModelAsset, event: Event) {
+  event.stopPropagation()
+  event.preventDefault()
+  if (!window.confirm(t('supersplat.deleteConfirm'))) {
+    return
+  }
+  const [error] = await modelsApi.remove(model.id)
+  if (error) {
+    errorMessage.value = formatDomainError(t, error)
+    return
+  }
+  models.value = models.value.filter((item) => item.id !== model.id)
+  if (selectedModelId.value === model.id) {
+    await openBlankSession()
+  }
+}
+
 function triggerLocalOpen() {
   localInputRef.value?.click()
 }
@@ -321,17 +338,20 @@ onBeforeRouteLeave(async (_to, _from, next) => {
       <p v-else-if="models.length === 0" class="supersplat-picker-hint">{{ t('supersplat.uploadHint') }}</p>
       <p v-else class="supersplat-picker-hint">{{ t('supersplat.modelCountHint', { count: models.length }) }}</p>
       <div v-if="models.length > 0" class="model-choice-list">
-        <button
-          v-for="model in models"
-          :key="model.id"
-          class="model-choice-card"
-          :class="{ 'is-current': model.id === selectedModelId }"
-          type="button"
-          @click="selectCloudModel(model)"
-        >
-          <span class="model-choice-name">{{ model.fileName }}</span>
-          <span class="model-choice-meta">{{ model.format }}</span>
-        </button>
+        <div v-for="model in models" :key="model.id" class="model-choice-row">
+          <button
+            class="model-choice-card"
+            :class="{ 'is-current': model.id === selectedModelId }"
+            type="button"
+            @click="selectCloudModel(model)"
+          >
+            <span class="model-choice-name">{{ model.fileName }}</span>
+            <span class="model-choice-meta">{{ model.format }}</span>
+          </button>
+          <AppButton compact variant="destructive" @click="deletePickedModel(model, $event)">
+            {{ t('supersplat.deleteModel') }}
+          </AppButton>
+        </div>
       </div>
       <template #footer>
         <AppButton @click="pickerVisible = false">{{ t('common.cancel') }}</AppButton>

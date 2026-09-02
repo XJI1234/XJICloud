@@ -7,15 +7,19 @@ import com.xjicloud.common.BusinessException;
 import com.xjicloud.model.dto.DownloadTokenResponse;
 import com.xjicloud.model.dto.ModelResponse;
 import com.xjicloud.model.dto.SaveViewerConfigRequest;
+import com.xjicloud.model.dto.UploadChunkResponse;
+import com.xjicloud.model.dto.UploadSessionResponse;
 import com.xjicloud.model.dto.ViewerConfigResponse;
 import com.xjicloud.project.Project;
 import com.xjicloud.project.ProjectService;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -40,6 +44,7 @@ public class ModelService {
     private final ProjectService projectService;
     private final LocalFileStoreService localFileStoreService;
     private final ModelDownloadTokenService modelDownloadTokenService;
+    private final ModelUploadSessionService modelUploadSessionService;
     private final ObjectMapper objectMapper;
 
     public ModelService(
@@ -48,6 +53,7 @@ public class ModelService {
             ProjectService projectService,
             LocalFileStoreService localFileStoreService,
             ModelDownloadTokenService modelDownloadTokenService,
+            ModelUploadSessionService modelUploadSessionService,
             ObjectMapper objectMapper
     ) {
         this.modelAssetRepository = modelAssetRepository;
@@ -55,6 +61,7 @@ public class ModelService {
         this.projectService = projectService;
         this.localFileStoreService = localFileStoreService;
         this.modelDownloadTokenService = modelDownloadTokenService;
+        this.modelUploadSessionService = modelUploadSessionService;
         this.objectMapper = objectMapper;
     }
 
@@ -63,6 +70,115 @@ public class ModelService {
         return modelAssetRepository.findByProjectIdOrderByCreatedAtDesc(project.getId()).stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    public UploadSessionResponse createUploadSession(UserAccount user, UUID projectId, String fileName, long sizeBytes) {
+        Project project = projectService.requireOwnedProject(user, projectId);
+        String originalName = sanitizeFileName(fileName);
+        ModelFormat format = detectFormat(originalName);
+        if (sizeBytes < 1 || sizeBytes > ModelUploadSessionService.MAX_SIZE_BYTES) {
+            throw new BusinessException("文件不能超过 2GB", HttpStatus.BAD_REQUEST);
+        }
+        try {
+            UploadSessionMeta meta = modelUploadSessionService.create(
+                    user.getId(),
+                    project.getId(),
+                    originalName,
+                    ModelUploadSessionService.storedExtension(format),
+                    sizeBytes
+            );
+            return toSessionResponse(meta);
+        } catch (IOException ex) {
+            throw new BusinessException("模型文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public UploadSessionResponse getUploadSession(UserAccount user, UUID sessionId) {
+        return toSessionResponse(modelUploadSessionService.requireOwned(user.getId(), sessionId));
+    }
+
+    public UploadChunkResponse putUploadChunk(UserAccount user, UUID sessionId, String contentRange, InputStream body) {
+        UploadSessionMeta meta = modelUploadSessionService.writeChunk(
+                user.getId(),
+                sessionId,
+                ContentRange.parse(contentRange),
+                body
+        );
+        return new UploadChunkResponse(meta.receivedBytes());
+    }
+
+    public void abortUploadSession(UserAccount user, UUID sessionId) {
+        modelUploadSessionService.requireOwned(user.getId(), sessionId);
+        modelUploadSessionService.deleteSession(user.getId(), sessionId);
+    }
+
+    @Transactional
+    public ModelResponse completeUploadSession(UserAccount user, UUID sessionId) {
+        UploadSessionMeta meta = modelUploadSessionService.requireOwned(user.getId(), sessionId);
+        Optional<ModelAsset> existingAsset = modelAssetRepository.findById(meta.modelId());
+        if (meta.completed() || existingAsset.isPresent()) {
+            ModelAsset existing = existingAsset.orElseThrow(() -> new BusinessException("模型不存在", HttpStatus.NOT_FOUND));
+            projectService.requireOwnedProject(user, existing.getProjectId());
+            if (!meta.completed()) {
+                modelUploadSessionService.markCompleted(user.getId(), sessionId);
+            }
+            return toResponse(existing);
+        }
+        if (meta.receivedBytes() != meta.sizeBytes()) {
+            throw new BusinessException("文件尚未上传完成", HttpStatus.BAD_REQUEST);
+        }
+        Project project = projectService.requireOwnedProject(user, meta.projectId());
+        ModelFormat format = detectFormat(meta.fileName());
+        UUID modelId = meta.modelId();
+        String storedFileName = "original." + format.name().toLowerCase(Locale.ROOT);
+        Path payload = modelUploadSessionService.payloadPathFor(user.getId(), sessionId);
+        Path storedPath = localFileStoreService.finalizeUploadedModel(user, project, modelId, payload, storedFileName);
+
+        ModelAsset asset = new ModelAsset();
+        asset.setId(modelId);
+        asset.setProjectId(project.getId());
+        asset.setFileName(meta.fileName());
+        asset.setFormat(format);
+        asset.setSizeBytes(localFileStoreService.fileSize(storedPath));
+        asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
+        asset.setVersion(1);
+        modelAssetRepository.save(asset);
+        syncViewerConfigEntity(asset, user, project);
+        modelUploadSessionService.markCompleted(user.getId(), sessionId);
+        return toResponse(asset);
+    }
+
+    @Transactional
+    public void deleteModel(UserAccount user, UUID modelId) {
+        ModelAsset asset = requireOwnedModel(user, modelId);
+        Project project = projectService.requireOwnedProject(user, asset.getProjectId());
+        viewerConfigRepository.deleteById(modelId);
+        modelAssetRepository.delete(asset);
+        registerDeleteModelDirectoryAfterCommit(user, project, modelId);
+    }
+
+    private void registerDeleteModelDirectoryAfterCommit(UserAccount user, Project project, UUID modelId) {
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            localFileStoreService.deleteModelDirectory(user, project, modelId);
+            return;
+        }
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        localFileStoreService.deleteModelDirectory(user, project, modelId);
+                    }
+                }
+        );
+    }
+
+    private UploadSessionResponse toSessionResponse(UploadSessionMeta meta) {
+        return new UploadSessionResponse(
+                meta.sessionId(),
+                ModelUploadSessionService.CHUNK_SIZE_BYTES,
+                meta.receivedBytes(),
+                meta.sizeBytes()
+        );
     }
 
     @Transactional

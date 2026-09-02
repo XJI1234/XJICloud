@@ -3,7 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppButton from '@/presentation/components/AppButton.vue'
+import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
 import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
+import { useTransferSpeed } from '@/presentation/composables/useTransferSpeed'
 import { formatDomainError } from '@/presentation/errors'
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
@@ -22,6 +24,8 @@ const newProjectName = ref('')
 const newProjectDescription = ref('')
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const pending = ref(false)
+const uploadProgress = ref(0)
+const { speedLabel, noteLoaded, resetSpeed } = useTransferSpeed()
 const editingProjectId = ref<string | null>(null)
 const editName = ref('')
 const editDescription = ref('')
@@ -85,8 +89,22 @@ async function handleUpload(event: Event) {
     return
   }
   pending.value = true
-  const [error] = await models.upload({ projectId: activeProjectId.value, file })
+  uploadProgress.value = 0
+  resetSpeed()
+  const [error] = await models.upload({
+    projectId: activeProjectId.value,
+    file,
+    onProgress: ({ loaded, total }) => {
+      uploadProgress.value = total > 0 ? Math.round((loaded / total) * 100) : 0
+      noteLoaded(loaded)
+    },
+  })
   pending.value = false
+  if (!error) {
+    uploadProgress.value = 100
+  } else {
+    resetSpeed()
+  }
   errorMessage.value = error ? formatDomainError(t, error) : ''
 }
 
@@ -151,6 +169,7 @@ async function saveEdit(projectId: string) {
             {{ pending ? t('common.uploading') : t('projects.uploadModel') }}
           </AppButton>
         </div>
+        <UploadProgressBar v-if="pending || uploadProgress > 0" :percent="uploadProgress" :speed="speedLabel" />
       </section>
 
       <section class="projects-create-card section-card">

@@ -8,6 +8,8 @@ import { canCancelJob, canDeleteJob } from '../../domain/services/job-policy.ser
 
 export type SubmitDatasetProgress = {
   percent: number
+  loaded: number
+  total: number
 }
 
 export async function submitDatasetUseCase(
@@ -23,6 +25,15 @@ export async function submitDatasetUseCase(
   const totalBytes = totalArchiveBytes(input.archive)
   let completedBytes = 0
 
+  const report = (loaded: number) => {
+    const safeTotal = totalBytes || loaded
+    input.onProgress?.({
+      percent: safeTotal > 0 ? Math.min(100, Math.round((loaded / safeTotal) * 100)) : 0,
+      loaded,
+      total: safeTotal,
+    })
+  }
+
   for (const fileItem of input.archive.files) {
     const uploadItem = ticket.uploads.find((item) => item.archivedName === fileItem.archivedName)
     if (!uploadItem) {
@@ -30,9 +41,7 @@ export async function submitDatasetUseCase(
     }
     try {
       await deps.objectStorage.put(uploadItem.uploadUrl, fileItem.file, fileItem.contentType, (loaded) => {
-        input.onProgress?.({
-          percent: Math.min(100, Math.round(((completedBytes + loaded) / totalBytes) * 100)),
-        })
+        report(completedBytes + loaded)
       })
     } catch (error) {
       return err(
@@ -42,7 +51,7 @@ export async function submitDatasetUseCase(
       )
     }
     completedBytes += fileItem.sizeBytes
-    input.onProgress?.({ percent: Math.min(100, Math.round((completedBytes / totalBytes) * 100)) })
+    report(completedBytes)
   }
 
   const manifestUpload = ticket.uploads.find((item) => item.archivedName === 'manifest.json')
@@ -53,9 +62,7 @@ export async function submitDatasetUseCase(
         input.archive.manifestBlob,
         'application/json',
         (loaded) => {
-          input.onProgress?.({
-            percent: Math.min(100, Math.round(((completedBytes + loaded) / totalBytes) * 100)),
-          })
+          report(completedBytes + loaded)
         },
       )
     } catch (error) {
@@ -67,7 +74,7 @@ export async function submitDatasetUseCase(
     }
   }
 
-  input.onProgress?.({ percent: 100 })
+  report(totalBytes)
   return deps.jobs.completeDataset(input.projectId, ticket.jobId)
 }
 

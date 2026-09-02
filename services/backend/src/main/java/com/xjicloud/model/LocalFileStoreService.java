@@ -78,6 +78,30 @@ public class LocalFileStoreService {
         deleteRecursively(projectDir);
     }
 
+    public void deleteModelDirectory(UserAccount user, Project project, UUID modelId) {
+        deleteRecursively(modelDirectory(user, project, modelId));
+    }
+
+    public Path finalizeUploadedModel(UserAccount user, Project project, UUID modelId, Path source, String storedFileName) {
+        try {
+            Path directory = modelDirectory(user, project, modelId);
+            Files.createDirectories(directory);
+            Path target = directory.resolve(storedFileName);
+            if (Files.exists(source)) {
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            } else if (!Files.exists(target)) {
+                throw new BusinessException("模型文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+            Path viewerConfig = viewerConfigPath(user, project, modelId);
+            if (!Files.exists(viewerConfig)) {
+                Files.writeString(viewerConfig, DEFAULT_VIEWER_CONFIG, StandardOpenOption.CREATE_NEW);
+            }
+            return target;
+        } catch (IOException ex) {
+            throw new BusinessException("模型文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     private void deleteRecursively(Path path) {
         if (path == null || !Files.exists(path)) {
             return;

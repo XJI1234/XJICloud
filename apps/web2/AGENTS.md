@@ -1,5 +1,7 @@
 # web2 Agent 手册
 
+全仓编程规则、强制验证与强制 Code Review 见 [docs/TEAM_ENGINEERING.md](../../docs/TEAM_ENGINEERING.md) 与根目录 [AGENTS.md](../../AGENTS.md)。本包规则不能替代全仓门槛：改完仍须跑 `pnpm test:web2`，并在回复中给出 `## 验证` 与 `## Code Review`。
+
 改 `@xjicloud/web2` 前先读 [docs/WEB2_FRONTEND.md](../../docs/WEB2_FRONTEND.md)。本文件是硬约束，不是摘要。
 
 通用前端 DDD 术语见仓库技能 `.agents/skills/frontend-ddd/SKILL.md`。落地以 **本包实际分层** 为准。

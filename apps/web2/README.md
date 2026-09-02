@@ -12,7 +12,7 @@ UI 主题：**浅色产品壳 + 暗色 3D 画布**（纸白 `--surface #f5f6f8`�
 | [docs/WEB2_FRONTEND.md](../../docs/WEB2_FRONTEND.md) | 人 + AI：完整 DDD 架构、限界上下文、数据流 |
 | [AGENTS.md](./AGENTS.md) | AI：改 web2 时必须遵守的规则与检查清单 |
 
-仓库总览见根目录 [README.md](../../README.md)。Agent 全仓上下文见 [docs/AGENT_CONTEXT.md](../../docs/AGENT_CONTEXT.md)。
+仓库总览见根目录 [README.md](../../README.md)。Agent 全仓上下文见 [docs/AGENT_CONTEXT.md](../../docs/AGENT_CONTEXT.md)。全仓工程规则见 [docs/TEAM_ENGINEERING.md](../../docs/TEAM_ENGINEERING.md)。
 
 ---
 
