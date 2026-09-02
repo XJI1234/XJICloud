@@ -184,7 +184,7 @@ export function createHttpClient(options: {
 }
 
 function isTechnicalNetworkMessage(message: string): boolean {
-  return /json|fetch|network|failed to execute|econnrefused|invalid response|empty response|bad gateway|internal server|service unavailable/i.test(
+  return /failed to execute|'json'|fetch failed|\bnetwork\b|econnrefused|invalid response|empty response|bad gateway|internal server|service unavailable/i.test(
     message,
   )
 }
@@ -199,6 +199,9 @@ export function mapHttpError(error: unknown): DomainError {
     }
     if (error.status === 413) {
       return new DomainError('MODEL_TOO_LARGE', undefined, { status: error.status })
+    }
+    if (error.status >= 500) {
+      return new DomainError('UNKNOWN', undefined, { status: error.status })
     }
     const safeMessage = error.message && !isTechnicalNetworkMessage(error.message) ? error.message : undefined
     return new DomainError('NETWORK', safeMessage, { status: error.status })

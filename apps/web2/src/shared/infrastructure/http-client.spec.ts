@@ -36,6 +36,14 @@ describe('http client', () => {
     expect(notified).toBe(1)
     expect(mapHttpError(new ApiError('expired', 401)).code).toBe('AUTH_UNAUTHORIZED')
     expect(mapHttpError(new ApiError('too large', 413)).code).toBe('MODEL_TOO_LARGE')
+    expect(
+      mapHttpError(
+        new ApiError(
+          'JDBC exception executing SQL [select json_payload from viewer_configs]',
+          500,
+        ),
+      ).code,
+    ).toBe('UNKNOWN')
   })
 
   it('maps empty or invalid JSON to a network error without leaking parse text', async () => {
