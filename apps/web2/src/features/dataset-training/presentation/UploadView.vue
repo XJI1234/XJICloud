@@ -3,7 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppButton from '@/presentation/components/AppButton.vue'
+import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
 import { formatDomainError } from '@/presentation/errors'
+import { useTransferSpeed } from '@/presentation/composables/useTransferSpeed'
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import type { Project } from '@/features/project/domain/entities/project.entity'
@@ -24,6 +26,7 @@ const errorMessage = ref('')
 const statusMessage = ref('')
 const pending = ref(false)
 const uploadProgress = ref(0)
+const { speedLabel, noteLoaded, resetSpeed } = useTransferSpeed()
 let uploadAbort: AbortController | null = null
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
 const activeProject = computed(() => projects.value.find((project) => project.id === activeProjectId.value) ?? null)
@@ -58,6 +61,7 @@ async function handleUpload(event: Event) {
   uploadAbort = controller
   pending.value = true
   uploadProgress.value = 0
+  resetSpeed()
   errorMessage.value = ''
   statusMessage.value = t('upload.uploadingFile', { name: file.name })
   const [error] = await models.upload({
@@ -67,6 +71,7 @@ async function handleUpload(event: Event) {
     onProgress: ({ loaded, total }) => {
       const percent = total > 0 ? Math.round((loaded / total) * 100) : 0
       uploadProgress.value = percent
+      noteLoaded(loaded)
       statusMessage.value = t('upload.uploadingProgress', { name: file.name, percent })
     },
   })
@@ -74,12 +79,14 @@ async function handleUpload(event: Event) {
   if (controller.signal.aborted) {
     statusMessage.value = ''
     uploadProgress.value = 0
+    resetSpeed()
     return
   }
   if (error) {
     errorMessage.value = formatDomainError(t, error)
     statusMessage.value = ''
     uploadProgress.value = 0
+    resetSpeed()
     return
   }
   uploadProgress.value = 100
@@ -134,12 +141,11 @@ function goToViewer() {
         </div>
       </section>
 
-      <div v-if="activeTab === 'model' && (pending || uploadProgress > 0)" class="cloud-progress">
-        <div class="cloud-progress-bar">
-          <div class="cloud-progress-bar__fill" :style="{ width: `${uploadProgress}%` }" />
-        </div>
-        <span>{{ uploadProgress }}%</span>
-      </div>
+      <UploadProgressBar
+        v-if="activeTab === 'model' && (pending || uploadProgress > 0)"
+        :percent="uploadProgress"
+        :speed="speedLabel"
+      />
 
       <p v-if="statusMessage" class="upload-status">{{ statusMessage }}</p>
       <p v-if="errorMessage" class="upload-error">{{ errorMessage }}</p>
