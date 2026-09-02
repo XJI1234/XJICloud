@@ -3,7 +3,9 @@
 > 供 Cursor / 其他 AI Agent 快速理解本仓库的结构、已实现功能、扩展点与约束。  
 > 用户面向文档见 [../README.md](../README.md)；部署见 [Deploy.md](Deploy.md)。
 
-**最后更新：** 2026-08-31（**当前用户前端是 `apps/web2`**；`apps/web` 已弃用。见 [WEB2_FRONTEND.md](./WEB2_FRONTEND.md)）
+**最后更新：** 2026-09-02（**当前用户前端是 `apps/web2`**；`apps/web` 已弃用。见 [WEB2_FRONTEND.md](./WEB2_FRONTEND.md)）
+
+**Agent 硬门槛（先读再改）：** [TEAM_ENGINEERING.md](./TEAM_ENGINEERING.md) — 编程规则、强制功能验证、强制 Code Review。根目录 [AGENTS.md](../AGENTS.md) 是入口。未验证、未审查的生成代码视为未完成。
 
 ---
 
@@ -35,7 +37,8 @@ XJICloud/
 ├── rust/                     # spark-rs、spark-worker-rs WASM
 ├── vendors/supersplat/       # SuperSplat 预编译静态资源
 ├── deploy/                   # Compose、Nginx、systemd、K8s
-├── docs/                     # Deploy.md、本文件
+├── docs/                     # AGENT_CONTEXT、TEAM_ENGINEERING、Deploy、WEB2_FRONTEND
+├── AGENTS.md                 # Agent 入口（强制验证与 Review）
 ├── scripts/                  # copy-supersplat-dist 等
 ├── package.json              # pnpm workspace 根编排
 └── pnpm-workspace.yaml
@@ -184,7 +187,13 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 | POST | `/auth/register`, `/auth/login` | 公开 |
 | GET/POST | `/projects` | 项目 |
 | GET | `/projects/{id}/models` | 模型列表 |
-| POST | `/projects/{id}/models/upload` | multipart PLY/SPZ → 本地盘 |
+| POST | `/projects/{id}/models/upload` | multipart PLY/SPZ → 本地盘（兼容旧客户端） |
+| POST | `/projects/{id}/models/upload-sessions` | 创建分片上传会话 |
+| GET | `/models/upload-sessions/{sessionId}` | 查询已收字节（续传） |
+| PUT | `/models/upload-sessions/{sessionId}/chunks` | `Content-Range` 原始分片写入本地盘 |
+| POST | `/models/upload-sessions/{sessionId}/complete` | 收齐后入库为 ModelAsset |
+| DELETE | `/models/upload-sessions/{sessionId}` | 取消未完成上传 |
+| DELETE | `/models/{id}` | 删除模型记录、viewer 配置与磁盘目录 |
 | POST | `/models/{id}/download-token` | SuperSplat 短期下载 token |
 | GET | `/models/{id}/download` | 下载（Bearer 或 `?access_token=`，支持 Range） |
 | GET/PUT | `/models/{id}/viewer-config` | 查看器 JSON v2 |
@@ -275,6 +284,9 @@ docker build -t xjicloud/gpu-worker services/gpu-worker/
 
 ## 12. Agent 约定
 
+完整规则与检查清单：[TEAM_ENGINEERING.md](./TEAM_ENGINEERING.md)。摘要：
+
+- 开场读 TEAM_ENGINEERING + 本文；只改任务点名的板块。结束必须实跑验证，并对本次 diff 做 Code Review（回复含 `## 验证` 与 `## Code Review`）
 - 不改 `packages/spark/`、`rust/`（除非任务要求）
 - **用户前端只改 `apps/web2`**（先读 `apps/web2/AGENTS.md`）。不要改已弃用的 `apps/web`，除非任务点名旧版。管理端改 `apps/admin`；后端改 `services/backend`
 - 关键配置：`services/backend/src/main/resources/application.yml`、`pnpm-workspace.yaml`、`apps/*/vite.config.ts`
@@ -289,4 +301,4 @@ OSS：`datasets/{jobId}/images/`、`outputs/{jobId}/model.ply`
 
 ---
 
-*重大架构变更后请同步更新本文与根 README。*
+*重大架构变更后请同步更新本文与根 README。工程规则变更同步 [TEAM_ENGINEERING.md](./TEAM_ENGINEERING.md)。*

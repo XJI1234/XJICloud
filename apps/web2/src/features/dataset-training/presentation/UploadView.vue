@@ -23,6 +23,8 @@ const uploadInputRef = ref<HTMLInputElement | null>(null)
 const errorMessage = ref('')
 const statusMessage = ref('')
 const pending = ref(false)
+const uploadProgress = ref(0)
+let uploadAbort: AbortController | null = null
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
 const activeProject = computed(() => projects.value.find((project) => project.id === activeProjectId.value) ?? null)
 
@@ -51,17 +53,41 @@ async function handleUpload(event: Event) {
   if (!file || !activeProjectId.value) {
     return
   }
+  uploadAbort?.abort()
+  const controller = new AbortController()
+  uploadAbort = controller
   pending.value = true
+  uploadProgress.value = 0
   errorMessage.value = ''
   statusMessage.value = t('upload.uploadingFile', { name: file.name })
-  const [error] = await models.upload({ projectId: activeProjectId.value, file })
+  const [error] = await models.upload({
+    projectId: activeProjectId.value,
+    file,
+    signal: controller.signal,
+    onProgress: ({ loaded, total }) => {
+      const percent = total > 0 ? Math.round((loaded / total) * 100) : 0
+      uploadProgress.value = percent
+      statusMessage.value = t('upload.uploadingProgress', { name: file.name, percent })
+    },
+  })
   pending.value = false
+  if (controller.signal.aborted) {
+    statusMessage.value = ''
+    uploadProgress.value = 0
+    return
+  }
   if (error) {
     errorMessage.value = formatDomainError(t, error)
     statusMessage.value = ''
+    uploadProgress.value = 0
     return
   }
+  uploadProgress.value = 100
   statusMessage.value = t('upload.uploadedFile', { name: file.name })
+}
+
+function cancelUpload() {
+  uploadAbort?.abort()
 }
 
 function goToViewer() {
@@ -101,11 +127,19 @@ function goToViewer() {
             <AppButton variant="primary" :disabled="pending" @click="triggerUpload">
               {{ pending ? t('common.uploading') : t('upload.selectFileUpload') }}
             </AppButton>
+            <AppButton v-if="pending" @click="cancelUpload">{{ t('upload.cancelUpload') }}</AppButton>
             <AppButton @click="goToViewer">{{ t('upload.goToViewer') }}</AppButton>
             <AppButton @click="router.push('/app/projects')">{{ t('projects.backHome') }}</AppButton>
           </div>
         </div>
       </section>
+
+      <div v-if="activeTab === 'model' && (pending || uploadProgress > 0)" class="cloud-progress">
+        <div class="cloud-progress-bar">
+          <div class="cloud-progress-bar__fill" :style="{ width: `${uploadProgress}%` }" />
+        </div>
+        <span>{{ uploadProgress }}%</span>
+      </div>
 
       <p v-if="statusMessage" class="upload-status">{{ statusMessage }}</p>
       <p v-if="errorMessage" class="upload-error">{{ errorMessage }}</p>

@@ -118,7 +118,29 @@ async function loadCloudModel(model: ViewerModelSummary) {
 
 function closeModelSelectionDialog() {
   modelSelectionVisible.value = false
-  modelCandidates.value = []
+}
+
+async function deleteProjectModel(model: ViewerModelSummary, event: Event) {
+  event.stopPropagation()
+  event.preventDefault()
+  if (!window.confirm(t('viewer.deleteConfirm'))) {
+    return
+  }
+  const [error] = await modelsApi.remove(model.id)
+  if (error) {
+    actionError.value = formatDomainError(t, error)
+    setRawStatus(formatDomainError(t, error))
+    return
+  }
+  modelCandidates.value = modelCandidates.value.filter((item) => item.id !== model.id)
+  if (currentModelId.value === model.id) {
+    currentFile.value = null
+    currentModelId.value = null
+    modelInfo.value = null
+    defaultView.value = null
+    setStatus('viewer.status.pickFile')
+  }
+  actionError.value = ''
 }
 
 function formatModelSize(sizeBytes: number) {
@@ -221,7 +243,18 @@ async function handleUpload(event: Event) {
 
   try {
     setStatus('viewer.status.uploading', { name: file.name })
-    const [error, model] = await modelsApi.upload({ projectId: activeProjectId.value, file })
+    const [error, model] = await modelsApi.upload({
+      projectId: activeProjectId.value,
+      file,
+      onProgress: ({ loaded, total }) => {
+        if (total > 0) {
+          setStatus('viewer.status.uploadingProgress', {
+            name: file.name,
+            percent: Math.round((loaded / total) * 100),
+          })
+        }
+      },
+    })
     if (error || !model) {
       actionError.value = formatDomainError(t, error)
       setRawStatus(formatDomainError(t, error))
@@ -428,25 +461,32 @@ onMounted(() => {
     >
       <p class="model-picker-subtitle">{{ t('viewer.modelCountHint', { count: modelCandidates.length }) }}</p>
       <div class="model-choice-list">
-        <button
+        <div
           v-for="candidate in sortedCandidates"
           :key="candidate.id"
-          class="model-choice-card"
-          :class="{ 'is-current': candidate.id === currentModelId }"
-          type="button"
-          @click="loadCloudModel(candidate)"
+          class="model-choice-row"
         >
-          <span class="model-choice-name">{{ candidate.fileName }}</span>
-          <span class="model-choice-meta">
-            {{ candidate.format || t('viewer.unknownFormat') }}
-            <template v-if="candidate.version"> · v{{ candidate.version }}</template>
-            <template v-if="candidate.sizeBytes"> · {{ formatModelSize(candidate.sizeBytes) }}</template>
-          </span>
-          <span v-if="candidate.updatedAt" class="model-choice-updated">
-            {{ t('viewer.updatedAt', { date: formatModelUpdatedAt(candidate.updatedAt) }) }}
-          </span>
-          <span v-if="candidate.id === currentModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
-        </button>
+          <button
+            class="model-choice-card"
+            :class="{ 'is-current': candidate.id === currentModelId }"
+            type="button"
+            @click="loadCloudModel(candidate)"
+          >
+            <span class="model-choice-name">{{ candidate.fileName }}</span>
+            <span class="model-choice-meta">
+              {{ candidate.format || t('viewer.unknownFormat') }}
+              <template v-if="candidate.version"> · v{{ candidate.version }}</template>
+              <template v-if="candidate.sizeBytes"> · {{ formatModelSize(candidate.sizeBytes) }}</template>
+            </span>
+            <span v-if="candidate.updatedAt" class="model-choice-updated">
+              {{ t('viewer.updatedAt', { date: formatModelUpdatedAt(candidate.updatedAt) }) }}
+            </span>
+            <span v-if="candidate.id === currentModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
+          </button>
+          <AppButton compact variant="destructive" @click="deleteProjectModel(candidate, $event)">
+            {{ t('viewer.deleteModel') }}
+          </AppButton>
+        </div>
       </div>
       <template #footer>
         <AppButton @click="closeModelSelectionDialog">{{ t('common.cancel') }}</AppButton>

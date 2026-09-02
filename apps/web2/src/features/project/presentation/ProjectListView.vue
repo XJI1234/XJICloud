@@ -22,6 +22,7 @@ const newProjectName = ref('')
 const newProjectDescription = ref('')
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const pending = ref(false)
+const uploadProgress = ref(0)
 const editingProjectId = ref<string | null>(null)
 const editName = ref('')
 const editDescription = ref('')
@@ -85,8 +86,18 @@ async function handleUpload(event: Event) {
     return
   }
   pending.value = true
-  const [error] = await models.upload({ projectId: activeProjectId.value, file })
+  uploadProgress.value = 0
+  const [error] = await models.upload({
+    projectId: activeProjectId.value,
+    file,
+    onProgress: ({ loaded, total }) => {
+      uploadProgress.value = total > 0 ? Math.round((loaded / total) * 100) : 0
+    },
+  })
   pending.value = false
+  if (!error) {
+    uploadProgress.value = 100
+  }
   errorMessage.value = error ? formatDomainError(t, error) : ''
 }
 
@@ -150,6 +161,12 @@ async function saveEdit(projectId: string) {
           <AppButton variant="primary" :disabled="pending" @click="triggerUpload">
             {{ pending ? t('common.uploading') : t('projects.uploadModel') }}
           </AppButton>
+        </div>
+        <div v-if="pending || uploadProgress > 0" class="cloud-progress">
+          <div class="cloud-progress-bar">
+            <div class="cloud-progress-bar__fill" :style="{ width: `${uploadProgress}%` }" />
+          </div>
+          <span>{{ uploadProgress }}%</span>
         </div>
       </section>
 

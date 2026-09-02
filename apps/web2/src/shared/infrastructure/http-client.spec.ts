@@ -35,6 +35,7 @@ describe('http client', () => {
     await expect(http.request('/api/v1/secure')).rejects.toBeInstanceOf(ApiError)
     expect(notified).toBe(1)
     expect(mapHttpError(new ApiError('expired', 401)).code).toBe('AUTH_UNAUTHORIZED')
+    expect(mapHttpError(new ApiError('too large', 413)).code).toBe('MODEL_TOO_LARGE')
   })
 
   it('maps empty or invalid JSON to a network error without leaking parse text', async () => {

@@ -29,6 +29,26 @@ export function mapModelFromDto(dto: ModelSummaryDto): ModelAsset {
   }
 }
 
+export type UploadSessionDto = {
+  sessionId?: string
+  chunkSizeBytes?: number
+  receivedBytes?: number
+  sizeBytes?: number
+}
+
+export type UploadChunkDto = {
+  receivedBytes?: number
+}
+
+export function mapUploadSessionFromDto(dto: UploadSessionDto) {
+  return {
+    sessionId: dto.sessionId ?? '',
+    chunkSizeBytes: dto.chunkSizeBytes ?? 8 * 1024 * 1024,
+    receivedBytes: dto.receivedBytes ?? 0,
+    sizeBytes: dto.sizeBytes ?? 0,
+  }
+}
+
 export function mapDownloadTokenFromDto(dto: DownloadTokenDto): DownloadToken {
   return {
     url: dto.url ?? '',

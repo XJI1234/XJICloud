@@ -147,6 +147,16 @@
   overflow: auto;
 }
 
+.model-choice-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.model-choice-row .model-choice-card {
+  flex: 1;
+}
+
 .model-choice-card {
   display: flex;
   flex-direction: column;

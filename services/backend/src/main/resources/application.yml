@@ -17,6 +17,9 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    connection-timeout: 3600000
+    max-swallow-size: -1
 
 xjicloud:
   jwt:
