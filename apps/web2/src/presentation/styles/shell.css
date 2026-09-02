@@ -804,6 +804,22 @@ a {
   border-top: 1px solid var(--line);
 }
 
+.training-job-item__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.model-upload-list {
+  margin-top: 20px;
+}
+
+.upload-page-footer {
+  margin-top: 16px;
+}
+
 .training-job-meta,
 .training-job-message,
 .upload-empty-text,

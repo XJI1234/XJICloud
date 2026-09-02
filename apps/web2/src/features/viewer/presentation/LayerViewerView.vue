@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { PhArrowArcLeft, PhArrowArcRight, PhArrowCounterClockwise, PhArrowsDownUp, PhCloud, PhFolderOpen, PhList, PhUploadSimple, PhX } from '@phosphor-icons/vue'
 import NativeSplatViewport from '@/features/viewer/presentation/components/NativeSplatViewport.vue'
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
@@ -13,6 +14,7 @@ import type { StoredDefaultView, ViewerModelSummary } from '@/features/viewer/do
 import type { Project } from '@/features/project/domain/entities/project.entity'
 
 const { t, locale } = useI18n()
+const route = useRoute()
 const workspace = useProjectWorkspace()
 const modelsApi = useModelAssets()
 const viewer = useViewerStorage()
@@ -353,13 +355,26 @@ function handleStatus(code: string) {
 }
 
 onMounted(() => {
-  workspace.load().then(([error, data]) => {
+  workspace.load().then(async ([error, data]) => {
     if (error) {
       setStatus('viewer.status.projectsLoadFailed')
       return
     }
     projectList.value = data ?? []
     activeProjectId.value = workspace.activeProjectId()
+    const queryModelId = typeof route.query.modelId === 'string' ? route.query.modelId : ''
+    if (queryModelId && activeProjectId.value) {
+      const [listError, listed] = await viewer.listModels(activeProjectId.value)
+      if (listError || !listed) {
+        actionError.value = formatDomainError(t, listError)
+        setRawStatus(formatDomainError(t, listError))
+        return
+      }
+      const match = listed.find((item) => item.id === queryModelId)
+      if (match) {
+        await loadCloudModel(match)
+      }
+    }
   })
 })
 </script>

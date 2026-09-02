@@ -175,10 +175,10 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 | | |
 |--|--|
 | UL | ModelAsset、PLY/SPZ、下载 token、export、分片上传会话 |
-| 领域服务 | `model-format.service`（格式与 2GB 上限）、`chunk-range.service` |
+| 领域服务 | `model-format.service`（格式与 2GB 上限）、`chunk-range.service`、`model-list.service`（按更新时间排序） |
 | Port | `ModelAssetRepository`（session / chunk / complete / delete） |
 | 用例 | `listModelsUseCase`、`uploadModelUseCase`（顺序分片续传）、`deleteModelUseCase` |
-| UI | `useModelAssets`（工程列表、上传页、查看器、编辑器共用） |
+| UI | `useModelAssets`、`ModelUploadPanel`（已上传列表、进行中进度、查看/删除） |
 
 没有工程 id 时 `MODEL_PROJECT_REQUIRED`。非法扩展名 `MODEL_INVALID_FORMAT`。超过 2GB `MODEL_TOO_LARGE`。
 
