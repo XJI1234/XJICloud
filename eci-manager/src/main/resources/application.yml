@@ -44,7 +44,7 @@ eci:
   default-image: nginx:alpine
   default-cpu: 1.0
   default-memory: 2.0
-  create-timeout-sec: 300
+  create-timeout-sec: ${ECI_CREATE_TIMEOUT_SEC:300}
   delete-timeout-sec: 300
   poll-interval-ms: 3000
   default-restart-policy: Never

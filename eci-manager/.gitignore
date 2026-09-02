@@ -8,3 +8,7 @@ application-local.yml
 .classpath
 .project
 .settings/
+
+.venv/
+**/__pycache__/
+*.pyc

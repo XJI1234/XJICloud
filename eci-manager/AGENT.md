@@ -4,7 +4,9 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-07-31（PRD v2.0.3 + OSS 集成 O1–O5.2；真云 Python/OSS 冒烟已通；内网 OSS endpoint）
+**最后更新：** 2026-09-02（3DGS 手动 Shell 标准档跑通；失败日志可观测性待做）
+
+**3DGS / 失败取证：** 手动 Shell 15k 成功与「Failed 即删丢日志」优化上下文见 [`docs/3dgs成功案例与日志可观测性上下文.md`](docs/3dgs成功案例与日志可观测性上下文.md)。已知缺口：`EciProvider` 无 `DescribeContainerLog`；`TaskLifecycleWatcher` 在 Failed/TIMEOUT 时 **先标失败再删实例**，任务侧仅短 `failureReason`。
 
 ---
 
