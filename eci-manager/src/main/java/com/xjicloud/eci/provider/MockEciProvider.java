@@ -1,8 +1,12 @@
 package com.xjicloud.eci.provider;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.LongSupplier;
 
@@ -30,6 +34,10 @@ public class MockEciProvider implements EciProvider {
     private final ConcurrentHashMap<String, Boolean> manualOverride = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CreateSpec> createSpecs = new ConcurrentHashMap<>();
     private final AtomicReference<CreateSpec> lastCreateSpec = new AtomicReference<>();
+    /** 测试用：记录 fetch/delete 调用顺序（值为 {@code fetch}/{@code delete}）。 */
+    private final List<String> lifecycleCallOrder = Collections.synchronizedList(new ArrayList<>());
+    private final AtomicInteger fetchContainerLogCalls = new AtomicInteger();
+    private final ConcurrentHashMap<String, String> containerLogs = new ConcurrentHashMap<>();
 
     /** 单元测试默认：关闭时间触发，仅钩子。 */
     public MockEciProvider() {
@@ -76,13 +84,47 @@ public class MockEciProvider implements EciProvider {
     public CloudInstanceView describe(String cloudInstanceId) {
         maybeAutoComplete(cloudInstanceId);
         String status = statuses.getOrDefault(cloudInstanceId, "NotFound");
-        return new CloudInstanceView(cloudInstanceId, status, null);
+        String detail = null;
+        if ("Failed".equalsIgnoreCase(status)) {
+            detail = "mock exitCode=1";
+        }
+        return new CloudInstanceView(cloudInstanceId, status, detail);
+    }
+
+    @Override
+    public String fetchContainerLog(String cloudInstanceId, int tailLines) {
+        fetchContainerLogCalls.incrementAndGet();
+        lifecycleCallOrder.add("fetch");
+        String configured = containerLogs.get(cloudInstanceId);
+        if (configured != null) {
+            return configured;
+        }
+        return "mock-container-log cloudInstanceId=" + cloudInstanceId
+                + " tailLines=" + Math.max(tailLines, 1)
+                + "\nline-last: process exited";
     }
 
     @Override
     public void delete(String cloudInstanceId) {
+        lifecycleCallOrder.add("delete");
         statuses.put(cloudInstanceId, "Deleted");
         completeAtEpochMs.remove(cloudInstanceId);
+    }
+
+    /** 测试钩子：为指定云实例预设容器日志内容。 */
+    public void setContainerLog(String cloudInstanceId, String logContent) {
+        if (cloudInstanceId != null && logContent != null) {
+            containerLogs.put(cloudInstanceId, logContent);
+        }
+    }
+
+    /** 测试用：fetch/delete 调用顺序。 */
+    public List<String> getLifecycleCallOrder() {
+        return List.copyOf(lifecycleCallOrder);
+    }
+
+    public int getFetchContainerLogCalls() {
+        return fetchContainerLogCalls.get();
     }
 
     /**

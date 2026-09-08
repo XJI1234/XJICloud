@@ -4,9 +4,9 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-09-02（3DGS 手动 Shell 标准档跑通；失败日志可观测性待做）
+**最后更新：** 2026-09-06（3DGS 使用说明收敛为单篇；POST 15k 已跑通）
 
-**3DGS / 失败取证：** 手动 Shell 15k 成功与「Failed 即删丢日志」优化上下文见 [`docs/3dgs成功案例与日志可观测性上下文.md`](docs/3dgs成功案例与日志可观测性上下文.md)。已知缺口：`EciProvider` 无 `DescribeContainerLog`；`TaskLifecycleWatcher` 在 Failed/TIMEOUT 时 **先标失败再删实例**，任务侧仅短 `failureReason`。
+**3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → grace → delete；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
 ---
 
@@ -26,14 +26,18 @@
   - ✅ 联调镜像源码 `test-images/oss-smoke/`；文档 API §3.1 / 设计说明 §4.4
   - ✅ 真云：`python_mirror` + `storage.mode=test` + **内网** OSS endpoint → `SUCCEEDED` 且对象写入 Bucket
   - 📋 Task 7 完整验收清单（keys/无 storage 回归等）可按 PRD 附录 B 继续
+- **已交付（失败日志可观测性，2026-09-02～09-05）：**
+  - ✅ 删实例前 `DescribeContainerLog` → 任务字段 `containerLogTail`（方案 A）
+  - ✅ 可选宽限 `eci.failure-log-grace-sec` 默认 90（方案 C；`0` 关闭）
+  - ✅ TIMEOUT 与 Failed 同序（先抓日志再删）；成功任务不存全量日志
+  - ✅ Mock/单测锁定 fetch→persist→delete；详节见下方 **§5.1**
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 - **OSS 增量 PRD：** [`ECI任务OSS对象存储集成产品需求文档(PRD).md`](../ECI任务OSS对象存储集成产品需求文档(PRD).md) **v1.0**
 - **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
 - **OSS 计划 / 续跑：** [`docs/superpowers/plans/2026-07-30-eci-oss-integration.md`](../docs/superpowers/plans/2026-07-30-eci-oss-integration.md)、[`docs/superpowers/2026-07-31-eci-oss-handoff.md`](../docs/superpowers/2026-07-31-eci-oss-handoff.md)
-- 生产最终用 ECI 还是 CCI **仍待定**（不阻塞本期）
 
-**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）。
+**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）；实时流式日志 UI；OSS 存全量容器日志（方案 B）。
 
 ---
 
@@ -44,18 +48,23 @@ eci-manager/
 ├── pom.xml
 ├── README.md
 ├── AGENT.md                         # 本文件
-├── .env.example                     # 含 ECI_OSS_*（.env gitignore）
+├── .env.example                     # 含 ECI_OSS_*、ECI_FAILURE_LOG_*（.env gitignore）
 ├── scripts/
 │   ├── load-env.sh / start.sh
 │   ├── run-hello-python.sh          # 真云：普通 Python 任务（无 storage）
-│   └── debug-oss-smoke.sh           # 真云：exit0 + storage.mode=test 冒烟
+│   ├── debug-oss-smoke.sh           # 真云：exit0 + storage.mode=test 冒烟
+│   ├── submit-3dgs-standard.sh      # POST 标准档 3DGS 任务
+│   ├── 3dgs-bootstrap.py            # 容器内 bootstrap（含 ply fallback）
+│   ├── oss-presign-3dgs.py          # 本机预签名
+│   └── run-eci-oss.sh               # conda eci-oss 包装
 ├── test-images/oss-smoke/           # eci-oss-test 联调镜像（Dockerfile/run.py）
 ├── docs/
 │   ├── 设计与使用说明.md            # §4.4 eci.oss
-│   ├── API文档.md                   # §3.1 storage
-│   └── 测试说明.md
+│   ├── API文档.md                   # §3.1 storage；TaskResponse.containerLogTail
+│   ├── 测试说明.md
+│   └── 3dgs-ECI使用说明.md          # 3DGS 真云一键提交与注意事项
 └── src/main/java/com/xjicloud/eci/
-    ├── config/          # EciProperties、OssProperties、…
+    ├── config/          # EciProperties（含 failure-log-*）、OssProperties、…
     ├── oss/             # OssStorageService
     ├── task/storage/    # TaskStorageResolver、DTO
     ├── instance/ … task/ … provider/ … lifecycle/
@@ -65,12 +74,13 @@ eci-manager/
 
 | 文件 | 作用 |
 |------|------|
-| `.env` / `.env.example` | **推荐**：Api-Key、网络、`ALIBABA_CLOUD_*`、`ECI_OSS_*`（内网 endpoint；`.env` gitignore） |
+| `.env` / `.env.example` | **推荐**：Api-Key、网络、`ALIBABA_CLOUD_*`、`ECI_OSS_*`、可选 `ECI_FAILURE_LOG_*`（`.env` gitignore） |
 | `scripts/load-env.sh` / `start.sh` | 加载 `.env` 并启动 |
-| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时 |
+| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`failure-log-tail-lines` / `failure-log-grace-sec` |
 | `application-dev.yml` | `mock=true` |
 | `application-cloud.yml` | `mock=false` + 推荐阿里云镜像 |
 | `application-local.yml.example` | 旧模板（推荐改用 `.env`） |
+| `src/test/resources/application.properties` | 测试默认 `eci.failure-log-grace-sec=0`（避免 IT 卡 90s） |
 
 仓库便携 JDK/Maven：根目录 `.tools/`（gitignore）+ `.tools/env.sh`（在 `eci-manager/` 下：`source ../.tools/env.sh`）。
 
@@ -103,11 +113,11 @@ flowchart LR
 |----|------|
 | Instance Controller | 手动实例 HTTP |
 | Task Controller | 任务提交/查询/取消 |
-| EciTaskService | 任务落库、驱动 `createForTask`、cancel、`onInstanceRunning`/`onInstanceFailed`/`markSucceeded` |
+| EciTaskService | 任务落库、驱动 `createForTask`、cancel、`onInstanceRunning`/`onInstanceFailed`(可带 `containerLogTail`)/`markSucceeded` |
 | EciInstanceService | **本地实例状态权威**；`createForTask` 写 `taskId`；`deleteForTaskCancel`（允许 CREATING）；refresh 钩子通知任务 |
-| EciProvider | 仅云侧 Create / Describe / Delete |
+| EciProvider | 云侧 Create / Describe / **fetchContainerLog** / Delete |
 | AsyncLifecycleWorker | 创建/删除轮询；Succeeded 视为创建成功路径 markRunning；cancel 竞态 abort→删；回调任务状态 |
-| TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；云终态自动删；TIMEOUT；SUCCEEDED 门闩 |
+| TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；Failed/TIMEOUT：**抓日志→落库→宽限→删**；SUCCEEDED 门闩 |
 | StartupCompensationRunner | 启动扫实例 CREATING/STOPPING/RUNNING + 非终态任务对齐 |
 | ApiKeyAuthFilter | `/api/v1/eci/**`；`/actuator/health` 公开 |
 
@@ -186,12 +196,14 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 |------|------|------|
 | POST | `/tasks` | **`image` 必填**；可选 `storage`；立即返回 taskId + STARTING + instanceId |
 | GET | `/tasks?status=` | 列表 |
-| GET | `/tasks/{id}` | 详情 |
+| GET | `/tasks/{id}` | 详情（失败时含 `failureReason` + `containerLogTail`） |
 | POST | `/tasks/{id}/cancel` | 幂等 CANCELLED + 删关联实例 |
 
 未传规格/重启/超时 → 用配置默认值，**实际值写入任务行**。
 
 有 `storage`：须 `eci.oss.enabled` 且配置完整，否则 **400 不落库**；注入 `XJI_OUTPUT_UPLOAD_URL` 等（禁止 AK/SK 进容器）。契约见 [docs/API文档.md](docs/API文档.md) §3.1。
+
+失败取证字段：`failureReason` 仍为短文案（≤1000）；容器日志尾部落独立字段 **`containerLogTail`**（`@Lob`），实例删除后仍可从 `GET /tasks/{id}` 读取。
 
 ### 其它
 
@@ -209,7 +221,11 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | 联调镜像 | 真实模式用**阿里云仓库**镜像（Docker Hub 易 Pending）；个人 ACR：`…/ylif4/python_mirror:3.12`（**VPC 域名**） |
 | OSS endpoint（ECI 任务） | 须 **`https://oss-cn-{region}-internal.aliyuncs.com`**；公网 endpoint 在无 NAT 的 ECI 上 PUT 会超时 → exit 1 / Failed |
 | OSS 联调 | `storage.mode=test` + 容器 PUT `XJI_OUTPUT_UPLOAD_URL`；本机探针失败（内网）属预期，以 ECI 终态为准 |
-| Failed 诊断 | `AliyunEciProvider.describe` 将 exitCode/reason/events 写入 `failureReason` |
+| Failed 诊断 | 短 `failureReason`（exitCode/events）+ 任务字段 `containerLogTail`（删前日志尾） |
+| 失败日志顺序 | **硬约束** `fetchContainerLog` → 落库 FAILED(+logTail) →（可选 grace）→ `ensureDelete`；拉日志失败不阻断删除 |
+| `failure-log-tail-lines` | 默认 **1000**（`ECI_FAILURE_LOG_TAIL_LINES`） |
+| `failure-log-grace-sec` | 默认 **90**（`ECI_FAILURE_LOG_GRACE_SEC`）；测试 / 可配 `0` |
+| 成功任务日志 | **不存** `containerLogTail`（防磁盘膨胀） |
 | 生产选型 ECI/CCI | 待定，不阻塞 |
 | 云凭证 | ECS RAM / `ALIBABA_CLOUD_*`；**yml AK 不建客户端** |
 | T1 范围 | Task 1–7 完成；一期 mock 验收 closure |
@@ -260,17 +276,20 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 | `7b172e6` | `feat(eci-manager): add task submit, query, and cancel APIs` |
 | `2572dca` | `fix(eci-manager): harden sanitizeName and validate poll intervals` |
 | `83fc612` | `test(eci-manager): assert manual instances expose null taskId` |
+| `e9e891e` | `chore(eci-manager): snapshot first 3dgs POST/Shell test baseline`（改代码前基线：3dgs docs/scripts） |
 
-（Succeeded 路径等与 Task 3 同文件的小改随 feat 提交；独立 Bugfix 为 sanitize/配置校验。）
+（失败日志可观测性实现曾在工作区未单独 commit；以本 AGENT 与源码为准。）
 
 ### 测试执行结论
 
 | 项 | 结果 | 日期 |
 |----|------|------|
 | `mvn test` | PASS（约 99 项，含 storage API） | 2026-07-31 |
+| Watcher 单测 / Failed Mock IT / Watcher IT | PASS（含 fetch-before-delete、`containerLogTail`） | 2026-09-02 |
 | Mock 手工 curl | 见 `docs/测试说明.md` §11 | |
 | 真云 hello-python | `run-hello-python.sh` / 历史 SUCCEEDED | 2026-07-31 |
 | 真云 OSS `mode=test` | 内网 endpoint → SUCCEEDED + `eci-test/{id}/output.txt` | 2026-07-31 |
+| 真云 3DGS 失败取证冒烟 | 待：`submit-3dgs-standard.sh` 或故意失败镜像 | |
 
 ### 实现分期
 
@@ -278,7 +297,28 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 - **T0–T3** 任务编排一期（mock 验收完成，2026-07-28）  
 - **T3+** 生命周期测试补强（2026-07-30）  
 - **O1–O5.2** OSS 配置/解析/API/联调镜像/文档（2026-07-31）  
-- **下一刀** O5.3 云端验收清单收尾 / 可选推送 `eci-oss-test`  
+- **L1** 失败日志可观测性（删前 Tail + 宽限，2026-09-02）  
+- **下一刀** 联合 3dgs（traceback / `PYTHONUNBUFFERED`）；可选真云失败取证冒烟；O5.3 云端验收清单收尾  
+
+### §5.1 变更记录：失败日志可观测性（2026-09-02）
+
+**问题：** POST 任务云侧 Failed 时 watcher 秒删实例 → 无法 `DescribeContainerLog` → `failureReason` 仅「云侧状态: Failed」，根因永久丢失。
+
+**eci-manager 侧改动（不改 3dgs 镜像）：**
+
+| 层 | 改动 |
+|----|------|
+| `EciProvider` | 新增 `fetchContainerLog(cloudId, tailLines)` |
+| `AliyunEciProvider` | `DescribeContainerLog`；`describe` 填 exitCode/reason/events → `statusDetail` |
+| `MockEciProvider` | 假日志 + `lifecycleCallOrder`（fetch/delete）供断言 |
+| `EciTaskEntity` / `TaskResponse` | 新字段 `containerLogTail`（`@Lob`） |
+| `EciTaskRepository.markFailedIfActive` | 同时写 `failureReason` + `containerLogTail` |
+| `TaskLifecycleWatcher` | Failed + TIMEOUT：`failPersistThenDelete`；TIMEOUT 不再先删后标失败 |
+| `EciProperties` / yml / `.env.example` | `failure-log-tail-lines=1000`，`failure-log-grace-sec=90` |
+| 测试 | `TaskLifecycleWatcherUnitTest` InOrder；`EciTaskLifecycleMockFailedIT` 删后仍可读 Tail |
+| 文档 | `docs/API文档.md`、本文件、`docs/3dgs-ECI使用说明.md` |
+
+**范围外（留给联合 3dgs）：** bootstrap 异常 traceback→stderr+flush；POST env `PYTHONUNBUFFERED=1`；方案 B（OSS 全量日志）。
 
 ### 代码修复备忘（历史 + 本轮）
 
@@ -288,6 +328,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 4. Describe：空 group / null status → NotFound 视图；**Failed 时拼 exitCode/events 到 statusDetail**  
 5. 启动校验：轮询/超时间隔必须为正  
 6. OSS：ECI 任务用内网 endpoint；`storage` 门控 400 不落库  
+7. 失败取证：`fetchContainerLog` 异常返回可读串/空，**不阻断**后续 delete；测试勿用 yml `eci:` 整树覆盖（会抹掉 `task-poll-interval-sec`），用 `application.properties` 扁平键  
 
 ### 真实联调结论（基座 + OSS）
 
@@ -366,12 +407,18 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | `../docs/superpowers/2026-07-31-eci-oss-handoff.md` | OSS 续跑摘要 |
 | `scripts/run-hello-python.sh` | 真云普通 Python 任务 |
 | `scripts/debug-oss-smoke.sh` | 真云 OSS storage 冒烟 |
+| `scripts/submit-3dgs-standard.sh` | POST 标准档 3DGS |
+| `scripts/3dgs-bootstrap.py` | 容器内 3DGS bootstrap |
 | `docs/测试说明.md` | Mock/真云逐步测试 |
 | `docs/设计与使用说明.md` | 结构 / 配置 / §4.4 OSS |
-| `docs/API文档.md` | HTTP 契约 / storage |
-| `src/.../task/EciTaskService.java` | 任务业务 |
+| `docs/API文档.md` | HTTP 契约 / storage / `containerLogTail` |
+| `docs/3dgs-ECI使用说明.md` | 3DGS 真云提交、验收、踩坑与失败取证 |
+| `src/.../task/EciTaskService.java` | 任务业务（含 `onInstanceFailed(..., logTail)`） |
 | `src/.../task/storage/TaskStorageResolver.java` | storage → env |
 | `src/.../oss/OssStorageService.java` | presign |
-| `src/.../provider/AliyunEciProvider.java` | 真实云 SDK + Failed 诊断串 |
+| `src/.../provider/EciProvider.java` | Create/Describe/**fetchContainerLog**/Delete |
+| `src/.../provider/AliyunEciProvider.java` | 真实云 SDK + DescribeContainerLog + Failed 诊断串 |
+| `src/.../lifecycle/TaskLifecycleWatcher.java` | 终态轮询；失败删前抓日志 |
 | `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 / 任务回调 |
+| `src/.../config/EciProperties.java` | 含 `failureLogTailLines` / `failureLogGraceSec` |
 | `src/.../config/ProviderConfig.java` | Mock/Aliyun 装配 |

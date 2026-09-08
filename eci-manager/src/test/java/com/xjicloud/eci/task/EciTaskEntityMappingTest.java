@@ -37,6 +37,36 @@ class EciTaskEntityMappingTest {
         assertThat(properties.getDefaultRestartPolicy()).isEqualTo("Never");
         assertThat(properties.getDefaultMaxRuntimeSec()).isEqualTo(14400);
         assertThat(properties.getTaskPollIntervalSec()).isEqualTo(10);
+        assertThat(properties.getFailureLogTailLines()).isEqualTo(1000);
+        // test/resources/application.yml 关闭宽限，避免 IT 卡住
+        assertThat(properties.getFailureLogGraceSec()).isEqualTo(0);
+    }
+
+    @Test
+    void persistsContainerLogTail() {
+        Instant now = Instant.now();
+        UUID id = UUID.randomUUID();
+
+        EciTaskEntity task = new EciTaskEntity();
+        task.setId(id);
+        task.setName("log-tail-task");
+        task.setStatus(TaskStatus.FAILED);
+        task.setImage("nginx:alpine");
+        task.setCpu(1.0);
+        task.setMemory(2.0);
+        task.setRestartPolicy("Never");
+        task.setMaxRuntimeSec(60);
+        task.setFailureReason("云侧状态: Failed");
+        task.setContainerLogTail("line1\nline2\nOOM");
+        task.setCreatedAt(now);
+        task.setUpdatedAt(now);
+        task.setEndedAt(now);
+
+        taskRepository.save(task);
+
+        EciTaskEntity loaded = taskRepository.findById(id).orElseThrow();
+        assertThat(loaded.getContainerLogTail()).isEqualTo("line1\nline2\nOOM");
+        assertThat(loaded.getFailureReason()).isEqualTo("云侧状态: Failed");
     }
 
     @Test

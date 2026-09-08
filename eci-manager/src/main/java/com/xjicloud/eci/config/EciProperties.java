@@ -54,6 +54,14 @@ public class EciProperties {
     private int mockAutoCompleteSec = 3;
     /** Mock 自动终态：Succeeded 或 Failed。 */
     private String mockAutoCompleteStatus = "Succeeded";
+    /**
+     * 失败/超时时 DescribeContainerLog 拉取的尾部行数。
+     */
+    private int failureLogTailLines = 1000;
+    /**
+     * 失败落库后、发起删除前的取证宽限秒数；{@code 0} 关闭。
+     */
+    private int failureLogGraceSec = 90;
 
     public boolean isMock() {
         return mock;
@@ -213,5 +221,21 @@ public class EciProperties {
 
     public void setMockAutoCompleteStatus(String mockAutoCompleteStatus) {
         this.mockAutoCompleteStatus = mockAutoCompleteStatus;
+    }
+
+    public int getFailureLogTailLines() {
+        return failureLogTailLines;
+    }
+
+    public void setFailureLogTailLines(int failureLogTailLines) {
+        this.failureLogTailLines = failureLogTailLines;
+    }
+
+    public int getFailureLogGraceSec() {
+        return failureLogGraceSec;
+    }
+
+    public void setFailureLogGraceSec(int failureLogGraceSec) {
+        this.failureLogGraceSec = failureLogGraceSec;
     }
 }

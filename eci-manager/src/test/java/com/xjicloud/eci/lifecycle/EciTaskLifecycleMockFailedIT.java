@@ -1,6 +1,8 @@
 package com.xjicloud.eci.lifecycle;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xjicloud.eci.provider.EciProvider;
+import com.xjicloud.eci.provider.MockEciProvider;
 import com.xjicloud.eci.task.TaskStatus;
 import com.xjicloud.eci.task.dto.TaskResponse;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "eci.task-poll-interval-sec=1",
         "eci.mock-auto-complete-sec=1",
         "eci.mock-auto-complete-status=Failed",
+        "eci.failure-log-grace-sec=0",
         "spring.datasource.url=jdbc:h2:mem:eci-task-mock-it-failed;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
 })
 @AutoConfigureMockMvc
@@ -39,6 +42,9 @@ class EciTaskLifecycleMockFailedIT {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private EciProvider eciProvider;
 
     @Test
     void autoFailedWithoutSimulateStatus() throws Exception {
@@ -61,6 +67,8 @@ class EciTaskLifecycleMockFailedIT {
                     TaskResponse.class);
             assertThat(task.status()).isEqualTo(TaskStatus.FAILED);
             assertThat(task.failureReason()).isNotBlank();
+            assertThat(task.containerLogTail()).isNotBlank();
+            assertThat(task.containerLogTail()).contains("mock-container-log");
 
             MvcResult instResult = mockMvc.perform(get("/api/v1/eci/instances/" + task.instanceId())
                             .header("X-Api-Key", "test-api-key"))
@@ -70,5 +78,13 @@ class EciTaskLifecycleMockFailedIT {
                     .path("data").path("status").asText();
             assertThat(instStatus).isEqualTo("TERMINATED");
         });
+
+        assertThat(eciProvider).isInstanceOf(MockEciProvider.class);
+        MockEciProvider mock = (MockEciProvider) eciProvider;
+        assertThat(mock.getLifecycleCallOrder()).contains("fetch");
+        int fetchIdx = mock.getLifecycleCallOrder().indexOf("fetch");
+        int deleteIdx = mock.getLifecycleCallOrder().indexOf("delete");
+        assertThat(fetchIdx).isGreaterThanOrEqualTo(0);
+        assertThat(deleteIdx).isGreaterThan(fetchIdx);
     }
 }

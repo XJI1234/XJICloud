@@ -29,6 +29,7 @@ public interface EciTaskRepository extends JpaRepository<EciTaskEntity, UUID> {
             UPDATE EciTaskEntity t
             SET t.status = :failed,
                 t.failureReason = :reason,
+                t.containerLogTail = :logTail,
                 t.endedAt = :now,
                 t.updatedAt = :now
             WHERE t.id = :id
@@ -38,6 +39,7 @@ public interface EciTaskRepository extends JpaRepository<EciTaskEntity, UUID> {
             @Param("id") UUID id,
             @Param("failed") TaskStatus failed,
             @Param("reason") String reason,
+            @Param("logTail") String logTail,
             @Param("now") Instant now,
             @Param("active") Collection<TaskStatus> active);
 

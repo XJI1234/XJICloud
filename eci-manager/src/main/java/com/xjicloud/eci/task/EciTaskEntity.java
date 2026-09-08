@@ -73,6 +73,11 @@ public class EciTaskEntity {
     @Column(length = 1024)
     private String failureReason;
 
+    /** 失败/超时删实例前抓取的容器日志尾部；成功任务不写。 */
+    @Lob
+    @Column
+    private String containerLogTail;
+
     /** 任务进入 RUNNING 的时间；用于超时判断。 */
     @Column
     private Instant startedAt;
@@ -213,6 +218,14 @@ public class EciTaskEntity {
 
     public void setFailureReason(String failureReason) {
         this.failureReason = failureReason;
+    }
+
+    public String getContainerLogTail() {
+        return containerLogTail;
+    }
+
+    public void setContainerLogTail(String containerLogTail) {
+        this.containerLogTail = containerLogTail;
     }
 
     public Instant getStartedAt() {

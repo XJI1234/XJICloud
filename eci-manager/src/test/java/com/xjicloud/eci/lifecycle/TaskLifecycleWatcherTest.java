@@ -33,6 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "eci.poll-interval-ms=200",
         "eci.task-poll-interval-sec=1",
         "eci.mock-auto-complete-sec=0",
+        "eci.failure-log-grace-sec=0",
         "spring.datasource.url=jdbc:h2:mem:eci-task-watcher-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
 })
 @AutoConfigureMockMvc
@@ -75,6 +76,7 @@ class TaskLifecycleWatcherTest {
             TaskResponse task = getTask(taskId);
             assertThat(task.status()).isEqualTo(TaskStatus.FAILED);
             assertThat(task.failureReason()).isNotBlank();
+            assertThat(task.containerLogTail()).isNotBlank();
             assertThat(instanceStatus(task.instanceId())).isEqualTo(InstanceStatus.TERMINATED);
         });
     }
@@ -88,6 +90,7 @@ class TaskLifecycleWatcherTest {
             TaskResponse task = getTask(taskId);
             assertThat(task.status()).isEqualTo(TaskStatus.FAILED);
             assertThat(task.failureReason()).isEqualTo("TIMEOUT");
+            assertThat(task.containerLogTail()).isNotBlank();
             assertThat(instanceStatus(task.instanceId())).isEqualTo(InstanceStatus.TERMINATED);
         });
     }

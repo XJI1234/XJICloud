@@ -153,6 +153,8 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `eci.default-restart-policy` | `Never` | |
 | `eci.default-max-runtime-sec` | `14400`（4 小时） | 未传 `maxRuntimeSec` 时写入任务；超时强制删 |
 | `eci.task-poll-interval-sec` | `10` | 运行中任务轮询云终态周期 |
+| `eci.failure-log-tail-lines` | `1000` | Failed/TIMEOUT 删前 `DescribeContainerLog` 尾部行数 |
+| `eci.failure-log-grace-sec` | `90` | 落库后、删实例前取证宽限（秒）；`0` 关闭 |
 | `eci.mock-auto-complete-sec` | `3` | Mock：创建后 N 秒自动迁终态；`<=0` 关闭 |
 | `eci.mock-auto-complete-status` | `Succeeded` | Mock 自动终态：`Succeeded` / `Failed` |
 | `eci.create-timeout-sec` | `300` | 创建等待上限 |
@@ -271,7 +273,8 @@ OSS 联调（`mode=test` + 联调镜像）：
 | `restartPolicy` | string | |
 | `maxRuntimeSec` | integer | |
 | `env` | object | 含合并后的 OSS 注入键（若请求带了 `storage`） |
-| `failureReason` | string \| null | 失败原因 |
+| `failureReason` | string \| null | 失败短原因（如 `TIMEOUT` / 云侧 exitCode 摘要） |
+| `containerLogTail` | string \| null | 失败/超时时删实例前抓取的容器日志尾部；成功为 `null` |
 | `startedAt` / `endedAt` | instant \| null | |
 | `createdAt` / `updatedAt` | instant | |
 
@@ -331,8 +334,8 @@ OSS 联调（`mode=test` + 联调镜像）：
 | 行为 | 说明 | 状态 |
 |------|------|------|
 | 云侧 `Succeeded` → 删实例 → 任务 `SUCCEEDED` | 仅实例已 `TERMINATED` 后落成功 | **已实现** |
-| 云侧 `Failed` → 删实例 → 任务 `FAILED` | `Never`；`OnFailure`/`Always` 见策略 | **已实现** |
-| 超过 `maxRuntimeSec` 强制删 | `failureReason=TIMEOUT` | **已实现** |
+| 云侧 `Failed` → 抓日志 → 落库 →（可选宽限）→ 删实例 → 任务 `FAILED` | `Never`；含 `containerLogTail` | **已实现** |
+| 超过 `maxRuntimeSec` 强制删 | `failureReason=TIMEOUT`，同样先抓日志 | **已实现** |
 | Mock 时间触发终态 | `mock-auto-complete-sec` / `status` | **已实现** |
 
 调用方对接：轮询 `GET /tasks/{id}` 的 `status` 直至终态。

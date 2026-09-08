@@ -199,11 +199,24 @@ public class EciTaskService {
      */
     @Transactional
     public void onInstanceFailed(UUID taskId, String reason) {
+        onInstanceFailed(taskId, reason, null);
+    }
+
+    /**
+     * 同 {@link #onInstanceFailed(UUID, String)}，可附带删实例前抓取的容器日志尾部。
+     */
+    @Transactional
+    public void onInstanceFailed(UUID taskId, String reason, String containerLogTail) {
         if (taskId == null) {
             return;
         }
         repository.markFailedIfActive(
-                taskId, TaskStatus.FAILED, truncate(reason), Instant.now(), ACTIVE_STATUSES);
+                taskId,
+                TaskStatus.FAILED,
+                truncate(reason),
+                blankToNull(containerLogTail),
+                Instant.now(),
+                ACTIVE_STATUSES);
     }
 
     /**
@@ -279,6 +292,7 @@ public class EciTaskService {
                 entity.getMaxRuntimeSec(),
                 parseEnv(entity.getEnvJson()),
                 entity.getFailureReason(),
+                entity.getContainerLogTail(),
                 entity.getStartedAt(),
                 entity.getEndedAt(),
                 entity.getCreatedAt(),
@@ -323,5 +337,9 @@ public class EciTaskService {
             return "unknown error";
         }
         return reason.length() > 1000 ? reason.substring(0, 1000) : reason;
+    }
+
+    private static String blankToNull(String value) {
+        return StringUtils.hasText(value) ? value : null;
     }
 }

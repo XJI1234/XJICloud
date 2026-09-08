@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# POST 一笔 3DGS 标准档任务（与 3dgs-ECI-Shell手动跑通.md §6 标准质量档对齐）。
+# POST 一笔 3DGS 标准档任务（步骤见 docs/3dgs-ECI使用说明.md）。
 # 前置：eci-manager 已启动；OSS 上已有 3dgs/raw/<建筑名>.zip；.env 配好内网 OSS + presign=1440。
 set -euo pipefail
 
@@ -98,29 +98,38 @@ PY
 
 TASK_ID=$(python3 -c "import json; print(json.load(open('/tmp/eci_3dgs_standard_submit.json'))['data']['id'])")
 
-echo "=== polling (15s interval, up to ~50min) ==="
-for i in $(seq 1 200); do
+POLL_MAX="${POLL_MAX:-1200}"   # 默认 1200×15s≈5h，够标准档 15k；短测可 POLL_MAX=200
+POLL_SLEEP_SEC="${POLL_SLEEP_SEC:-15}"
+echo "=== polling (${POLL_SLEEP_SEC}s interval, up to $((POLL_MAX * POLL_SLEEP_SEC / 60))min) ==="
+# 注意：set -e 下不可用「python 非 0 退出」判断未终态，否则首轮 STARTING 就会整脚本退出
+for i in $(seq 1 "$POLL_MAX"); do
   curl -s "$BASE/api/v1/eci/tasks/$TASK_ID" \
     -H "X-Api-Key: $ECI_API_KEY" \
     | tee /tmp/eci_3dgs_standard_get.json >/dev/null
+  terminal=0
   python3 - <<'PY'
 import json
 d = json.load(open("/tmp/eci_3dgs_standard_get.json"))["data"]
-print(d["status"], "|", d.get("failureReason") or "")
+tail = d.get("containerLogTail") or ""
+print(d["status"], "|", d.get("failureReason") or "-", "| logTailChars=", len(tail))
+open("/tmp/eci_3dgs_standard_terminal.flag", "w").write(
+    "1" if d["status"] in ("SUCCEEDED", "FAILED", "CANCELLED") else "0"
+)
 PY
-  python3 - <<'PY'
-import json, sys
-d = json.load(open("/tmp/eci_3dgs_standard_get.json"))["data"]
-sys.exit(0 if d["status"] in ("SUCCEEDED", "FAILED", "CANCELLED", "TIMEOUT") else 1)
-PY
-  if [[ $? -eq 0 ]]; then
+  if [[ "$(cat /tmp/eci_3dgs_standard_terminal.flag)" == "1" ]]; then
     break
   fi
-  sleep 15
+  sleep "$POLL_SLEEP_SEC"
 done
 
 python3 - <<'PY'
 import json
 d = json.load(open("/tmp/eci_3dgs_standard_get.json"))["data"]
-print(json.dumps({"status": d["status"], "failureReason": d.get("failureReason")}, ensure_ascii=False, indent=2))
+tail = d.get("containerLogTail") or ""
+print(json.dumps({
+    "status": d["status"],
+    "failureReason": d.get("failureReason"),
+    "containerLogTailLen": len(tail),
+    "containerLogTailPreview": tail[-1500:] if tail else None,
+}, ensure_ascii=False, indent=2))
 PY

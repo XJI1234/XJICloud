@@ -27,6 +27,7 @@ public record TaskResponse(
         int maxRuntimeSec,
         Map<String, String> env,
         String failureReason,
+        String containerLogTail,
         Instant startedAt,
         Instant endedAt,
         Instant createdAt,

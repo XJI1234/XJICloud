@@ -5,24 +5,12 @@
 > **API 文档：** [docs/API文档.md](docs/API文档.md)  
 > **设计与使用：** [docs/设计与使用说明.md](docs/设计与使用说明.md)  
 > **逐步测试：** [docs/测试说明.md](docs/测试说明.md)  
+> **3DGS 真云出图：** [docs/3dgs-ECI使用说明.md](docs/3dgs-ECI使用说明.md)  
 > **Agent 上下文：** [AGENT.md](AGENT.md)  
 > **实现计划：** [docs/superpowers/plans/2026-07-27-eci-task-orchestration.md](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)  
 > **产品需求：** [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 
 > **费用警告：** `eci.mock=false`（cloud profile）会创建真实云资源并产生账单。任务路径在终态后会自动删；仍请到控制台确认无残留。手动实例测完务必 `DELETE`。
-
-本工程不修改主仓 `backend/`。生产最终用 ECI 还是 CCI **仍待定**（不阻塞本期）。
-
-### 实现进度（2026-07-30）
-
-| 范围 | 状态 |
-|------|------|
-| 实例 `/api/v1/eci/instances`（含 restartPolicy / command / args / imageSnapshotId） | ✅ |
-| 任务 `/api/v1/eci/tasks` 提交 / 查询 / 取消 | ✅ T1 |
-| 终态自动删、`maxRuntimeSec` 超时、`TaskLifecycleWatcher` | ✅ T2 |
-| Mock 时间触发终态（`mock-auto-complete-sec`） | ✅ T3 |
-| 文档与一期验收（mock） | ✅ T3 |
-| 生命周期测试补强（Watcher 单测、Mock 边界、启动补偿） | ✅ T3+ |
 
 ## 环境要求（Linux）
 
@@ -42,7 +30,7 @@ source ../.tools/env.sh    # 在 eci-manager/ 下
 
 ## 配置（`.env`，推荐）
 
-真云联调时，Api-Key、VPC、阿里云 AK 建议统一写在 **`eci-manager/.env`**（已加入 `.gitignore`，勿提交）。
+真云联调时，Api-Key、VPC、阿里云 AK 建议统一写在 **`eci-manager/.env`**。
 
 ```bash
 cd eci-manager
@@ -61,7 +49,7 @@ chmod +x scripts/*.sh
 
 **脚本：**
 
-- `scripts/load-env.sh` — 加载 `.env` 并导出 `ALIBABA_CLOUD_*`；无 `.env` 时用 Mock 默认 Api-Key（便于 curl）
+- `scripts/load-env.sh` — 加载 `.env` 并导出 `ALIBABA_CLOUD_*`；无 `.env` 时用 Mock 默认 Api-Key。
 - `scripts/start.sh` — 要求已有 `.env`，然后 `mvn spring-boot:run`
 
 curl 联调（另开终端）：
@@ -72,7 +60,7 @@ source scripts/load-env.sh
 curl -s -H "X-Api-Key: $ECI_API_KEY" http://127.0.0.1:8081/actuator/health
 ```
 
-仍可使用 `application-local.yml`（见 [设计与使用说明](docs/设计与使用说明.md) §4.2），但 `.env` 更省事。
+ `application-local.yml` 仍被保留（见 [设计与使用说明](docs/设计与使用说明.md) §4.2）。省事。
 
 ## 快速开始（Mock，推荐）
 
@@ -198,10 +186,6 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 | GET | `/actuator/health` | 健康检查（无 Api-Key） |
 
 响应：`{ "success", "message", "data" }`。
-
-## 后续如何被 XJICloud 调用
-
-一期保持**独立进程**（8081）。主仓后续可通过 HTTP（`X-Api-Key`）提交 `/tasks`、查询状态；或再评估将编排迁入 `backend` / 切换 CCI Provider。本期**不改**主仓业务代码；生产 ECI vs CCI **待定**。
 
 ## 一期验收清单（mock）
 

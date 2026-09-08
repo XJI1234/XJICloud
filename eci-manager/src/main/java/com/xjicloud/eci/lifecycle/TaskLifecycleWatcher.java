@@ -1,5 +1,6 @@
 package com.xjicloud.eci.lifecycle;
 
+import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.instance.EciInstanceService;
 import com.xjicloud.eci.instance.InstanceStatus;
 import com.xjicloud.eci.instance.dto.InstanceResponse;
@@ -23,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 任务终态轮询：对 STARTING/RUNNING 任务按云侧状态或 maxRuntimeSec 触发删除并回写任务。
  * <p>
  * SUCCEEDED 仅在关联实例已 TERMINATED 后落库；删除失败不得静默标成功。
+ * Failed / TIMEOUT：先抓容器日志尾部落库，可选宽限后再删实例。
  */
 @Component
 public class TaskLifecycleWatcher {
@@ -36,6 +38,7 @@ public class TaskLifecycleWatcher {
     private final EciTaskService taskService;
     private final EciInstanceService instanceService;
     private final EciProvider eciProvider;
+    private final EciProperties properties;
 
     /** 已见云侧 Succeeded、等待本地实例 TERMINATED 后再 markSucceeded。 */
     private final Set<UUID> pendingSucceeded = ConcurrentHashMap.newKeySet();
@@ -43,10 +46,12 @@ public class TaskLifecycleWatcher {
     public TaskLifecycleWatcher(
             EciTaskService taskService,
             EciInstanceService instanceService,
-            EciProvider eciProvider) {
+            EciProvider eciProvider,
+            EciProperties properties) {
         this.taskService = taskService;
         this.instanceService = instanceService;
         this.eciProvider = eciProvider;
+        this.properties = properties;
     }
 
     @Scheduled(fixedDelayString = "#{${eci.task-poll-interval-sec} * 1000}")
@@ -98,8 +103,7 @@ public class TaskLifecycleWatcher {
         if (isTimedOut(task)) {
             log.info("task timeout taskId={} instanceId={} cloudInstanceId={} maxRuntimeSec={}",
                     taskId, instanceId, cloudInstanceId, task.getMaxRuntimeSec());
-            ensureDelete(instance);
-            taskService.onInstanceFailed(taskId, TIMEOUT_REASON);
+            failPersistThenDelete(taskId, instance, cloudInstanceId, TIMEOUT_REASON);
             pendingSucceeded.remove(taskId);
             return;
         }
@@ -108,8 +112,7 @@ public class TaskLifecycleWatcher {
             String reason = StringUtils.hasText(instance.failureReason())
                     ? instance.failureReason()
                     : "实例失败";
-            ensureDelete(instance);
-            taskService.onInstanceFailed(taskId, reason);
+            failPersistThenDelete(taskId, instance, cloudInstanceId, reason);
             pendingSucceeded.remove(taskId);
             return;
         }
@@ -163,9 +166,8 @@ public class TaskLifecycleWatcher {
                 String reason = StringUtils.hasText(view.statusDetail())
                         ? view.statusDetail()
                         : "云侧状态: " + view.status();
-                taskService.onInstanceFailed(taskId, reason);
+                failPersistThenDelete(taskId, instance, cloudInstanceId, reason);
                 pendingSucceeded.remove(taskId);
-                ensureDelete(instance);
             }
             // OnFailure/Always：云侧 Failed 可能随后重启，等待 Succeeded / 超时 / cancel，勿标 RUNNING
             return;
@@ -174,6 +176,46 @@ public class TaskLifecycleWatcher {
         // 仅云侧 Running 才推进 STARTING→RUNNING；Always 下的 Succeeded 等终态不假装 Running
         if (view.isRunning()) {
             taskService.onInstanceRunning(taskId);
+        }
+    }
+
+    /**
+     * 硬约束顺序：fetchContainerLog → 落库 FAILED(+logTail) → 可选 grace → ensureDelete。
+     */
+    private void failPersistThenDelete(
+            UUID taskId, InstanceResponse instance, String cloudInstanceId, String reason) {
+        String logTail = fetchLogSafe(cloudInstanceId);
+        taskService.onInstanceFailed(taskId, reason, logTail);
+        applyFailureGrace(taskId, cloudInstanceId);
+        ensureDelete(instance);
+    }
+
+    private String fetchLogSafe(String cloudInstanceId) {
+        if (!StringUtils.hasText(cloudInstanceId)) {
+            return null;
+        }
+        try {
+            String logTail = eciProvider.fetchContainerLog(
+                    cloudInstanceId, properties.getFailureLogTailLines());
+            return StringUtils.hasText(logTail) ? logTail : null;
+        } catch (Exception e) {
+            log.warn("fetchContainerLog failed cloudInstanceId={}: {}", cloudInstanceId, e.getMessage());
+            return null;
+        }
+    }
+
+    private void applyFailureGrace(UUID taskId, String cloudInstanceId) {
+        int graceSec = properties.getFailureLogGraceSec();
+        if (graceSec <= 0) {
+            return;
+        }
+        log.info("failure log grace sleep={}s taskId={} cloudInstanceId={}",
+                graceSec, taskId, cloudInstanceId);
+        try {
+            Thread.sleep(graceSec * 1000L);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("failure log grace interrupted taskId={}", taskId);
         }
     }
 

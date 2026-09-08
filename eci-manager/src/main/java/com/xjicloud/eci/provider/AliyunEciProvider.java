@@ -10,6 +10,8 @@ import com.aliyuncs.eci.model.v20180808.CreateContainerGroupResponse;
 import com.aliyuncs.eci.model.v20180808.DeleteContainerGroupRequest;
 import com.aliyuncs.eci.model.v20180808.DescribeContainerGroupsRequest;
 import com.aliyuncs.eci.model.v20180808.DescribeContainerGroupsResponse;
+import com.aliyuncs.eci.model.v20180808.DescribeContainerLogRequest;
+import com.aliyuncs.eci.model.v20180808.DescribeContainerLogResponse;
 import com.aliyuncs.exceptions.ClientException;
 import com.aliyuncs.profile.DefaultProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -22,6 +24,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.UUID;
 
 /**
@@ -150,7 +153,7 @@ public class AliyunEciProvider implements EciProvider {
             if (group == null || group.getStatus() == null) {
                 return new CloudInstanceView(cloudInstanceId, "NotFound", "empty container group");
             }
-            return new CloudInstanceView(cloudInstanceId, group.getStatus(), null);
+            return new CloudInstanceView(cloudInstanceId, group.getStatus(), buildStatusDetail(group));
         } catch (ClientException e) {
             if ("InvalidParameter.NotFound".equalsIgnoreCase(e.getErrCode())
                     || "ContainerGroupNotFound".equalsIgnoreCase(e.getErrCode())) {
@@ -159,6 +162,38 @@ public class AliyunEciProvider implements EciProvider {
             log.error("ECI describe failed cloudInstanceId={} errCode={} requestId={}",
                     cloudInstanceId, e.getErrCode(), e.getRequestId());
             throw new IllegalStateException("阿里云 ECI 查询失败: " + e.getErrCode() + " " + e.getErrMsg(), e);
+        }
+    }
+
+    @Override
+    public String fetchContainerLog(String cloudInstanceId, int tailLines) {
+        if (!StringUtils.hasText(cloudInstanceId)) {
+            return "";
+        }
+        int tail = tailLines > 0 ? tailLines : 1000;
+        try {
+            String containerName = resolvePrimaryContainerName(cloudInstanceId);
+            if (!StringUtils.hasText(containerName)) {
+                log.warn("ECI fetchContainerLog skipped: no container name cloudInstanceId={}", cloudInstanceId);
+                return "";
+            }
+            DescribeContainerLogRequest request = new DescribeContainerLogRequest();
+            request.setRegionId(properties.getRegionId());
+            request.setContainerGroupId(cloudInstanceId);
+            request.setContainerName(containerName);
+            request.setTail(tail);
+            DescribeContainerLogResponse response = client.getAcsResponse(request);
+            String content = response != null ? response.getContent() : null;
+            log.info("ECI fetchContainerLog ok cloudInstanceId={} containerName={} tail={} chars={}",
+                    cloudInstanceId, containerName, tail, content != null ? content.length() : 0);
+            return content != null ? content : "";
+        } catch (ClientException e) {
+            log.warn("ECI fetchContainerLog failed cloudInstanceId={} errCode={} requestId={}: {}",
+                    cloudInstanceId, e.getErrCode(), e.getRequestId(), e.getErrMsg());
+            return "fetchContainerLog failed: " + e.getErrCode() + " " + e.getErrMsg();
+        } catch (RuntimeException e) {
+            log.warn("ECI fetchContainerLog failed cloudInstanceId={}: {}", cloudInstanceId, e.getMessage());
+            return "fetchContainerLog failed: " + e.getMessage();
         }
     }
 
@@ -183,6 +218,95 @@ public class AliyunEciProvider implements EciProvider {
                     cloudInstanceId, e.getErrCode(), e.getRequestId());
             throw new IllegalStateException("阿里云 ECI 删除失败: " + e.getErrCode() + " " + e.getErrMsg(), e);
         }
+    }
+
+    /**
+     * 从 DescribeContainerGroups 解析主容器名（取第一个 containers 项）。
+     */
+    private String resolvePrimaryContainerName(String cloudInstanceId) throws ClientException {
+        DescribeContainerGroupsRequest request = new DescribeContainerGroupsRequest();
+        request.setRegionId(properties.getRegionId());
+        request.setContainerGroupIds(toContainerGroupIdsJson(cloudInstanceId));
+        DescribeContainerGroupsResponse response = client.getAcsResponse(request);
+        if (response.getContainerGroups() == null || response.getContainerGroups().isEmpty()) {
+            return null;
+        }
+        DescribeContainerGroupsResponse.ContainerGroup group = response.getContainerGroups().get(0);
+        if (group == null || group.getContainers() == null || group.getContainers().isEmpty()) {
+            return group != null ? group.getContainerGroupName() : null;
+        }
+        DescribeContainerGroupsResponse.ContainerGroup.Container container = group.getContainers().get(0);
+        if (container != null && StringUtils.hasText(container.getName())) {
+            return container.getName();
+        }
+        return group.getContainerGroupName();
+    }
+
+    /**
+     * 汇总 exitCode / reason / 近期 events，供 failureReason 短文案使用（调用方再截断）。
+     */
+    static String buildStatusDetail(DescribeContainerGroupsResponse.ContainerGroup group) {
+        if (group == null) {
+            return null;
+        }
+        StringJoiner joiner = new StringJoiner("; ");
+        if (group.getContainers() != null) {
+            for (DescribeContainerGroupsResponse.ContainerGroup.Container c : group.getContainers()) {
+                if (c == null) {
+                    continue;
+                }
+                DescribeContainerGroupsResponse.ContainerGroup.Container.ContainerState state = c.getCurrentState();
+                if (state == null) {
+                    state = c.getPreviousState();
+                }
+                if (state == null) {
+                    continue;
+                }
+                StringBuilder part = new StringBuilder();
+                if (StringUtils.hasText(c.getName())) {
+                    part.append(c.getName()).append(' ');
+                }
+                if (state.getExitCode() != null) {
+                    part.append("exitCode=").append(state.getExitCode());
+                }
+                if (StringUtils.hasText(state.getReason())) {
+                    if (part.length() > 0 && !part.toString().endsWith(" ")) {
+                        part.append(' ');
+                    }
+                    part.append("reason=").append(state.getReason());
+                }
+                if (StringUtils.hasText(state.getMessage())) {
+                    if (part.length() > 0) {
+                        part.append(' ');
+                    }
+                    part.append("msg=").append(state.getMessage());
+                }
+                if (part.length() > 0) {
+                    joiner.add(part.toString().trim());
+                }
+            }
+        }
+        if (group.getEvents() != null && !group.getEvents().isEmpty()) {
+            int from = Math.max(0, group.getEvents().size() - 3);
+            for (int i = from; i < group.getEvents().size(); i++) {
+                DescribeContainerGroupsResponse.ContainerGroup.Event event = group.getEvents().get(i);
+                if (event == null) {
+                    continue;
+                }
+                StringBuilder part = new StringBuilder("event");
+                if (StringUtils.hasText(event.getReason())) {
+                    part.append('=').append(event.getReason());
+                }
+                if (StringUtils.hasText(event.getMessage())) {
+                    part.append(':').append(event.getMessage());
+                }
+                if (part.length() > "event".length()) {
+                    joiner.add(part.toString());
+                }
+            }
+        }
+        String detail = joiner.toString();
+        return StringUtils.hasText(detail) ? detail : null;
     }
 
     /**
