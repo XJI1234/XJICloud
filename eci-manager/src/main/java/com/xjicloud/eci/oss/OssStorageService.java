@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
@@ -26,9 +27,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 /**
  * 精简版 OSS 客户端：presign PUT/GET 与 key 构建。
  * <p>
- * 从主项目移植，去掉 {@code system_config} 热更新；直接读取 {@link OssProperties}。
- * {@code enabled=false} 或 {@link OssProperties#isConfigured()} 为 false 时 {@link #init()} 跳过建连，
- * 服务仍可启动；此后任何 API 经 {@code requireReady()} 抛「OSS 未配置/未启用」。
+ * 从主项目移植；支持 {@link #applyRuntimeKeys} 热切换当前 AK（endpoint/bucket 仍读 {@link OssProperties}）。
+ * {@code enabled=false} 或凭证/目标不完整时 {@link #init()} 跳过建连，服务仍可启动。
  */
 @Service
 public class OssStorageService {
@@ -51,31 +51,50 @@ public class OssStorageService {
      */
     @PostConstruct
     public void init() {
-        // 未启用或不完整：静默跳过，避免阻断普通任务创建
         if (!properties.isEnabled() || !properties.isConfigured()) {
             log.info("OSS client skipped: enabled={}, configured={}",
                     properties.isEnabled(), properties.isConfigured());
             return;
         }
+        rebuildClients(properties.getAccessKey(), properties.getSecretKey());
+    }
+
+    /**
+     * 热切换当前 OSS AccessKey；endpoint/bucket 仍来自 {@link OssProperties}。
+     * 未启用或 endpoint/bucket 不完整时只记日志、不抛错。
+     */
+    public void applyRuntimeKeys(String accessKeyId, String accessKeySecret) {
+        if (!StringUtils.hasText(accessKeyId) || !StringUtils.hasText(accessKeySecret)) {
+            log.info("OSS applyRuntimeKeys skipped: access key pair incomplete");
+            return;
+        }
+        if (!properties.isEnabled()
+                || !StringUtils.hasText(properties.getEndpoint())
+                || !StringUtils.hasText(properties.getBucket())) {
+            log.info("OSS applyRuntimeKeys skipped: enabled={}, endpoint/bucket incomplete",
+                    properties.isEnabled());
+            return;
+        }
+        rebuildClients(accessKeyId.trim(), accessKeySecret.trim());
+    }
+
+    private void rebuildClients(String accessKey, String secretKey) {
         String sdkEndpoint = normalizeEndpointForSdk(properties.getEndpoint());
         String sdkHost = extractHostFromEndpoint(sdkEndpoint);
         if (sdkHost == null || sdkHost.isBlank()) {
             throw new IllegalStateException("OSS endpoint 无效: " + properties.getEndpoint());
         }
         Region sdkRegion = resolveSdkRegion(sdkEndpoint, properties.getRegion());
-        // 阿里云强制 virtual-hosted；MinIO 等沿用配置项
         boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, properties.isPathStyleAccess());
         log.info("OSS S3 client: endpoint={}, region={}, bucket={}, pathStyle={}",
                 sdkEndpoint, sdkRegion, properties.getBucket(), pathStyleForSdk);
-        AwsBasicCredentials credentials = AwsBasicCredentials.create(
-                properties.getAccessKey(),
-                properties.getSecretKey()
-        );
-        // 阿里云 OSS + AWS SDK：须关闭 chunked encoding，否则签名/上传易失败
+        AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
         S3Configuration s3Configuration = S3Configuration.builder()
                 .pathStyleAccessEnabled(pathStyleForSdk)
                 .chunkedEncodingEnabled(false)
                 .build();
+        S3Client previousClient = this.s3Client;
+        S3Presigner previousPresigner = this.s3Presigner;
         this.s3Client = S3Client.builder()
                 .endpointOverride(URI.create(sdkEndpoint))
                 .region(sdkRegion)
@@ -88,6 +107,19 @@ public class OssStorageService {
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(s3Configuration)
                 .build();
+        closeQuietly(previousClient);
+        closeQuietly(previousPresigner);
+    }
+
+    private static void closeQuietly(AutoCloseable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+            // 热切换时关闭旧客户端失败不阻断新客户端
+        }
     }
 
     /**

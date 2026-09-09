@@ -17,6 +17,9 @@ import com.aliyuncs.profile.DefaultProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.config.EciProperties;
+import com.xjicloud.eci.credential.AliyunCredentialMode;
+import com.xjicloud.eci.credential.AliyunCredentialResolver;
+import com.xjicloud.eci.credential.CredentialHint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
@@ -30,8 +33,8 @@ import java.util.UUID;
 /**
  * 阿里云 ECI OpenAPI 实现：CreateContainerGroup / DescribeContainerGroups / DeleteContainerGroup。
  * <p>
- * 云凭证走 SDK 内置链（ECS RAM 角色 / 环境变量等），不使用 yml 长期 AccessKey。
- * 日志只记录实例 ID 与错误码，不打印凭证 / Api-Key。
+ * 成对 {@code eci.access-key-id/secret} 时走 STATIC_AK；否则 ECS RAM 角色或 SDK 默认链。
+ * 日志只记录实例 ID、credentialMode 与错误码，不打印凭证 / Api-Key。
  */
 public class AliyunEciProvider implements EciProvider {
 
@@ -45,12 +48,24 @@ public class AliyunEciProvider implements EciProvider {
                     + "非 ECS 上出现连接 100.100.100.200 超时属预期。";
 
     private final EciProperties properties;
-    private final IAcsClient client;
+    private volatile IAcsClient client;
 
     public AliyunEciProvider(EciProperties properties) {
+        if (properties.isMock()) {
+            throw new IllegalStateException("AliyunEciProvider must not be constructed when eci.mock=true");
+        }
         this.properties = properties;
         String regionId = properties.getRegionId();
         String roleName = properties.getEcsRamRoleName();
+        AliyunCredentialMode mode = AliyunCredentialResolver.resolve(
+                properties.getAccessKeyId(), properties.getAccessKeySecret(), roleName);
+        if (mode == AliyunCredentialMode.STATIC_AK) {
+            DefaultProfile profile = DefaultProfile.getProfile(
+                    regionId, properties.getAccessKeyId().trim(), properties.getAccessKeySecret().trim());
+            this.client = new DefaultAcsClient(profile);
+            log.info("ECI Aliyun client ready credentialMode={} region={}", mode, regionId);
+            return;
+        }
         String credentialMode;
         AlibabaCloudCredentialsProvider creds;
         try {
@@ -71,6 +86,20 @@ public class AliyunEciProvider implements EciProvider {
         DefaultProfile profile = DefaultProfile.getProfile(regionId);
         this.client = new DefaultAcsClient(profile, creds);
         log.info("ECI Aliyun client ready credentialMode={} region={}", credentialMode, regionId);
+    }
+
+    @Override
+    public void reloadAccessKey(String accessKeyId, String accessKeySecret) {
+        if (!StringUtils.hasText(accessKeyId) || !StringUtils.hasText(accessKeySecret)) {
+            throw new IllegalArgumentException("accessKeyId 与 accessKeySecret 必须成对非空");
+        }
+        DefaultProfile profile = DefaultProfile.getProfile(
+                properties.getRegionId(), accessKeyId.trim(), accessKeySecret.trim());
+        this.client = new DefaultAcsClient(profile);
+        log.info("ECI Aliyun client reloaded credentialMode={} akHint={} region={}",
+                AliyunCredentialMode.STATIC_AK,
+                CredentialHint.mask(accessKeyId),
+                properties.getRegionId());
     }
 
     @Override

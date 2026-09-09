@@ -29,4 +29,10 @@ public interface EciProvider {
 
     /** 删除云实例；已不存在时应幂等成功（不抛错）。 */
     void delete(String cloudInstanceId);
+
+    /**
+     * 用成对 AccessKey 热重建客户端。默认 no-op（Mock 不建云客户端）。
+     */
+    default void reloadAccessKey(String accessKeyId, String accessKeySecret) {
+    }
 }

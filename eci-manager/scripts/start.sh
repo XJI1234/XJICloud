@@ -15,6 +15,6 @@ source "$ROOT/scripts/load-env.sh"
 
 echo "profiles=${SPRING_PROFILES_ACTIVE:-dev} mock=${ECI_MOCK:-<profile>} region=${ECI_REGION_ID:-}"
 echo "eci-manager → ${ECI_BASE}"
-echo "云凭证: ALIBABA_CLOUD_ACCESS_KEY_ID=${ALIBABA_CLOUD_ACCESS_KEY_ID:+已设置}"
+echo "云凭证: ECI_ACCESS_KEY_ID=${ECI_ACCESS_KEY_ID:+已设置} ALIBABA_CLOUD_ACCESS_KEY_ID=${ALIBABA_CLOUD_ACCESS_KEY_ID:+已设置}"
 
 exec mvn spring-boot:run

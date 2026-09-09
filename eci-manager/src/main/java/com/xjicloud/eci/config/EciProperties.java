@@ -15,11 +15,11 @@ public class EciProperties {
     /** HTTP 鉴权密钥，对应请求头 X-Api-Key。 */
     private String apiKey = "";
     /**
-     * 已废弃：真实模式不再用 yml 长期 AK 建客户端。
-     * 保留字段以免旧配置报未知属性；请改用 ECS RAM 角色或环境变量凭证链。
+     * 成对非空时 {@link com.xjicloud.eci.provider.AliyunEciProvider} 走 STATIC_AK。
+     * 对应环境变量 {@code ECI_ACCESS_KEY_ID}（可由 {@code load-env.sh} 从 {@code ALIBABA_CLOUD_*} 映射）。
      */
     private String accessKeyId = "";
-    /** @deprecated 同 {@link #accessKeyId}，不再用于建客户端。 */
+    /** 与 {@link #accessKeyId} 成对；对应 {@code ECI_ACCESS_KEY_SECRET}。 */
     private String accessKeySecret = "";
     /**
      * 可选。ECS 实例 RAM 角色名；有值时用 {@code InstanceProfileCredentialsProvider}。

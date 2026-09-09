@@ -1,5 +1,6 @@
 package com.xjicloud.eci.config;
 
+import com.xjicloud.eci.provider.AliyunEciProvider;
 import com.xjicloud.eci.provider.EciProvider;
 import com.xjicloud.eci.provider.MockEciProvider;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,31 @@ class ProviderConfigValidationTest {
         MockEciProvider mock = (MockEciProvider) provider;
         assertThat(mock.getMockAutoCompleteSec()).isEqualTo(5);
         assertThat(mock.getMockAutoCompleteStatus()).isEqualTo("Failed");
+    }
+
+    @Test
+    void aliyunProviderRejectsMockFlag() {
+        EciProperties properties = validProperties();
+        properties.setMock(true);
+        assertThatThrownBy(() -> new AliyunEciProvider(properties))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("eci.mock=true");
+    }
+
+    @Test
+    void staticAkAssemblesAliyunProviderWithoutImds() {
+        EciProperties properties = validProperties();
+        properties.setMock(false);
+        properties.setRegionId("cn-hangzhou");
+        properties.setVswitchId("vsw-test");
+        properties.setSecurityGroupId("sg-test");
+        properties.setAccessKeyId("LTAItestkey01");
+        properties.setAccessKeySecret("fake-secret-value");
+        properties.setEcsRamRoleName("should-be-ignored");
+
+        EciProvider provider = new ProviderConfig().eciProvider(properties);
+
+        assertThat(provider).isInstanceOf(AliyunEciProvider.class);
     }
 
     private static EciProperties validProperties() {

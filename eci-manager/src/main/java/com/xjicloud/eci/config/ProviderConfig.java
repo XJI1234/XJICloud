@@ -1,5 +1,9 @@
 package com.xjicloud.eci.config;
 
+import com.xjicloud.eci.credential.AliyunCredentialMode;
+import com.xjicloud.eci.credential.AliyunCredentialResolver;
+import com.xjicloud.eci.credential.CredentialHint;
+import com.xjicloud.eci.credential.RuntimeCredentialService;
 import com.xjicloud.eci.provider.AliyunEciProvider;
 import com.xjicloud.eci.provider.EciProvider;
 import com.xjicloud.eci.provider.MockEciProvider;
@@ -20,9 +24,13 @@ public class ProviderConfig {
 
     /**
      * mock=true → {@link MockEciProvider}；否则校验云配置后返回 {@link AliyunEciProvider}。
+     * {@code runtimeCredentials} 为 null 时跳过种子（单测）。
      */
     @Bean
-    public EciProvider eciProvider(EciProperties properties) {
+    public EciProvider eciProvider(EciProperties properties, RuntimeCredentialService runtimeCredentials) {
+        if (runtimeCredentials != null) {
+            runtimeCredentials.seedIfAbsent();
+        }
         if (properties.isMock()) {
             log.info("ECI provider mode: MOCK autoCompleteSec={} status={}",
                     properties.getMockAutoCompleteSec(), properties.getMockAutoCompleteStatus());
@@ -30,13 +38,27 @@ public class ProviderConfig {
                     properties.getMockAutoCompleteSec(),
                     properties.getMockAutoCompleteStatus());
         }
+        if (runtimeCredentials != null) {
+            runtimeCredentials.overlayEciKeys(properties);
+        }
         validateCloudConfig(properties);
-        String credentialHint = StringUtils.hasText(properties.getEcsRamRoleName())
-                ? "INSTANCE_PROFILE role=" + properties.getEcsRamRoleName()
-                : "DEFAULT_CHAIN";
-        log.info("ECI provider mode: ALIYUN credential={} region={}",
-                credentialHint, properties.getRegionId());
+        AliyunCredentialMode mode = AliyunCredentialResolver.resolve(
+                properties.getAccessKeyId(),
+                properties.getAccessKeySecret(),
+                properties.getEcsRamRoleName());
+        log.info("ECI provider mode: ALIYUN credentialMode={} akHint={} region={}",
+                mode, CredentialHint.mask(properties.getAccessKeyId()), properties.getRegionId());
         return new AliyunEciProvider(properties);
+    }
+
+    /** 单测入口：不经过种子。 */
+    EciProvider eciProvider(EciProperties properties) {
+        return eciProvider(properties, null);
+    }
+
+    @Bean
+    public ApplicationRunner applyPersistedOssCredentials(RuntimeCredentialService runtimeCredentials) {
+        return args -> runtimeCredentials.applyPersistedOssKeys();
     }
 
     /** 启动失败快：api-key 与轮询/超时配置合法性。 */
