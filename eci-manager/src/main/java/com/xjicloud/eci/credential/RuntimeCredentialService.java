@@ -116,13 +116,12 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
             throw new BusinessException("resource 必填");
         }
         AliyunResource resource = parseResource(request.getResource());
-        String accessKeyId = request.getAccessKeyId();
-        String accessKeySecret = request.getAccessKeySecret();
-        if (!StringUtils.hasText(accessKeyId) || !StringUtils.hasText(accessKeySecret)) {
+        AccessKeyPair pair = new AccessKeyPair(request.getAccessKeyId(), request.getAccessKeySecret());
+        if (!pair.isComplete()) {
             throw new BusinessException("accessKeyId 与 accessKeySecret 必须成对非空");
         }
-        String id = accessKeyId.trim();
-        String secret = accessKeySecret.trim();
+        String id = pair.accessKeyId().trim();
+        String secret = pair.accessKeySecret().trim();
         write(idKey(resource), id);
         write(secretKey(resource), secret);
         applyToClient(resource, id, secret);

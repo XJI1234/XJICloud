@@ -1,13 +1,13 @@
 package com.xjicloud.eci.oss;
 
 import com.xjicloud.eci.config.OssProperties;
+import com.xjicloud.eci.credential.AccessKeyPair;
 import java.net.URI;
 import java.time.Duration;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
@@ -60,13 +60,11 @@ public class OssStorageService {
      * 未启用或 endpoint/bucket 不完整时只记日志、不抛错。
      */
     public void applyRuntimeKeys(String accessKeyId, String accessKeySecret) {
-        if (!StringUtils.hasText(accessKeyId) || !StringUtils.hasText(accessKeySecret)) {
+        if (!new AccessKeyPair(accessKeyId, accessKeySecret).isComplete()) {
             log.info("OSS applyRuntimeKeys skipped: access key pair incomplete");
             return;
         }
-        if (!properties.isEnabled()
-                || !StringUtils.hasText(properties.getEndpoint())
-                || !StringUtils.hasText(properties.getBucket())) {
+        if (!properties.isEnabled() || !properties.hasTarget()) {
             log.info("OSS applyRuntimeKeys skipped: enabled={}, endpoint/bucket incomplete",
                     properties.isEnabled());
             return;

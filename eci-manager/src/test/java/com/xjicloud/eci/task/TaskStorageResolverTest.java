@@ -44,6 +44,39 @@ class TaskStorageResolverTest {
     }
 
     @Test
+    void allowsStorageWhenRuntimeKeysAppliedWithoutPropertiesAccessKey() {
+        OssProperties props = new OssProperties();
+        props.setEnabled(true);
+        props.setEndpoint("https://oss-cn-hangzhou.aliyuncs.com");
+        props.setRegion("cn-hangzhou");
+        props.setBucket("test-bucket");
+        props.setPresignExpirationMinutes(60);
+        OssStorageService oss = new OssStorageService(props);
+        oss.applyRuntimeKeys("runtime-access-key", "runtime-secret-key");
+        TaskStorageResolver resolver = new TaskStorageResolver(props, oss, new ObjectMapper());
+
+        Map<String, String> env = resolver.resolveAndBuildEnv(TASK_ID, testMode(), Map.of());
+
+        assertThat(env.get("XJI_OUTPUT_OSS_KEY")).isEqualTo("eci-test/" + TASK_ID + "/output.txt");
+        assertThat(env.get("XJI_OUTPUT_UPLOAD_URL")).isNotBlank();
+        assertThat(env.get("XJI_OSS_BUCKET")).isEqualTo("test-bucket");
+    }
+
+    @Test
+    void rejectsStorageWhenEnabledButLiveClientNotReady() {
+        OssProperties props = new OssProperties();
+        props.setEnabled(true);
+        props.setEndpoint("https://oss-cn-hangzhou.aliyuncs.com");
+        props.setBucket("test-bucket");
+        TaskStorageResolver resolver = new TaskStorageResolver(
+                props, new OssStorageService(props), new ObjectMapper());
+
+        assertThatThrownBy(() -> resolver.resolveAndBuildEnv(TASK_ID, testMode(), Map.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("OSS");
+    }
+
+    @Test
     void testModeBuildsEciTestPrefix() {
         TaskStorageResolver resolver = resolver(configuredOss());
         Map<String, String> env = resolver.resolveAndBuildEnv(TASK_ID, testMode(), Map.of());

@@ -102,7 +102,7 @@ public class AliyunEciProvider implements EciProvider {
     }
 
     private IAcsClient staticClient(String accessKeyId, String accessKeySecret) {
-        if (!StringUtils.hasText(accessKeyId) || !StringUtils.hasText(accessKeySecret)) {
+        if (!new AccessKeyPair(accessKeyId, accessKeySecret).isComplete()) {
             throw new IllegalArgumentException("accessKeyId 与 accessKeySecret 必须成对非空");
         }
         DefaultProfile profile = DefaultProfile.getProfile(

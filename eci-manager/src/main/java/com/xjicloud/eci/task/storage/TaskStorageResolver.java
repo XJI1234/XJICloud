@@ -17,7 +17,7 @@ import org.springframework.util.StringUtils;
 /**
  * 校验 {@link TaskStorageRequest}，presign PUT/GET，并构建注入容器的 OSS env。
  * <p>
- * OSS 门控：须 {@code enabled} 且 {@link OssProperties#isConfigured()}，否则 {@link BusinessException}。
+ * OSS 门控：须 {@code enabled} 且 endpoint/bucket 齐全，并由活客户端（库当前钥或 {@code init()}）签发。
  * mode：{@code test} 生成 {@code eci-test/{taskId}/{fileName}}；{@code keys} 用调用方 {@code outputKey}；
  * {@code dataset} / 其它 → 400。
  * PUT contentType（一期固定，须与上传头一致）：{@code test}→{@code text/plain}；
@@ -53,8 +53,8 @@ public class TaskStorageResolver {
             UUID taskId,
             TaskStorageRequest storage,
             Map<String, String> callerEnv) {
-        // 门控：未启用或不完整时直接 400，避免半初始化客户端
-        if (!ossProperties.isEnabled() || !ossProperties.isConfigured()) {
+        // 门控：未启用或缺少 endpoint/bucket 时直接 400。当前钥在活客户端上，不看 properties AK。
+        if (!ossProperties.isEnabled() || !ossProperties.hasTarget()) {
             throw new BusinessException("OSS 未启用或配置不完整，无法处理 storage 请求");
         }
 

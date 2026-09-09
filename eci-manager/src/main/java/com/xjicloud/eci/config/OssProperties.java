@@ -7,8 +7,8 @@ import org.springframework.util.StringUtils;
  * 绑定配置前缀 {@code eci.oss.} 的 OSS 属性。
  * <p>
  * 字段语义对齐主项目 {@code xjicloud.oss}；对接时填相同值即可共享 Bucket。
- * {@code enabled=false} 或 {@link #isConfigured()} 为 false 时不建客户端，普通任务仍可跑；
- * 仅带 {@code storage} 的创建会被拒绝。
+ * {@code enabled=false} 或缺少 endpoint/bucket 时不建热切客户端；普通任务仍可跑。
+ * 带 {@code storage} 的创建还须活客户端已就绪。
  */
 @ConfigurationProperties(prefix = "eci.oss")
 public class OssProperties {
@@ -94,15 +94,21 @@ public class OssProperties {
         this.presignExpirationMinutes = presignExpirationMinutes;
     }
 
-/**
-     * 判断凭证与目标是否齐全，可初始化 S3 客户端。
+    /**
+     * 网络目标是否齐全（不含 AccessKey）。种子 AK 只用于 {@link #isConfigured()} / {@code init()}。
+     */
+    public boolean hasTarget() {
+        return StringUtils.hasText(endpoint) && StringUtils.hasText(bucket);
+    }
+
+    /**
+     * 判断凭证与目标是否齐全，可供 {@code OssStorageService.init()} 用 properties 建连。
      * <p>
      * 必填：{@code endpoint}、{@code bucket}、{@code accessKey}、{@code secretKey}（均非空白）。
-     * {@code region}、{@code pathStyleAccess}、{@code presignExpirationMinutes} 不参与判定。
+     * 任务 storage 与热切客户端不走此判定，以免把种子 AK 当成当前钥。
      */
     public boolean isConfigured() {
-        return StringUtils.hasText(endpoint)
-                && StringUtils.hasText(bucket)
+        return hasTarget()
                 && StringUtils.hasText(accessKey)
                 && StringUtils.hasText(secretKey);
     }
