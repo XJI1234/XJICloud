@@ -142,7 +142,7 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 | 用例 | `loginUseCase`、`registerUseCase`、`resolveAuthNavigation` |
 | UI | `LoginView`、`useAuthSession` |
 
-会话在 localStorage。路由用 `isAuthenticated(session)` + `resolveAuthNavigation`，不要在每个页面手写 if。
+会话在 localStorage。`isAuthenticated` 以 JWT `exp` 为准（用户 token 7 天）。过期或 API 401 清会话并回登录页；登出不清最近工程。路由用 `isAuthenticated(session)` + `resolveAuthNavigation`，不要在每个页面手写 if。
 
 ### 6.2 Project（工程）
 
@@ -150,8 +150,8 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 |--|--|
 | UL | Project、最近打开 |
 | 实体 | `project.entity`（id/name/description/createdAt） |
-| 领域服务 | `recent-projects.service`（上限 `MAX_RECENT_PROJECTS`） |
-| Ports | `ProjectRepository`、`WorkspacePersistence`（当前工程 id、最近列表） |
+| 领域服务 | `recent-projects.service`（上限 `MAX_RECENT_PROJECTS` = 5） |
+| Ports | `ProjectRepository`、`WorkspacePersistence`（当前工程 id、按账号隔离的最近列表） |
 | UI | `HomeView`、`ProjectListView`、`useProjectWorkspace` |
 
 「当前工程」是 workspace 持久化，不是后端字段。查看器、上传、编辑器都读 `activeProjectId()`。

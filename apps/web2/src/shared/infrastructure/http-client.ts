@@ -1,5 +1,6 @@
 import { ApiError, type ApiResponse } from '@xjicloud/shared'
 import { DomainError } from '../domain-error'
+import { shouldLogoutOnStatus } from '../jwt-expiry'
 
 export type TokenProvider = {
   getToken(): string | null
@@ -46,7 +47,10 @@ export function createHttpClient(options: {
 
     const response = await fetchImpl(`${baseUrl}${path}`, { ...init, headers })
 
-    if (response.status === 401 && token) {
+    if (shouldLogoutOnStatus(response.status, token)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'A',location:'http-client.ts:request',message:'session logout',data:{status:response.status,path},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       options.unauthorized.notifyUnauthorized()
     }
 
@@ -79,7 +83,7 @@ export function createHttpClient(options: {
     }
 
     const response = await fetchImpl(`${baseUrl}${path}`, { headers })
-    if (response.status === 401 && token) {
+    if (shouldLogoutOnStatus(response.status, token)) {
       options.unauthorized.notifyUnauthorized()
     }
     if (!response.ok) {
@@ -152,7 +156,7 @@ export function createHttpClient(options: {
       }
       xhr.onload = () => {
         signal?.removeEventListener('abort', onAbort)
-        if (xhr.status === 401 && token) {
+        if (shouldLogoutOnStatus(xhr.status, token)) {
           options.unauthorized.notifyUnauthorized()
         }
         try {

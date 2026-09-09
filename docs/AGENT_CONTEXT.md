@@ -114,6 +114,8 @@ flowchart TB
 
 Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.shared-secret` 一致。
 
+用户 JWT 有效期 **7 天**。过期后前端清会话并回到登录页。最近项目按账号存在浏览器本地，登出不清空。
+
 ---
 
 ## 4. 训练流水线（图片 → 模型）

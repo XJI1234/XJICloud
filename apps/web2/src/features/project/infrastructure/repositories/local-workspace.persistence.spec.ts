@@ -27,7 +27,7 @@ function memoryStorage(): Storage {
 
 describe('local workspace persistence', () => {
   it('notifies subscribers when the active project changes', () => {
-    const persistence = createLocalWorkspacePersistence(memoryStorage())
+    const persistence = createLocalWorkspacePersistence(memoryStorage(), () => 'u1')
     const seen: Array<string | null> = []
     const unsubscribe = persistence.subscribe(() => {
       seen.push(persistence.getActiveProjectId())
@@ -42,8 +42,9 @@ describe('local workspace persistence', () => {
   })
 
   it('notifies subscribers on clear', () => {
-    const persistence = createLocalWorkspacePersistence(memoryStorage())
+    const persistence = createLocalWorkspacePersistence(memoryStorage(), () => 'u1')
     persistence.setActiveProjectId('p1')
+    persistence.writeRecentEntries([{ id: 'p1', openedAt: 1 }])
     let calls = 0
     persistence.subscribe(() => {
       calls += 1
@@ -51,5 +52,19 @@ describe('local workspace persistence', () => {
     persistence.clear()
     expect(calls).toBe(1)
     expect(persistence.getActiveProjectId()).toBeNull()
+    expect(persistence.readRecentEntries()).toEqual([{ id: 'p1', openedAt: 1 }])
+  })
+
+  it('keeps recent projects per account', () => {
+    const storage = memoryStorage()
+    let userId = 'alice'
+    const persistence = createLocalWorkspacePersistence(storage, () => userId)
+    persistence.writeRecentEntries([{ id: 'a1', openedAt: 1 }])
+    userId = 'bob'
+    persistence.writeRecentEntries([{ id: 'b1', openedAt: 2 }])
+    userId = 'alice'
+    expect(persistence.readRecentEntries()).toEqual([{ id: 'a1', openedAt: 1 }])
+    userId = 'bob'
+    expect(persistence.readRecentEntries()).toEqual([{ id: 'b1', openedAt: 2 }])
   })
 })

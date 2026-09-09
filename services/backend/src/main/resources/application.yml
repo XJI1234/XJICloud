@@ -24,6 +24,7 @@ server:
 xjicloud:
   jwt:
     secret: change-me-in-production-use-at-least-32-chars-long-secret-key
+    # Admin JWT TTL. User JWT is 7 days (JwtService.USER_EXPIRATION_MS). Worker JWT is this value × 7.
     expiration-ms: 86400000
   storage:
     root: ./data/xjicloud

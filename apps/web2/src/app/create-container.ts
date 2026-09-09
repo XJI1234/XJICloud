@@ -16,20 +16,22 @@ export type CreateContainerOptions = {
   storage?: Storage
   fetchImpl?: typeof fetch
   baseUrl?: string
+  onUnauthorized?: () => void
 }
 
 export function createWeb2Container(options: CreateContainerOptions = {}): Web2Container {
   const storage = options.storage ?? localStorage
   const session = createLocalStorageSessionStore(storage)
-  const workspace = createLocalWorkspacePersistence(storage)
+  const workspace = createLocalWorkspacePersistence(storage, () => session.read()?.userId ?? null)
   const workspaceReset = {
     clearJobs: () => undefined as void,
   }
   const unauthorized = {
     notifyUnauthorized() {
       session.clear()
-      workspace.clear()
+      workspace.setActiveProjectId(null)
       workspaceReset.clearJobs()
+      options.onUnauthorized?.()
     },
   }
 
@@ -63,7 +65,7 @@ export function createWeb2Container(options: CreateContainerOptions = {}): Web2C
     viewerStorage: createHttpViewerStorage({ http, models }),
     editorBridge: createPostMessageEditorBridge(),
     resetWorkspace() {
-      workspace.clear()
+      workspace.setActiveProjectId(null)
       jobWatch.clear()
     },
   }
