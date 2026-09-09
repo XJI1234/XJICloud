@@ -10,4 +10,4 @@ export type RecentProjectEntry = {
   openedAt: number
 }
 
-export const MAX_RECENT_PROJECTS = 8
+export const MAX_RECENT_PROJECTS = 5

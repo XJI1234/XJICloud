@@ -1,3 +1,5 @@
+import { isJwtExpired } from '@/shared/jwt-expiry'
+
 export type UserSession = {
   accessToken: string
   tokenType: string
@@ -7,6 +9,9 @@ export type UserSession = {
   displayName: string
 }
 
-export function isAuthenticated(session: UserSession | null): boolean {
-  return Boolean(session?.accessToken)
+export function isAuthenticated(session: UserSession | null, nowMs = Date.now()): boolean {
+  if (!session?.accessToken) {
+    return false
+  }
+  return !isJwtExpired(session.accessToken, nowMs)
 }

@@ -10,6 +10,8 @@ import { useViewerStorage } from '@/features/viewer/presentation/composables/use
 import { formatDomainError } from '@/presentation/errors'
 import AppButton from '@/presentation/components/AppButton.vue'
 import AppSheet from '@/presentation/components/AppSheet.vue'
+import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
+import { createTransferRateTracker, formatTransferSpeed } from '@/shared/transfer-rate'
 import type { StoredDefaultView, ViewerModelSummary } from '@/features/viewer/domain/entities/viewer-config.entity'
 import type { Project } from '@/features/project/domain/entities/project.entity'
 
@@ -34,6 +36,7 @@ const flipYToken = ref(0)
 const menuOpen = ref(true)
 const modelSelectionVisible = ref(false)
 const modelCandidates = ref<ViewerModelSummary[]>([])
+const downloadById = ref<Record<string, { percent: number; speed: string }>>({})
 const modelInfo = ref<{ fileName: string; splatCount: number } | null>(null)
 const actionError = ref('')
 const statusState = ref<
@@ -90,27 +93,47 @@ function setCurrentModelSource(file: File, modelId: string | null = null) {
 }
 
 async function loadCloudModel(model: ViewerModelSummary) {
-  if (!activeProjectId.value) {
+  if (!activeProjectId.value || downloadById.value[model.id]) {
     return
   }
 
   viewer.rememberMeta(model.id, model.fileName)
+  const tracker = createTransferRateTracker()
+  downloadById.value = {
+    ...downloadById.value,
+    [model.id]: { percent: 0, speed: '' },
+  }
 
   try {
     setStatus('viewer.status.downloading', { name: model.fileName })
     const [error, loaded] = await viewer.loadBytes(model.id, (loadedBytes, total) => {
+      const percent = total > 0 ? Math.min(99, Math.round((loadedBytes / total) * 100)) : 0
+      const rate = tracker.push(loadedBytes, Date.now())
+      downloadById.value = {
+        ...downloadById.value,
+        [model.id]: {
+          percent,
+          speed: rate != null ? formatTransferSpeed(rate) : downloadById.value[model.id]?.speed ?? '',
+        },
+      }
       if (total > 0) {
         setStatus('viewer.status.downloadingProgress', {
           name: model.fileName,
-          percent: Math.round((loadedBytes / total) * 100),
+          percent,
         })
       }
     })
+    // #region agent log
+    fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'C',location:'LayerViewerView.vue:loadCloudModel',message:'viewer download finished',data:{ok:!error,fileName:model.fileName},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (error || !loaded) {
       actionError.value = formatDomainError(t, error)
       setRawStatus(formatDomainError(t, error))
       return
     }
+    const next = { ...downloadById.value }
+    delete next[model.id]
+    downloadById.value = next
     setCurrentModelSource(loaded.file, loaded.modelId)
   } catch (error) {
     actionError.value = formatDomainError(t, error)
@@ -496,7 +519,13 @@ onMounted(() => {
             <span v-if="candidate.updatedAt" class="model-choice-updated">
               {{ t('viewer.updatedAt', { date: formatModelUpdatedAt(candidate.updatedAt) }) }}
             </span>
-            <span v-if="candidate.id === currentModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
+            <span v-if="downloadById[candidate.id]" class="model-choice-badge">{{ t('viewer.downloading') }}</span>
+            <span v-else-if="candidate.id === currentModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
+            <UploadProgressBar
+              v-if="downloadById[candidate.id]"
+              :percent="downloadById[candidate.id].percent"
+              :speed="downloadById[candidate.id].speed"
+            />
           </button>
           <AppButton compact variant="destructive" @click="deleteProjectModel(candidate, $event)">
             {{ t('viewer.deleteModel') }}

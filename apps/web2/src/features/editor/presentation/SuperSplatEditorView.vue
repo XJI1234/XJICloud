@@ -5,12 +5,13 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { PhCloud, PhFolderOpen, PhPlus } from '@phosphor-icons/vue'
 import AppButton from '@/presentation/components/AppButton.vue'
 import AppSheet from '@/presentation/components/AppSheet.vue'
+import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
+import { createTransferRateTracker, formatTransferSpeed } from '@/shared/transfer-rate'
 import { formatDomainError } from '@/presentation/errors'
 import { DomainError } from '@/shared/domain-error'
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import { useEditorSession } from '@/features/editor/presentation/composables/useEditorSession'
-import { createRemoteEditorLaunch } from '@/features/editor/domain/services/editor-launch.service'
 import { CLOUD_SAVE_DONE, CLOUD_SAVE_ERROR, CLOUD_SAVE_REQUEST, isTrustedIframeMessage } from '@/features/editor/infrastructure/supersplat-protocol'
 import type { ModelAsset } from '@/features/model-asset/domain/entities/model-asset.entity'
 import { CONTAINER_KEY } from '@/shared/di'
@@ -30,6 +31,7 @@ const selectedModelId = ref<string | null>(null)
 const localFileName = ref<string | null>(null)
 const pickerVisible = ref(false)
 const loadingEditor = ref(false)
+const downloadById = ref<Record<string, { percent: number; speed: string }>>({})
 const errorMessage = ref('')
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
 let localFile: File | null = null
@@ -85,26 +87,60 @@ async function loadCloudEditor(model: ModelAsset) {
   errorMessage.value = ''
   localFile = null
   localFileName.value = null
-  const [tokenError, token] = await editor.open(model.id)
-  if (tokenError || !token) {
-    errorMessage.value = formatDomainError(t, tokenError)
+  const tracker = createTransferRateTracker()
+  downloadById.value = {
+    ...downloadById.value,
+    [model.id]: { percent: 0, speed: '' },
+  }
+  const [downloadError, buffer] = await modelsApi.downloadBytes(model.id, (loadedBytes, total) => {
+    const percent = total > 0 ? Math.min(99, Math.round((loadedBytes / total) * 100)) : 0
+    const rate = tracker.push(loadedBytes, Date.now())
+    downloadById.value = {
+      ...downloadById.value,
+      [model.id]: {
+        percent,
+        speed: rate != null ? formatTransferSpeed(rate) : downloadById.value[model.id]?.speed ?? '',
+      },
+    }
+  })
+  // #region agent log
+  fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'D',location:'SuperSplatEditorView.vue:loadCloudEditor',message:'editor cloud download',data:{ok:!downloadError,fileName:model.fileName,hasSpzExt:/\.spz$/i.test(model.fileName),usedImportLocal:true},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  if (downloadError || !buffer) {
+    errorMessage.value = formatDomainError(t, downloadError)
     loadingEditor.value = false
     return
   }
-  const [srcError, src] = editor.src(
-    createRemoteEditorLaunch({
-      signedUrl: token.url,
-      fileName: model.fileName,
-      modelId: model.id,
-      lang: editorLang.value,
-    }),
-  )
+  const file = new File([buffer], model.fileName, { type: 'application/octet-stream' })
+  const [prepareError] = editor.prepareLocal(file)
+  if (prepareError) {
+    errorMessage.value = formatDomainError(t, prepareError)
+    loadingEditor.value = false
+    return
+  }
+  const [srcError, src] = editor.src(editor.blank(editorLang.value))
   if (srcError || !src) {
     errorMessage.value = formatDomainError(t, srcError)
     loadingEditor.value = false
     return
   }
   await navigateEditor(src)
+  const frame = editorFrame()
+  if (!frame?.contentWindow) {
+    errorMessage.value = formatDomainError(t, new DomainError('EDITOR_NOT_READY'))
+    loadingEditor.value = false
+    return
+  }
+  const [importError] = await editor.importLocal(frame, file)
+  if (importError) {
+    errorMessage.value = formatDomainError(t, importError)
+    loadingEditor.value = false
+    return
+  }
+  const next = { ...downloadById.value }
+  delete next[model.id]
+  downloadById.value = next
+  pickerVisible.value = false
   await router.replace({ path: route.path, query: { ...route.query, modelId: model.id } })
   loadingEditor.value = false
 }
@@ -146,7 +182,9 @@ async function openBlankSession() {
 }
 
 async function selectCloudModel(model: ModelAsset) {
-  pickerVisible.value = false
+  if (downloadById.value[model.id]) {
+    return
+  }
   selectedModelId.value = model.id
   await loadCloudEditor(model)
 }
@@ -347,6 +385,12 @@ onBeforeRouteLeave(async (_to, _from, next) => {
           >
             <span class="model-choice-name">{{ model.fileName }}</span>
             <span class="model-choice-meta">{{ model.format }}</span>
+            <span v-if="downloadById[model.id]" class="model-choice-badge">{{ t('supersplat.downloading') }}</span>
+            <UploadProgressBar
+              v-if="downloadById[model.id]"
+              :percent="downloadById[model.id].percent"
+              :speed="downloadById[model.id].speed"
+            />
           </button>
           <AppButton compact variant="destructive" @click="deletePickedModel(model, $event)">
             {{ t('supersplat.deleteModel') }}

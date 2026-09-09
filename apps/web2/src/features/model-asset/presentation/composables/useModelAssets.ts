@@ -18,6 +18,8 @@ export function useModelAssets() {
       signal?: AbortSignal
     }) => uploadModelUseCase({ models: container.models }, input),
     remove: (modelId: string) => deleteModelUseCase({ models: container.models }, modelId),
+    downloadBytes: (modelId: string, onProgress?: (loaded: number, total: number) => void) =>
+      container.models.downloadBytes(modelId, onProgress),
     createDownloadToken: (modelId: string) => container.models.createDownloadToken(modelId),
   }
 }

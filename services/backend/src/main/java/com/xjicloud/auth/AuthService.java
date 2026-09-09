@@ -135,7 +135,7 @@ public class AuthService {
         return new AuthResponse(
                 jwtService.generateToken(user),
                 "Bearer",
-                jwtService.getExpirationMs(),
+                jwtService.getUserExpirationMs(),
                 user.getId(),
                 user.getUsername(),
                 user.getDisplayName()
