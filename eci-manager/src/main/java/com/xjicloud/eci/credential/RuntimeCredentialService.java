@@ -11,18 +11,22 @@ import com.xjicloud.eci.provider.EciProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 每种资源一把当前 AK：种子、查询、PUT 落盘并热重建。GET 永不返回 SK。
  */
 @Service
-public class RuntimeCredentialService {
+public class RuntimeCredentialService implements SmartInitializingSingleton {
 
     private static final Logger log = LoggerFactory.getLogger(RuntimeCredentialService.class);
 
@@ -31,6 +35,8 @@ public class RuntimeCredentialService {
     private final OssProperties ossProperties;
     private final ObjectProvider<EciProvider> eciProvider;
     private final ObjectProvider<OssStorageService> ossStorageService;
+    private final ReentrantLock putLock = new ReentrantLock();
+    private TransactionTemplate transactionTemplate;
 
     public RuntimeCredentialService(
             RuntimeCredentialRepository repository,
@@ -43,6 +49,11 @@ public class RuntimeCredentialService {
         this.ossProperties = ossProperties;
         this.eciProvider = eciProvider;
         this.ossStorageService = ossStorageService;
+    }
+
+    @Autowired(required = false)
+    void setPlatformTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     static String idKey(AliyunResource resource) {
@@ -59,26 +70,25 @@ public class RuntimeCredentialService {
         seedPair(AliyunResource.OSS, ossProperties.getAccessKey(), ossProperties.getSecretKey());
     }
 
-    /** 用库中当前 ECI 成对钥覆盖 properties，供 AliyunEciProvider 构造。 */
-    public void overlayEciKeys(EciProperties properties) {
-        String id = read(idKey(AliyunResource.ECI_OPENAPI));
-        String secret = read(secretKey(AliyunResource.ECI_OPENAPI));
-        if (StringUtils.hasText(id) && StringUtils.hasText(secret)) {
-            properties.setAccessKeyId(id);
-            properties.setAccessKeySecret(secret);
-        }
+    @Override
+    public void afterSingletonsInstantiated() {
+        seedIfAbsent();
+        applyPersistedOssKeys();
     }
 
-    /** 启动后按库钥重建 OSS 客户端（{@code @PostConstruct} 可能早于 seed）。 */
+    public AccessKeyPair currentPair(AliyunResource resource) {
+        return new AccessKeyPair(read(idKey(resource)), read(secretKey(resource)));
+    }
+
+    /** 全部单例就绪后按库钥建 OSS 客户端（避免 {@code eciProvider} Bean 创建时 OSS 尚未存在）。 */
     public void applyPersistedOssKeys() {
-        String id = read(idKey(AliyunResource.OSS));
-        String secret = read(secretKey(AliyunResource.OSS));
-        if (!StringUtils.hasText(id) || !StringUtils.hasText(secret)) {
+        AccessKeyPair pair = currentPair(AliyunResource.OSS);
+        if (!pair.isComplete()) {
             return;
         }
         OssStorageService oss = ossStorageService.getIfAvailable();
         if (oss != null) {
-            oss.applyRuntimeKeys(id, secret);
+            oss.applyRuntimeKeys(pair.accessKeyId(), pair.accessKeySecret());
         }
     }
 
@@ -89,8 +99,19 @@ public class RuntimeCredentialService {
         return new RuntimeCredentialsResponse(eciProperties.isMock(), resources);
     }
 
-    @Transactional
     public RuntimeCredentialsResponse putCurrent(PutRuntimeCredentialRequest request) {
+        putLock.lock();
+        try {
+            if (transactionTemplate != null) {
+                return transactionTemplate.execute(status -> putCurrentInTransaction(request));
+            }
+            return putCurrentInTransaction(request);
+        } finally {
+            putLock.unlock();
+        }
+    }
+
+    private RuntimeCredentialsResponse putCurrentInTransaction(PutRuntimeCredentialRequest request) {
         if (request == null) {
             throw new BusinessException("resource 必填");
         }
@@ -139,29 +160,27 @@ public class RuntimeCredentialService {
     }
 
     private RuntimeResourceStatus eciStatus() {
-        String id = read(idKey(AliyunResource.ECI_OPENAPI));
-        String secret = read(secretKey(AliyunResource.ECI_OPENAPI));
-        boolean configured = StringUtils.hasText(id) && StringUtils.hasText(secret);
-        String hint = configured ? CredentialHint.mask(id) : "";
+        AccessKeyPair pair = currentPair(AliyunResource.ECI_OPENAPI);
+        boolean configured = pair.isComplete();
+        String hint = configured ? CredentialHint.mask(pair.accessKeyId()) : "";
         String mode;
         if (eciProperties.isMock()) {
             mode = "MOCK";
         } else if (configured) {
             mode = AliyunCredentialMode.STATIC_AK.name();
         } else {
-            mode = AliyunCredentialResolver.resolve(id, secret, eciProperties.getEcsRamRoleName()).name();
+            mode = AliyunCredentialResolver.resolve(
+                    pair.accessKeyId(), pair.accessKeySecret(), eciProperties.getEcsRamRoleName()).name();
         }
         return new RuntimeResourceStatus(configured, hint, mode);
     }
 
     private RuntimeResourceStatus ossStatus() {
-        String id = read(idKey(AliyunResource.OSS));
-        String secret = read(secretKey(AliyunResource.OSS));
-        boolean configured = StringUtils.hasText(id) && StringUtils.hasText(secret);
-        if (!configured) {
+        AccessKeyPair pair = currentPair(AliyunResource.OSS);
+        if (!pair.isComplete()) {
             return new RuntimeResourceStatus(false, "", null);
         }
-        return new RuntimeResourceStatus(true, CredentialHint.mask(id), AliyunCredentialMode.STATIC_AK.name());
+        return new RuntimeResourceStatus(true, CredentialHint.mask(pair.accessKeyId()), AliyunCredentialMode.STATIC_AK.name());
     }
 
     private String read(String key) {

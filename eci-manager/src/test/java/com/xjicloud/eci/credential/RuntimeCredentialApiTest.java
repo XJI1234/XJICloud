@@ -8,6 +8,16 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.xjicloud.eci.config.EciProperties;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -32,6 +42,9 @@ class RuntimeCredentialApiTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private EciProperties eciProperties;
 
     @Test
     void getRejectsMissingApiKey() throws Exception {
@@ -104,6 +117,63 @@ class RuntimeCredentialApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.mock").value(true))
+                .andExpect(jsonPath("$.data.resources.ECI_OPENAPI.accessKeyHint").value("LTAI****0001"));
+    }
+
+    @Test
+    void putEciDoesNotMutateSeedProperties() throws Exception {
+        String seedId = eciProperties.getAccessKeyId();
+
+        mockMvc.perform(put(PATH)
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resource\":\"ECI_OPENAPI\",\"accessKeyId\":\"LTAIputkey0001\",\"accessKeySecret\":\"put-secret-value\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(eciProperties.getAccessKeyId()).isEqualTo(seedId);
+        assertThat(eciProperties.getAccessKeyId()).isNotEqualTo("LTAIputkey0001");
+    }
+
+    @Test
+    void concurrentGetAndPutDoNotReturnServerError() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Integer>> futures = new ArrayList<>();
+        for (int i = 0; i < 16; i++) {
+            final int idx = i;
+            futures.add(pool.submit(() -> {
+                start.await(5, TimeUnit.SECONDS);
+                if (idx % 2 == 0) {
+                    return mockMvc.perform(get(PATH).header("X-Api-Key", API_KEY))
+                            .andReturn()
+                            .getResponse()
+                            .getStatus();
+                }
+                String accessKeyId = "LTAIconcur" + String.format("%04d", idx);
+                return mockMvc.perform(put(PATH)
+                                .header("X-Api-Key", API_KEY)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"resource\":\"ECI_OPENAPI\",\"accessKeyId\":\""
+                                        + accessKeyId + "\",\"accessKeySecret\":\"concurrent-secret\"}"))
+                        .andReturn()
+                        .getResponse()
+                        .getStatus();
+            }));
+        }
+        start.countDown();
+        for (Future<Integer> future : futures) {
+            assertThat(future.get(15, TimeUnit.SECONDS)).isEqualTo(200);
+        }
+        pool.shutdownNow();
+
+        mockMvc.perform(put(PATH)
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resource\":\"ECI_OPENAPI\",\"accessKeyId\":\"LTAIfinalkey0001\",\"accessKeySecret\":\"final-secret-value\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get(PATH).header("X-Api-Key", API_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.resources.ECI_OPENAPI.configured").value(true))
                 .andExpect(jsonPath("$.data.resources.ECI_OPENAPI.accessKeyHint").value("LTAI****0001"));
     }
 }

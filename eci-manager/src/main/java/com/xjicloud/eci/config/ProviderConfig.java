@@ -1,7 +1,9 @@
 package com.xjicloud.eci.config;
 
+import com.xjicloud.eci.credential.AccessKeyPair;
 import com.xjicloud.eci.credential.AliyunCredentialMode;
 import com.xjicloud.eci.credential.AliyunCredentialResolver;
+import com.xjicloud.eci.credential.AliyunResource;
 import com.xjicloud.eci.credential.CredentialHint;
 import com.xjicloud.eci.credential.RuntimeCredentialService;
 import com.xjicloud.eci.provider.AliyunEciProvider;
@@ -24,7 +26,7 @@ public class ProviderConfig {
 
     /**
      * mock=true → {@link MockEciProvider}；否则校验云配置后返回 {@link AliyunEciProvider}。
-     * {@code runtimeCredentials} 为 null 时跳过种子（单测）。
+     * {@code runtimeCredentials} 为 null 时跳过种子（单测），用 properties 当运行时钥。
      */
     @Bean
     public EciProvider eciProvider(EciProperties properties, RuntimeCredentialService runtimeCredentials) {
@@ -38,27 +40,22 @@ public class ProviderConfig {
                     properties.getMockAutoCompleteSec(),
                     properties.getMockAutoCompleteStatus());
         }
-        if (runtimeCredentials != null) {
-            runtimeCredentials.overlayEciKeys(properties);
-        }
+        AccessKeyPair runtimeKeys = runtimeCredentials != null
+                ? runtimeCredentials.currentPair(AliyunResource.ECI_OPENAPI)
+                : new AccessKeyPair(properties.getAccessKeyId(), properties.getAccessKeySecret());
         validateCloudConfig(properties);
         AliyunCredentialMode mode = AliyunCredentialResolver.resolve(
-                properties.getAccessKeyId(),
-                properties.getAccessKeySecret(),
+                runtimeKeys.accessKeyId(),
+                runtimeKeys.accessKeySecret(),
                 properties.getEcsRamRoleName());
         log.info("ECI provider mode: ALIYUN credentialMode={} akHint={} region={}",
-                mode, CredentialHint.mask(properties.getAccessKeyId()), properties.getRegionId());
-        return new AliyunEciProvider(properties);
+                mode, CredentialHint.mask(runtimeKeys.accessKeyId()), properties.getRegionId());
+        return new AliyunEciProvider(properties, runtimeKeys);
     }
 
     /** 单测入口：不经过种子。 */
     EciProvider eciProvider(EciProperties properties) {
         return eciProvider(properties, null);
-    }
-
-    @Bean
-    public ApplicationRunner applyPersistedOssCredentials(RuntimeCredentialService runtimeCredentials) {
-        return args -> runtimeCredentials.applyPersistedOssKeys();
     }
 
     /** 启动失败快：api-key 与轮询/超时配置合法性。 */
@@ -76,7 +73,7 @@ public class ProviderConfig {
         };
     }
 
-    /** 真实模式只校验网络/地域；云身份靠 ECS RAM 角色或默认凭证链，不强制 yml AK。 */
+    /** 真实模式只校验网络/地域；云身份靠当前钥、ECS RAM 角色或默认凭证链，不强制 yml AK。 */
     private static void validateCloudConfig(EciProperties properties) {
         require(properties.getRegionId(), "eci.region-id");
         require(properties.getVswitchId(), "eci.vswitch-id");

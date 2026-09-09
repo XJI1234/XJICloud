@@ -2,10 +2,16 @@ package com.xjicloud.eci.oss;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import com.xjicloud.eci.config.OssProperties;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 class OssStorageServiceTest {
 
@@ -88,6 +94,25 @@ class OssStorageServiceTest {
                 .isEqualTo("datasets/11111111-1111-1111-1111-111111111111/images/photo.jpg");
         assertThat(service.buildDatasetPrefix(jobId))
                 .isEqualTo("datasets/11111111-1111-1111-1111-111111111111/");
+    }
+
+    @Test
+    void swapClientsClosesPreviousAfterAssigningNext() {
+        OssStorageService service = new OssStorageService(new OssProperties());
+        S3Client firstClient = mock(S3Client.class);
+        S3Presigner firstPresigner = mock(S3Presigner.class);
+        S3Client secondClient = mock(S3Client.class);
+        S3Presigner secondPresigner = mock(S3Presigner.class);
+
+        service.swapClients(firstClient, firstPresigner);
+        verify(firstClient, never()).close();
+        verify(firstPresigner, never()).close();
+
+        service.swapClients(secondClient, secondPresigner);
+        verify(firstClient, times(1)).close();
+        verify(firstPresigner, times(1)).close();
+        verify(secondClient, never()).close();
+        verify(secondPresigner, never()).close();
     }
 
     @Test

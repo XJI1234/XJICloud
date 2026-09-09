@@ -1,7 +1,6 @@
 package com.xjicloud.eci.oss;
 
 import com.xjicloud.eci.config.OssProperties;
-import jakarta.annotation.PostConstruct;
 import java.net.URI;
 import java.time.Duration;
 import java.util.UUID;
@@ -44,12 +43,9 @@ public class OssStorageService {
     }
 
     /**
-     * 启动门控：仅当 {@code enabled=true} 且 {@link OssProperties#isConfigured()} 时建客户端。
-     * <p>
-     * 阿里云兼容要点：endpoint 去 {@code s3.} 前缀（见 {@link #normalizeEndpointForSdk}）；
-     * path-style 对 aliyuncs.com 强制关闭（virtual-hosted）；关闭 chunked encoding（官方兼容要求）。
+     * 单测/显式建连：仅当 {@code enabled=true} 且 {@link OssProperties#isConfigured()} 时建客户端。
+     * Spring 启动走 {@link com.xjicloud.eci.credential.RuntimeCredentialService#applyPersistedOssKeys()}。
      */
-    @PostConstruct
     public void init() {
         if (!properties.isEnabled() || !properties.isConfigured()) {
             log.info("OSS client skipped: enabled={}, configured={}",
@@ -93,20 +89,29 @@ public class OssStorageService {
                 .pathStyleAccessEnabled(pathStyleForSdk)
                 .chunkedEncodingEnabled(false)
                 .build();
+        S3Client nextClient = S3Client.builder()
+                .endpointOverride(URI.create(sdkEndpoint))
+                .region(sdkRegion)
+                .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                .serviceConfiguration(s3Configuration)
+                .build();
+        S3Presigner nextPresigner = S3Presigner.builder()
+                .endpointOverride(URI.create(sdkEndpoint))
+                .region(sdkRegion)
+                .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                .serviceConfiguration(s3Configuration)
+                .build();
+        swapClients(nextClient, nextPresigner);
+    }
+
+    /**
+     * 先赋新引用再关闭旧客户端。包可见以便测试 {@code close()}。
+     */
+    void swapClients(S3Client nextClient, S3Presigner nextPresigner) {
         S3Client previousClient = this.s3Client;
         S3Presigner previousPresigner = this.s3Presigner;
-        this.s3Client = S3Client.builder()
-                .endpointOverride(URI.create(sdkEndpoint))
-                .region(sdkRegion)
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .serviceConfiguration(s3Configuration)
-                .build();
-        this.s3Presigner = S3Presigner.builder()
-                .endpointOverride(URI.create(sdkEndpoint))
-                .region(sdkRegion)
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .serviceConfiguration(s3Configuration)
-                .build();
+        this.s3Client = nextClient;
+        this.s3Presigner = nextPresigner;
         closeQuietly(previousClient);
         closeQuietly(previousPresigner);
     }

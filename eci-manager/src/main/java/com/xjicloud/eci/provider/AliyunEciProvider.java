@@ -17,6 +17,7 @@ import com.aliyuncs.profile.DefaultProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.config.EciProperties;
+import com.xjicloud.eci.credential.AccessKeyPair;
 import com.xjicloud.eci.credential.AliyunCredentialMode;
 import com.xjicloud.eci.credential.AliyunCredentialResolver;
 import com.xjicloud.eci.credential.CredentialHint;
@@ -33,7 +34,7 @@ import java.util.UUID;
 /**
  * 阿里云 ECI OpenAPI 实现：CreateContainerGroup / DescribeContainerGroups / DeleteContainerGroup。
  * <p>
- * 成对 {@code eci.access-key-id/secret} 时走 STATIC_AK；否则 ECS RAM 角色或 SDK 默认链。
+ * 成对运行时 AccessKey 时走 STATIC_AK；否则 ECS RAM 角色或 SDK 默认链。
  * 日志只记录实例 ID、credentialMode 与错误码，不打印凭证 / Api-Key。
  */
 public class AliyunEciProvider implements EciProvider {
@@ -44,25 +45,28 @@ public class AliyunEciProvider implements EciProvider {
 
     private static final String CREDENTIAL_HINT =
             "无法解析阿里云凭证：生产请为 ECS 绑定 RAM 角色（可配 eci.ecs-ram-role-name）；"
-                    + "本机请设置 ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET（及 SECURITY_TOKEN）临时环境变量。"
+                    + "本机请用 ECI_ACCESS_KEY_ID/SECRET 作为种子，或 PUT /api/v1/eci/runtime-credentials 写入当前钥。"
                     + "非 ECS 上出现连接 100.100.100.200 超时属预期。";
 
     private final EciProperties properties;
     private volatile IAcsClient client;
 
     public AliyunEciProvider(EciProperties properties) {
+        this(properties, new AccessKeyPair(properties.getAccessKeyId(), properties.getAccessKeySecret()));
+    }
+
+    public AliyunEciProvider(EciProperties properties, AccessKeyPair runtimeKeys) {
         if (properties.isMock()) {
             throw new IllegalStateException("AliyunEciProvider must not be constructed when eci.mock=true");
         }
         this.properties = properties;
         String regionId = properties.getRegionId();
         String roleName = properties.getEcsRamRoleName();
-        AliyunCredentialMode mode = AliyunCredentialResolver.resolve(
-                properties.getAccessKeyId(), properties.getAccessKeySecret(), roleName);
+        String accessKeyId = runtimeKeys == null ? null : runtimeKeys.accessKeyId();
+        String accessKeySecret = runtimeKeys == null ? null : runtimeKeys.accessKeySecret();
+        AliyunCredentialMode mode = AliyunCredentialResolver.resolve(accessKeyId, accessKeySecret, roleName);
         if (mode == AliyunCredentialMode.STATIC_AK) {
-            DefaultProfile profile = DefaultProfile.getProfile(
-                    regionId, properties.getAccessKeyId().trim(), properties.getAccessKeySecret().trim());
-            this.client = new DefaultAcsClient(profile);
+            this.client = staticClient(accessKeyId, accessKeySecret);
             log.info("ECI Aliyun client ready credentialMode={} region={}", mode, regionId);
             return;
         }
@@ -90,16 +94,20 @@ public class AliyunEciProvider implements EciProvider {
 
     @Override
     public void reloadAccessKey(String accessKeyId, String accessKeySecret) {
+        this.client = staticClient(accessKeyId, accessKeySecret);
+        log.info("ECI Aliyun client reloaded credentialMode={} akHint={} region={}",
+                AliyunCredentialMode.STATIC_AK,
+                CredentialHint.mask(accessKeyId),
+                properties.getRegionId());
+    }
+
+    private IAcsClient staticClient(String accessKeyId, String accessKeySecret) {
         if (!StringUtils.hasText(accessKeyId) || !StringUtils.hasText(accessKeySecret)) {
             throw new IllegalArgumentException("accessKeyId 与 accessKeySecret 必须成对非空");
         }
         DefaultProfile profile = DefaultProfile.getProfile(
                 properties.getRegionId(), accessKeyId.trim(), accessKeySecret.trim());
-        this.client = new DefaultAcsClient(profile);
-        log.info("ECI Aliyun client reloaded credentialMode={} akHint={} region={}",
-                AliyunCredentialMode.STATIC_AK,
-                CredentialHint.mask(accessKeyId),
-                properties.getRegionId());
+        return new DefaultAcsClient(profile);
     }
 
     @Override

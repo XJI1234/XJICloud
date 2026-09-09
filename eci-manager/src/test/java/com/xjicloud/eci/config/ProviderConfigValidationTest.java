@@ -1,14 +1,25 @@
 package com.xjicloud.eci.config;
 
+import com.xjicloud.eci.credential.AliyunResource;
+import com.xjicloud.eci.credential.RuntimeCredentialEntity;
+import com.xjicloud.eci.credential.RuntimeCredentialRepository;
+import com.xjicloud.eci.credential.RuntimeCredentialService;
+import com.xjicloud.eci.oss.OssStorageService;
 import com.xjicloud.eci.provider.AliyunEciProvider;
 import com.xjicloud.eci.provider.EciProvider;
 import com.xjicloud.eci.provider.MockEciProvider;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
+
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 启动配置校验：轮询/超时间隔必须为正数；Mock 装配透传自动终态配置。
@@ -79,6 +90,40 @@ class ProviderConfigValidationTest {
         EciProvider provider = new ProviderConfig().eciProvider(properties);
 
         assertThat(provider).isInstanceOf(AliyunEciProvider.class);
+    }
+
+    @Test
+    void eciProviderDoesNotCopyRuntimeKeysOntoProperties() {
+        EciProperties properties = validProperties();
+        properties.setMock(false);
+        properties.setRegionId("cn-hangzhou");
+        properties.setVswitchId("vsw-test");
+        properties.setSecurityGroupId("sg-test");
+        properties.setAccessKeyId("LTAIseedeci01");
+        properties.setAccessKeySecret("seed-secret-value");
+
+        RuntimeCredentialRepository repository = mock(RuntimeCredentialRepository.class);
+        when(repository.existsById(any())).thenReturn(true);
+        when(repository.findById("current." + AliyunResource.ECI_OPENAPI.name() + ".access-key-id"))
+                .thenReturn(Optional.of(new RuntimeCredentialEntity(
+                        "current." + AliyunResource.ECI_OPENAPI.name() + ".access-key-id",
+                        "LTAIputkey0001")));
+        when(repository.findById("current." + AliyunResource.ECI_OPENAPI.name() + ".secret"))
+                .thenReturn(Optional.of(new RuntimeCredentialEntity(
+                        "current." + AliyunResource.ECI_OPENAPI.name() + ".secret",
+                        "put-secret-value")));
+
+        @SuppressWarnings("unchecked")
+        ObjectProvider<EciProvider> eciProvider = mock(ObjectProvider.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<OssStorageService> ossStorage = mock(ObjectProvider.class);
+        RuntimeCredentialService service = new RuntimeCredentialService(
+                repository, properties, new OssProperties(), eciProvider, ossStorage);
+
+        new ProviderConfig().eciProvider(properties, service);
+
+        assertThat(properties.getAccessKeyId()).isEqualTo("LTAIseedeci01");
+        assertThat(properties.getAccessKeySecret()).isEqualTo("seed-secret-value");
     }
 
     private static EciProperties validProperties() {
