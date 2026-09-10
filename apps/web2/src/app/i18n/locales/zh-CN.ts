@@ -246,7 +246,7 @@ export default {
     blankEditor: '空白画布',
     pickCloudModel: '项目中的模型',
     downloading: '下载中',
-    localHint: '没有项目模型也可以进入。用上方按钮打开本机 PLY 或 SPZ，或在 SuperSplat 菜单里打开文件。',
+    localHint: '支持本地和离线模型编辑',
     modelCountHint: '当前工程共 {count} 个模型',
     deleteModel: '删除',
     deleteConfirm: '确定删除该模型？删除后无法恢复。',

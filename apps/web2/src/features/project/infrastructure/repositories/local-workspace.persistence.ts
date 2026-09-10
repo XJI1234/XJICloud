@@ -67,9 +67,6 @@ export function createLocalWorkspacePersistence(
         return
       }
       storage.setItem(recentProjectsStorageKey(userId), JSON.stringify(entries.slice(0, MAX_RECENT_PROJECTS)))
-      // #region agent log
-      globalThis.fetch?.('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'B',location:'local-workspace.persistence.ts:writeRecentEntries',message:'wrote per-account recents',data:{count:Math.min(entries.length, MAX_RECENT_PROJECTS),cappedAt:MAX_RECENT_PROJECTS},timestamp:Date.now()})})?.catch(()=>{});
-      // #endregion
       notify()
     },
     subscribe(listener) {

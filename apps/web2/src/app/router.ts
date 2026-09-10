@@ -45,14 +45,8 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const session = getContainer().session.read()
-  const authed = isAuthenticated(session)
-  if (session?.accessToken && !authed) {
-    // #region agent log
-    fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'A',location:'router.ts:beforeEach',message:'expired session treated as logged out',data:{to:to.path,requiresAuth:Boolean(to.meta.requiresAuth)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }
   const redirect = resolveAuthNavigation({
-    isAuthenticated: authed,
+    isAuthenticated: isAuthenticated(session),
     isPublicLogin: Boolean(to.meta.public && to.name === 'login'),
     requiresAuth: Boolean(to.meta.requiresAuth),
     fullPath: to.fullPath,
