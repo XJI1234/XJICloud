@@ -165,13 +165,13 @@ public class ModelController {
         return ApiResponse.ok(modelService.listModelVersions(user, modelId));
     }
 
-    @GetMapping("/models/{modelId}/versions/file")
+    @GetMapping("/models/{modelId}/versions/{versionId}/file")
     public ResponseEntity<StreamingResponseBody> downloadVersionFile(
             @AuthenticationPrincipal UserAccount user,
             @PathVariable UUID modelId,
-            @RequestParam("archiveName") String archiveName
+            @PathVariable UUID versionId
     ) throws IOException {
-        return modelService.downloadVersionArchive(user, modelId, archiveName);
+        return modelService.downloadVersionFile(user, modelId, versionId);
     }
 
     @PostMapping("/models/{modelId}/versions/restore")

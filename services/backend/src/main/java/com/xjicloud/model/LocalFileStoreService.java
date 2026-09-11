@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -148,25 +147,48 @@ public class LocalFileStoreService {
         }
     }
 
-    public void replaceModelFile(UserAccount user, Project project, UUID modelId, String storedFileName, byte[] bytes) {
+    public Path archiveCurrentModel(UserAccount user, Project project, UUID modelId, UUID versionId, Path source) {
+        try {
+            Path exportsDir = exportsDirectory(user, project, modelId);
+            Files.createDirectories(exportsDir);
+            String fileName = source.getFileName().toString();
+            String ext = fileName.toLowerCase().endsWith(".spz") ? ".spz" : ".ply";
+            Path target = exportsDir.resolve(versionId.toString() + ext);
+            Files.copy(source, target);
+            return target;
+        } catch (IOException ex) {
+            throw new BusinessException("导出文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public Path replaceModelFile(UserAccount user, Project project, UUID modelId, String storedFileName, InputStream input) {
         try {
             Path directory = modelDirectory(user, project, modelId);
             Files.createDirectories(directory);
-            Files.write(directory.resolve(storedFileName), bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Path target = directory.resolve(storedFileName);
+            Path temp = directory.resolve(storedFileName + ".tmp");
+            Files.copy(input, temp, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            deleteAlternateOriginal(directory, storedFileName);
+            return target;
         } catch (IOException ex) {
             throw new BusinessException("模型文件更新失败", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    public void storeExport(UserAccount user, Project project, UUID modelId, String fileName, byte[] bytes) {
-        try {
-            Path exportsDir = exportsDirectory(user, project, modelId);
-            Files.createDirectories(exportsDir);
-            String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now()).replace(":", "-");
-            Path exportPath = exportsDir.resolve(timestamp + "_" + fileName);
-            Files.write(exportPath, bytes, StandardOpenOption.CREATE_NEW);
+    public Path copyToLive(UserAccount user, Project project, UUID modelId, String storedFileName, Path source) {
+        try (InputStream input = Files.newInputStream(source)) {
+            return replaceModelFile(user, project, modelId, storedFileName, input);
         } catch (IOException ex) {
-            throw new BusinessException("导出文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new BusinessException("模型文件更新失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private static void deleteAlternateOriginal(Path directory, String storedFileName) throws IOException {
+        if ("original.ply".equals(storedFileName)) {
+            Files.deleteIfExists(directory.resolve("original.spz"));
+        } else if ("original.spz".equals(storedFileName)) {
+            Files.deleteIfExists(directory.resolve("original.ply"));
         }
     }
 

@@ -110,14 +110,13 @@ export function createHttpModelAssetRepository(http: HttpClient): ModelAssetRepo
         return err(mapHttpError(error))
       }
     },
-    async downloadVersionBytes(modelId, archiveName, onProgress): Promise<Result<ArrayBuffer>> {
+    async downloadVersionBytes(modelId, versionId, onProgress): Promise<Result<ArrayBuffer>> {
       try {
         const params = new URLSearchParams({
-          archiveName,
           _: String(Date.now()),
         })
         const buffer = await http.downloadBytes(
-          `/api/v1/models/${modelId}/versions/file?${params.toString()}`,
+          `/api/v1/models/${modelId}/versions/${encodeURIComponent(versionId)}/file?${params.toString()}`,
           onProgress,
         )
         return ok(buffer)
@@ -146,11 +145,11 @@ export function createHttpModelAssetRepository(http: HttpClient): ModelAssetRepo
         return err(mapHttpError(error))
       }
     },
-    async restoreVersion(modelId, archiveName): Promise<Result<ModelAsset>> {
+    async restoreVersion(modelId, versionId): Promise<Result<ModelAsset>> {
       try {
         const dto = await http.request<ModelSummaryDto>(`/api/v1/models/${modelId}/versions/restore`, {
           method: 'POST',
-          body: JSON.stringify({ archiveName }),
+          body: JSON.stringify({ versionId }),
         })
         return ok(mapModelFromDto(dto))
       } catch (error) {

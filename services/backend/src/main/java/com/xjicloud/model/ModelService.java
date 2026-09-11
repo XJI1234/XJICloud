@@ -44,6 +44,7 @@ public class ModelService {
 
     private final ModelAssetRepository modelAssetRepository;
     private final ViewerConfigRepository viewerConfigRepository;
+    private final ModelVersionRepository modelVersionRepository;
     private final ProjectService projectService;
     private final LocalFileStoreService localFileStoreService;
     private final ModelDownloadTokenService modelDownloadTokenService;
@@ -53,6 +54,7 @@ public class ModelService {
     public ModelService(
             ModelAssetRepository modelAssetRepository,
             ViewerConfigRepository viewerConfigRepository,
+            ModelVersionRepository modelVersionRepository,
             ProjectService projectService,
             LocalFileStoreService localFileStoreService,
             ModelDownloadTokenService modelDownloadTokenService,
@@ -61,6 +63,7 @@ public class ModelService {
     ) {
         this.modelAssetRepository = modelAssetRepository;
         this.viewerConfigRepository = viewerConfigRepository;
+        this.modelVersionRepository = modelVersionRepository;
         this.projectService = projectService;
         this.localFileStoreService = localFileStoreService;
         this.modelDownloadTokenService = modelDownloadTokenService;
@@ -156,6 +159,7 @@ public class ModelService {
         ModelAsset asset = requireOwnedModel(user, modelId);
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
         viewerConfigRepository.deleteById(modelId);
+        modelVersionRepository.deleteByModelId(modelId);
         modelAssetRepository.delete(asset);
         registerDeleteModelDirectoryAfterCommit(user, project, modelId);
     }
@@ -271,20 +275,20 @@ public class ModelService {
                 .body(body);
     }
 
-    public ResponseEntity<StreamingResponseBody> downloadVersionArchive(
+    public ResponseEntity<StreamingResponseBody> downloadVersionFile(
             UserAccount user,
             UUID modelId,
-            String archiveName
+            UUID versionId
     ) throws IOException {
-        ModelAsset asset = requireOwnedModel(user, modelId);
-        Project project = projectService.requireOwnedProject(user, asset.getProjectId());
-        Path filePath = localFileStoreService.resolveExportPath(user, project, modelId, archiveName);
+        requireOwnedModel(user, modelId);
+        ModelVersionEntity version = modelVersionRepository.findByIdAndModelId(versionId, modelId)
+                .orElseThrow(() -> new BusinessException("版本不存在", HttpStatus.NOT_FOUND));
+        Path filePath = localFileStoreService.resolveStoredPath(version.getStoragePath());
         long fileSize = Files.size(filePath);
-        String fileName = stripExportTimestamp(filePath.getFileName().toString());
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .headers(noStoreHeaders())
-                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(fileName))
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(version.getFileName()))
                 .contentLength(fileSize)
                 .body(outputStream -> Files.copy(filePath, outputStream));
     }
@@ -316,7 +320,6 @@ public class ModelService {
         return new ViewerConfigResponse(entity.getJsonPayload(), entity.getUpdatedAt());
     }
 
-    @Transactional
     public ModelResponse exportModel(UserAccount user, UUID modelId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("导出文件不能为空");
@@ -324,25 +327,42 @@ public class ModelService {
 
         ModelAsset asset = requireOwnedModel(user, modelId);
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
+        return writeExport(user, project, asset, file);
+    }
 
+    ModelResponse writeExport(UserAccount user, Project project, ModelAsset asset, MultipartFile file) {
         String exportName = sanitizeFileName(file.getOriginalFilename());
         ExportTarget exportTarget = resolveExportTarget(exportName);
+        UUID snapshotId = UUID.randomUUID();
+        Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
 
         try {
-            byte[] bytes = file.getBytes();
-            localFileStoreService.storeExport(user, project, modelId, exportTarget.fileName(), bytes);
+            // #region agent log
+            debugExportLog("A", "ModelService.writeExport:beforeArchive", "live vs incoming size", asset, user, project, asset.getId(), file.getSize());
+            // #endregion
+            Path archivePath = localFileStoreService.archiveCurrentModel(user, project, asset.getId(), snapshotId, livePath);
+            persistSnapshot(asset, snapshotId, archivePath);
+            // #region agent log
+            debugExportLog("B", "ModelService.writeExport:afterArchive", "archived previous live", asset, user, project, asset.getId(), file.getSize());
+            // #endregion
 
-            localFileStoreService.replaceModelFile(user, project, modelId, exportTarget.storedFileName(), bytes);
-            Path storedPath = localFileStoreService.modelFilePath(user, project, modelId, exportTarget.storedFileName());
-
-            asset.setFileName(exportTarget.fileName());
-            asset.setFormat(exportTarget.format());
-            asset.setSizeBytes(bytes.length);
-            asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
-            asset.setVersion(asset.getVersion() + 1);
-            asset.setUpdatedAt(Instant.now());
-            modelAssetRepository.save(asset);
-            return toResponse(asset);
+            try (InputStream input = file.getInputStream()) {
+                Path storedPath = localFileStoreService.replaceModelFile(
+                        user,
+                        project,
+                        asset.getId(),
+                        exportTarget.storedFileName(),
+                        input
+                );
+                asset.setFileName(exportTarget.fileName());
+                asset.setFormat(exportTarget.format());
+                asset.setSizeBytes(localFileStoreService.fileSize(storedPath));
+                asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
+                asset.setVersion(asset.getVersion() + 1);
+                asset.setUpdatedAt(Instant.now());
+                modelAssetRepository.save(asset);
+                return toResponse(asset);
+            }
         } catch (IOException ex) {
             throw new BusinessException("导出保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -351,62 +371,61 @@ public class ModelService {
     public List<ModelVersionResponse> listModelVersions(UserAccount user, UUID modelId) {
         ModelAsset asset = requireOwnedModel(user, modelId);
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
+        return listOwnedVersions(user, project, asset);
+    }
+
+    List<ModelVersionResponse> listOwnedVersions(UserAccount user, Project project, ModelAsset asset) {
+        backfillLegacyExports(user, project, asset);
 
         List<ModelVersionResponse> versions = new ArrayList<>();
-        int versionNo = Math.max(1, asset.getVersion());
         versions.add(new ModelVersionResponse(
                 "current",
                 asset.getFileName(),
                 asset.getSizeBytes(),
                 asset.getUpdatedAt() != null ? asset.getUpdatedAt() : asset.getCreatedAt(),
                 true,
-                versionNo
+                Math.max(1, asset.getVersion())
         ));
-
-        // listExports is newest-first; label them v(N-1), v(N-2), ...
-        for (LocalFileStoreService.ExportArchive archive : localFileStoreService.listExports(user, project, modelId)) {
-            versionNo = Math.max(1, versionNo - 1);
+        for (ModelVersionEntity row : modelVersionRepository.findByModelIdOrderByVersionDesc(asset.getId())) {
             versions.add(new ModelVersionResponse(
-                    archive.archiveName(),
-                    archive.fileName(),
-                    archive.sizeBytes(),
-                    archive.createdAt(),
+                    row.getId().toString(),
+                    row.getFileName(),
+                    row.getSizeBytes(),
+                    row.getCreatedAt(),
                     false,
-                    versionNo
+                    row.getVersion()
             ));
         }
+        // #region agent log
+        debugExportLog("D", "ModelService.listModelVersions", "jpa version rows", asset, user, project, asset.getId(), -1);
+        // #endregion
         return versions;
     }
 
-    @Transactional
     public ModelResponse restoreModelVersion(UserAccount user, UUID modelId, RestoreModelVersionRequest request) {
         ModelAsset asset = requireOwnedModel(user, modelId);
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
+        return writeRestore(user, project, asset, request.versionId());
+    }
 
-        String archiveName = request.archiveName();
-        if ("current".equals(archiveName)) {
-            throw new BusinessException("当前版本无需恢复");
-        }
+    ModelResponse writeRestore(UserAccount user, Project project, ModelAsset asset, UUID versionId) {
+        ModelVersionEntity snapshot = modelVersionRepository.findByIdAndModelId(versionId, asset.getId())
+                .orElseThrow(() -> new BusinessException("版本不存在", HttpStatus.NOT_FOUND));
+        Path snapshotPath = localFileStoreService.resolveStoredPath(snapshot.getStoragePath());
+        Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
+        UUID backupId = UUID.randomUUID();
+        // #region agent log
+        debugExportLog("C", "ModelService.writeRestore:beforeBackup", "restore archives live first", asset, user, project, asset.getId(), localFileStoreService.fileSize(livePath));
+        // #endregion
+        Path backupPath = localFileStoreService.archiveCurrentModel(user, project, asset.getId(), backupId, livePath);
+        persistSnapshot(asset, backupId, backupPath);
 
-        byte[] bytes = localFileStoreService.readExport(user, project, modelId, archiveName);
-        String exportName = sanitizeFileName(stripExportTimestamp(archiveName));
+        String exportName = sanitizeFileName(snapshot.getFileName());
         ExportTarget exportTarget = resolveExportTarget(exportName);
-
-        // Keep the live file as a new archive before overwriting.
-        try {
-            Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
-            byte[] liveBytes = Files.readAllBytes(livePath);
-            localFileStoreService.storeExport(user, project, modelId, asset.getFileName(), liveBytes);
-        } catch (IOException ex) {
-            throw new BusinessException("备份当前版本失败", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-
-        localFileStoreService.replaceModelFile(user, project, modelId, exportTarget.storedFileName(), bytes);
-        Path storedPath = localFileStoreService.modelFilePath(user, project, modelId, exportTarget.storedFileName());
-
+        Path storedPath = localFileStoreService.copyToLive(user, project, asset.getId(), exportTarget.storedFileName(), snapshotPath);
         asset.setFileName(exportTarget.fileName());
         asset.setFormat(exportTarget.format());
-        asset.setSizeBytes(bytes.length);
+        asset.setSizeBytes(localFileStoreService.fileSize(storedPath));
         asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
         asset.setVersion(asset.getVersion() + 1);
         asset.setUpdatedAt(Instant.now());
@@ -414,12 +433,45 @@ public class ModelService {
         return toResponse(asset);
     }
 
-    private static String stripExportTimestamp(String archiveName) {
-        int underscore = archiveName.indexOf('_');
-        if (underscore <= 0 || underscore >= archiveName.length() - 1) {
-            return archiveName;
+    private void persistSnapshot(ModelAsset asset, UUID snapshotId, Path archivePath) {
+        if (modelVersionRepository.existsByModelIdAndVersion(asset.getId(), asset.getVersion())) {
+            return;
         }
-        return archiveName.substring(underscore + 1);
+        ModelVersionEntity row = new ModelVersionEntity();
+        row.setId(snapshotId);
+        row.setModelId(asset.getId());
+        row.setVersion(asset.getVersion());
+        row.setFileName(asset.getFileName());
+        row.setSizeBytes(localFileStoreService.fileSize(archivePath));
+        row.setStoragePath(localFileStoreService.toRelativeStoragePath(archivePath));
+        row.setCreatedAt(Instant.now());
+        modelVersionRepository.save(row);
+    }
+
+    private void backfillLegacyExports(UserAccount user, Project project, ModelAsset asset) {
+        if (modelVersionRepository.existsByModelId(asset.getId())) {
+            return;
+        }
+        List<LocalFileStoreService.ExportArchive> archives = localFileStoreService.listExports(user, project, asset.getId());
+        if (archives.isEmpty()) {
+            return;
+        }
+        List<LocalFileStoreService.ExportArchive> oldestFirst = new ArrayList<>(archives);
+        java.util.Collections.reverse(oldestFirst);
+        int versionNo = 1;
+        for (LocalFileStoreService.ExportArchive archive : oldestFirst) {
+            Path path = localFileStoreService.resolveExportPath(user, project, asset.getId(), archive.archiveName());
+            ModelVersionEntity row = new ModelVersionEntity();
+            row.setId(UUID.randomUUID());
+            row.setModelId(asset.getId());
+            row.setVersion(versionNo);
+            row.setFileName(archive.fileName());
+            row.setSizeBytes(archive.sizeBytes());
+            row.setStoragePath(localFileStoreService.toRelativeStoragePath(path));
+            row.setCreatedAt(archive.createdAt());
+            modelVersionRepository.save(row);
+            versionNo += 1;
+        }
     }
 
     private static HttpHeaders noStoreHeaders() {
@@ -494,6 +546,70 @@ public class ModelService {
 
     private record ExportTarget(String fileName, String storedFileName, ModelFormat format) {
     }
+
+    // #region agent log
+    private void debugExportLog(
+            String hypothesisId,
+            String location,
+            String message,
+            ModelAsset asset,
+            UserAccount user,
+            Project project,
+            UUID modelId,
+            long incomingLen
+    ) {
+        try {
+            Path livePath = localFileStoreService.modelFilePath(user, project, modelId, "original.ply");
+            if (!Files.exists(livePath)) {
+                livePath = localFileStoreService.modelFilePath(user, project, modelId, "original.spz");
+            }
+            long liveSize = Files.exists(livePath) ? Files.size(livePath) : -1L;
+            String livePrefix = peekPrefix(livePath);
+            var archives = localFileStoreService.listExports(user, project, modelId);
+            long newestArchiveSize = archives.isEmpty() ? -1L : archives.get(0).sizeBytes();
+            String newestName = archives.isEmpty() ? "" : archives.get(0).archiveName().replace("\"", "");
+            String archivePrefix = "";
+            if (!archives.isEmpty()) {
+                archivePrefix = peekPrefix(localFileStoreService.resolveExportPath(user, project, modelId, newestName));
+            }
+            String data = "{\"assetVersion\":" + asset.getVersion()
+                    + ",\"liveSize\":" + liveSize
+                    + ",\"livePrefix\":\"" + livePrefix.replace("\"", "")
+                    + "\",\"incomingLen\":" + incomingLen
+                    + ",\"archiveCount\":" + archives.size()
+                    + ",\"newestArchiveSize\":" + newestArchiveSize
+                    + ",\"archivePrefix\":\"" + archivePrefix.replace("\"", "")
+                    + "\",\"newestArchiveName\":\"" + newestName
+                    + "\"}";
+            String line = "{\"sessionId\":\"14ec0c\",\"runId\":\"post-fix\",\"hypothesisId\":\"" + hypothesisId
+                    + "\",\"location\":\"" + location + "\",\"message\":\"" + message
+                    + "\",\"data\":" + data + ",\"timestamp\":" + System.currentTimeMillis() + "}\n";
+            Files.writeString(
+                    Path.of("d:/WeChatProjects/XJICloud/debug-14ec0c.log"),
+                    line,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND
+            );
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String peekPrefix(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return "";
+        }
+        try (InputStream in = Files.newInputStream(path)) {
+            byte[] buf = new byte[16];
+            int n = in.read(buf);
+            if (n <= 0) {
+                return "";
+            }
+            return new String(buf, 0, n, java.nio.charset.StandardCharsets.ISO_8859_1).replace("\"", "").replace("\n", "");
+        } catch (Exception ex) {
+            return "";
+        }
+    }
+    // #endregion
 
     private ModelFormat detectFormat(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);

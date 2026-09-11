@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { PhCloud, PhCloudArrowUp, PhFolderOpen, PhPlus, PhClockCounterClockwise } from '@phosphor-icons/vue'
@@ -12,9 +12,7 @@ import { DomainError } from '@/shared/domain-error'
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import { useEditorSession } from '@/features/editor/presentation/composables/useEditorSession'
-import { CLOUD_SAVE_DONE, CLOUD_SAVE_ERROR, CLOUD_SAVE_REQUEST, isTrustedIframeMessage } from '@/features/editor/infrastructure/supersplat-protocol'
 import type { ModelAsset, ModelVersion } from '@/features/model-asset/domain/entities/model-asset.entity'
-import { CONTAINER_KEY } from '@/shared/di'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,7 +20,6 @@ const { t, locale } = useI18n()
 const workspace = useProjectWorkspace()
 const modelsApi = useModelAssets()
 const editor = useEditorSession()
-const container = inject(CONTAINER_KEY)!
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const localInputRef = ref<HTMLInputElement | null>(null)
@@ -430,33 +427,6 @@ async function restoreVersion(version: ModelVersion) {
   restoring.value = false
 }
 
-async function handleCloudSaveRequest(event: MessageEvent) {
-  const data = event.data as { type?: string; modelId?: string; fileName?: string; buffer?: ArrayBuffer }
-  if (data?.type !== CLOUD_SAVE_REQUEST || !data.modelId || !data.fileName || !data.buffer) {
-    return
-  }
-  const iframe = iframeRef.value
-  if (!iframe || !isTrustedIframeMessage(event, iframe, window.location.origin)) {
-    return
-  }
-  if (!selectedModelId.value || data.modelId !== selectedModelId.value) {
-    return
-  }
-  const source = event.source as Window | null
-  if (!source) {
-    return
-  }
-  const blob = new Blob([data.buffer], { type: 'application/octet-stream' })
-  const [error] = await container.models.uploadExport(data.modelId, blob, data.fileName)
-  if (error) {
-    source.postMessage({ type: CLOUD_SAVE_ERROR, message: formatDomainError(t, error) }, event.origin)
-    return
-  }
-  source.postMessage({ type: CLOUD_SAVE_DONE }, event.origin)
-  statusMessage.value = t('supersplat.savedToCloudShort')
-  await refreshModels()
-}
-
 watch(activeProjectId, async () => {
   await refreshModels()
 })
@@ -477,7 +447,6 @@ watch(locale, async () => {
 })
 
 onMounted(async () => {
-  window.addEventListener('message', handleCloudSaveRequest)
   await nextTick()
   await loadBlankEditor()
   await ensureProjects()
@@ -491,7 +460,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('message', handleCloudSaveRequest)
   localFile = null
 })
 

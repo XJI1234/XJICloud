@@ -2,6 +2,7 @@ import { inject } from 'vue'
 import { CONTAINER_KEY } from '@/shared/di'
 import {
   deleteModelUseCase,
+  downloadModelVersionBytesUseCase,
   listModelsUseCase,
   listModelVersionsUseCase,
   restoreModelVersionUseCase,
@@ -27,12 +28,12 @@ export function useModelAssets() {
     ) => container.models.downloadBytes(modelId, onProgress, options),
     downloadVersionBytes: (
       modelId: string,
-      archiveName: string,
+      versionId: string,
       onProgress?: (loaded: number, total: number) => void,
-    ) => container.models.downloadVersionBytes(modelId, archiveName, onProgress),
+    ) => downloadModelVersionBytesUseCase({ models: container.models }, modelId, versionId, onProgress),
     createDownloadToken: (modelId: string) => container.models.createDownloadToken(modelId),
     listVersions: (modelId: string) => listModelVersionsUseCase({ models: container.models }, modelId),
-    restoreVersion: (modelId: string, archiveName: string) =>
-      restoreModelVersionUseCase({ models: container.models }, modelId, archiveName),
+    restoreVersion: (modelId: string, versionId: string) =>
+      restoreModelVersionUseCase({ models: container.models }, modelId, versionId),
   }
 }

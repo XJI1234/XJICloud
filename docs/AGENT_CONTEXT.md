@@ -199,12 +199,30 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 | POST | `/models/{id}/download-token` | SuperSplat 短期下载 token |
 | GET | `/models/{id}/download` | 下载（Bearer 或 `?access_token=`，支持 Range） |
 | GET/PUT | `/models/{id}/viewer-config` | 查看器 JSON v2 |
-| POST | `/models/{id}/export` | 上传导出 SPZ/PLY |
+| POST | `/models/{id}/export` | SuperSplat 导出覆盖当前模型：先把 live 文件拷到 `exports/{versionId}.ply\|spz` 并写入 `model_versions`，再流式覆盖 live，`ModelAsset.version + 1`。不要把整文件读进堆。 |
+| GET | `/models/{id}/versions` | 当前版本 + `model_versions` 历史（id 为 UUID；`current` 表示 live） |
+| GET | `/models/{id}/versions/{versionId}/file` | 下载某一历史快照（需用户 JWT；versionId 必须属于该模型） |
+| POST | `/models/{id}/versions/restore` | body `{ versionId }`：先归档当前 live，再把快照拷回 live 并 bump version |
 | POST | `/projects/{id}/datasets` | 创建数据集任务 + presigned URLs |
 | POST | `/projects/{id}/datasets/{jobId}/complete` | 确认上传完成并入队 |
 | GET | `/projects/{id}/jobs` | 项目训练任务列表 |
 | GET | `/jobs/{id}` | 任务详情 |
 | GET | `/jobs/{id}/events` | **SSE** 进度（需 Authorization，前端用 fetch 流式读） |
+
+prod 使用 `ddl-auto: validate` 时需先建表：
+
+```sql
+CREATE TABLE model_versions (
+  id UUID PRIMARY KEY,
+  model_id UUID NOT NULL,
+  version INTEGER NOT NULL,
+  file_name VARCHAR(512) NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  storage_path VARCHAR(1024) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  CONSTRAINT uk_model_versions_model_version UNIQUE (model_id, version)
+);
+```
 
 ### 6.2 Worker（Bearer worker JWT + 注册时 X-Worker-Secret）
 

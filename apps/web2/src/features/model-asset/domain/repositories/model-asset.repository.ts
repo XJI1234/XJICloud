@@ -32,10 +32,10 @@ export interface ModelAssetRepository {
   ): Promise<Result<ArrayBuffer>>
   downloadVersionBytes(
     modelId: string,
-    archiveName: string,
+    versionId: string,
     onProgress?: (loaded: number, total: number) => void,
   ): Promise<Result<ArrayBuffer>>
   uploadExport(modelId: string, file: Blob, fileName: string): Promise<Result<ModelAsset>>
   listVersions(modelId: string): Promise<Result<ModelVersion[]>>
-  restoreVersion(modelId: string, archiveName: string): Promise<Result<ModelAsset>>
+  restoreVersion(modelId: string, versionId: string): Promise<Result<ModelAsset>>
 }

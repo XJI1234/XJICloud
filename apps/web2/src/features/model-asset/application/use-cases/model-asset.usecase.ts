@@ -162,10 +162,22 @@ export async function listModelVersionsUseCase(
 export async function restoreModelVersionUseCase(
   deps: { models: ModelAssetRepository },
   modelId: string,
-  archiveName: string,
+  versionId: string,
 ): Promise<Result<ModelAsset>> {
-  if (!modelId || !archiveName) {
+  if (!modelId || !versionId || versionId === 'current') {
     return err(new DomainError('UNKNOWN'))
   }
-  return deps.models.restoreVersion(modelId, archiveName)
+  return deps.models.restoreVersion(modelId, versionId)
+}
+
+export async function downloadModelVersionBytesUseCase(
+  deps: { models: ModelAssetRepository },
+  modelId: string,
+  versionId: string,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<Result<ArrayBuffer>> {
+  if (!modelId || !versionId || versionId === 'current') {
+    return err(new DomainError('UNKNOWN'))
+  }
+  return deps.models.downloadVersionBytes(modelId, versionId, onProgress)
 }
