@@ -1,4 +1,4 @@
-import type { DownloadToken, ModelAsset, ModelFormat } from '../../domain/entities/model-asset.entity'
+import type { DownloadToken, ModelAsset, ModelFormat, ModelVersion } from '../../domain/entities/model-asset.entity'
 
 export type ModelSummaryDto = {
   id?: string
@@ -9,6 +9,15 @@ export type ModelSummaryDto = {
   version?: number
   createdAt?: string
   updatedAt?: string
+}
+
+export type ModelVersionDto = {
+  id?: string
+  fileName?: string
+  sizeBytes?: number
+  createdAt?: string
+  current?: boolean
+  version?: number
 }
 
 export type DownloadTokenDto = {
@@ -26,6 +35,17 @@ export function mapModelFromDto(dto: ModelSummaryDto): ModelAsset {
     version: dto.version ?? 0,
     createdAt: dto.createdAt ?? '',
     updatedAt: dto.updatedAt ?? '',
+  }
+}
+
+export function mapModelVersionFromDto(dto: ModelVersionDto): ModelVersion {
+  return {
+    id: dto.id ?? '',
+    fileName: dto.fileName ?? '',
+    sizeBytes: dto.sizeBytes ?? 0,
+    createdAt: dto.createdAt ?? '',
+    current: Boolean(dto.current),
+    version: dto.version ?? 0,
   }
 }
 

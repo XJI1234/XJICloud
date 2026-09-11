@@ -12,6 +12,9 @@ export const IMPORT_LOCAL_ERROR = 'supersplat:import-local-error'
 export const DIRTY_QUERY_TIMEOUT_MS = 10_000
 export const EXPORT_TIMEOUT_MS = 120_000
 export const IMPORT_LOCAL_TIMEOUT_MS = 120_000
+/** One poll while waiting for the iframe listener after navigation. */
+export const READY_PING_TIMEOUT_MS = 400
+export const READY_MAX_ATTEMPTS = 50
 
 export type DirtyResponse = {
   type: typeof IS_SCENE_DIRTY

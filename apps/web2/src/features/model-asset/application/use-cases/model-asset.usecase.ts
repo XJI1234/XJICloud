@@ -1,6 +1,6 @@
 import { DomainError } from '@/shared/domain-error'
 import { err, ok, type Result } from '@/shared/result'
-import type { ModelAsset } from '../../domain/entities/model-asset.entity'
+import type { ModelAsset, ModelVersion } from '../../domain/entities/model-asset.entity'
 import type { ModelAssetRepository } from '../../domain/repositories/model-asset.repository'
 import { nextChunkRange } from '../../domain/services/chunk-range.service'
 import { assertModelFile } from '../../domain/services/model-format.service'
@@ -147,4 +147,25 @@ export async function deleteModelUseCase(
     return err(new DomainError('UNKNOWN'))
   }
   return deps.models.delete(modelId)
+}
+
+export async function listModelVersionsUseCase(
+  deps: { models: ModelAssetRepository },
+  modelId: string,
+): Promise<Result<ModelVersion[]>> {
+  if (!modelId) {
+    return err(new DomainError('UNKNOWN'))
+  }
+  return deps.models.listVersions(modelId)
+}
+
+export async function restoreModelVersionUseCase(
+  deps: { models: ModelAssetRepository },
+  modelId: string,
+  archiveName: string,
+): Promise<Result<ModelAsset>> {
+  if (!modelId || !archiveName) {
+    return err(new DomainError('UNKNOWN'))
+  }
+  return deps.models.restoreVersion(modelId, archiveName)
 }

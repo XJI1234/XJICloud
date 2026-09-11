@@ -8,6 +8,8 @@ import {
   IMPORT_LOCAL,
   IMPORT_LOCAL_TIMEOUT_MS,
   IS_SCENE_DIRTY,
+  READY_MAX_ATTEMPTS,
+  READY_PING_TIMEOUT_MS,
   buildSuperSplatSrc,
   isDirtyResponse,
   isExportError,
@@ -37,6 +39,48 @@ export function createPostMessageEditorBridge(options?: {
   return {
     buildSrc(params) {
       return buildSuperSplatSrc(params)
+    },
+
+    async waitReady(frame) {
+      const win = frame.contentWindow
+      if (!win) {
+        return err(new DomainError('EDITOR_NOT_READY'))
+      }
+      const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
+
+      for (let attempt = 0; attempt < READY_MAX_ATTEMPTS; attempt++) {
+        const ready = await new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => {
+            cleanup()
+            resolve(false)
+          }, READY_PING_TIMEOUT_MS)
+
+          function cleanup() {
+            clearTimeout(timer)
+            removeListener('message', onMessage)
+          }
+
+          function onMessage(event: MessageEvent) {
+            if (!isTrustedIframeMessage(event, frame, pageOrigin) || !isDirtyResponse(event.data)) {
+              return
+            }
+            cleanup()
+            resolve(true)
+          }
+
+          addListener('message', onMessage)
+          try {
+            win.postMessage({ type: IS_SCENE_DIRTY }, targetOrigin)
+          } catch {
+            cleanup()
+            resolve(false)
+          }
+        })
+        if (ready) {
+          return ok(undefined)
+        }
+      }
+      return err(new DomainError('EDITOR_TIMEOUT'))
     },
 
     isDirty(frame) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ok } from '@/shared/result'
 import type { ModelAssetRepository } from '@/features/model-asset/domain/repositories/model-asset.repository'
-import { openEditorUseCase, prepareLocalEditorLaunch, saveEditorExportUseCase, importLocalEditorFileUseCase } from './editor.usecase'
+import { openEditorUseCase, prepareLocalEditorLaunch, saveEditorAsNewModelUseCase, saveEditorExportUseCase, importLocalEditorFileUseCase } from './editor.usecase'
 import type { EditorBridgePort } from '../../domain/repositories/editor-bridge.port'
 import { buildSuperSplatSrc, isDirtyResponse, isTrustedIframeMessage } from '../../infrastructure/supersplat-protocol'
 
@@ -44,6 +44,7 @@ describe('editor use cases', () => {
     } as unknown as ModelAssetRepository
     const bridge: EditorBridgePort = {
       buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
       isDirty: async () => ok(false),
       importLocal: async () => ok(undefined),
       exportPly: async () => ok({ blob: new Blob(['ply']), fileName: 'out.ply' }),
@@ -54,6 +55,41 @@ describe('editor use cases', () => {
     )
     expect(error).toBeNull()
     expect(uploaded[0]?.name).toBe('out.ply')
+  })
+
+  it('saves a local edit as a new cloud model via chunked upload', async () => {
+    const models = {
+      createUploadSession: async () =>
+        ok({ sessionId: 's1', chunkSizeBytes: 8, receivedBytes: 0, sizeBytes: 3 }),
+      getUploadSession: async () =>
+        ok({ sessionId: 's1', chunkSizeBytes: 8, receivedBytes: 3, sizeBytes: 3 }),
+      putChunk: async () => ok({ receivedBytes: 3 }),
+      completeUpload: async () =>
+        ok({
+          id: 'm2',
+          projectId: 'p',
+          fileName: 'local.ply',
+          format: 'PLY' as const,
+          sizeBytes: 3,
+          version: 1,
+          createdAt: '',
+          updatedAt: '',
+        }),
+      abortUpload: async () => ok(undefined),
+    } as unknown as ModelAssetRepository
+    const bridge: EditorBridgePort = {
+      buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
+      isDirty: async () => ok(false),
+      importLocal: async () => ok(undefined),
+      exportPly: async () => ok({ blob: new Blob(['ply']), fileName: 'local.ply' }),
+    }
+    const [error, created] = await saveEditorAsNewModelUseCase(
+      { models, bridge },
+      { projectId: 'p', frame: { contentWindow: {} as Window, src: '/supersplat/' } },
+    )
+    expect(error).toBeNull()
+    expect(created?.id).toBe('m2')
   })
 })
 
@@ -76,6 +112,7 @@ describe('supersplat protocol', () => {
     const imported: File[] = []
     const bridge: EditorBridgePort = {
       buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
       isDirty: async () => ok(false),
       importLocal: async (_frame, file) => {
         imported.push(file)

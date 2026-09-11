@@ -11,6 +11,15 @@ export type ModelAsset = {
   updatedAt: string
 }
 
+export type ModelVersion = {
+  id: string
+  fileName: string
+  sizeBytes: number
+  createdAt: string
+  current: boolean
+  version: number
+}
+
 export type DownloadToken = {
   url: string
   expiresAt: string

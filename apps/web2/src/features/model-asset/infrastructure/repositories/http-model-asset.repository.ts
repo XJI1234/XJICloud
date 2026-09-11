@@ -1,13 +1,15 @@
 import { err, ok, type Result } from '@/shared/result'
 import { mapHttpError, type HttpClient } from '@/shared/infrastructure/http-client'
-import type { DownloadToken, ModelAsset } from '../../domain/entities/model-asset.entity'
+import type { DownloadToken, ModelAsset, ModelVersion } from '../../domain/entities/model-asset.entity'
 import type { ModelAssetRepository, ModelUploadSession } from '../../domain/repositories/model-asset.repository'
 import {
   mapDownloadTokenFromDto,
   mapModelFromDto,
+  mapModelVersionFromDto,
   mapUploadSessionFromDto,
   type DownloadTokenDto,
   type ModelSummaryDto,
+  type ModelVersionDto,
   type UploadChunkDto,
   type UploadSessionDto,
 } from '../mappers/model-asset.mapper'
@@ -94,9 +96,30 @@ export function createHttpModelAssetRepository(http: HttpClient): ModelAssetRepo
         return err(mapHttpError(error))
       }
     },
-    async downloadBytes(modelId, onProgress): Promise<Result<ArrayBuffer>> {
+    async downloadBytes(modelId, onProgress, options): Promise<Result<ArrayBuffer>> {
       try {
-        const buffer = await http.downloadBytes(`/api/v1/models/${modelId}/download`, onProgress)
+        const params = new URLSearchParams()
+        if (options?.cacheBust != null && options.cacheBust !== '') {
+          params.set('v', String(options.cacheBust))
+        }
+        params.set('_', String(Date.now()))
+        const query = params.toString()
+        const buffer = await http.downloadBytes(`/api/v1/models/${modelId}/download?${query}`, onProgress)
+        return ok(buffer)
+      } catch (error) {
+        return err(mapHttpError(error))
+      }
+    },
+    async downloadVersionBytes(modelId, archiveName, onProgress): Promise<Result<ArrayBuffer>> {
+      try {
+        const params = new URLSearchParams({
+          archiveName,
+          _: String(Date.now()),
+        })
+        const buffer = await http.downloadBytes(
+          `/api/v1/models/${modelId}/versions/file?${params.toString()}`,
+          onProgress,
+        )
         return ok(buffer)
       } catch (error) {
         return err(mapHttpError(error))
@@ -109,6 +132,25 @@ export function createHttpModelAssetRepository(http: HttpClient): ModelAssetRepo
         const dto = await http.request<ModelSummaryDto>(`/api/v1/models/${modelId}/export`, {
           method: 'POST',
           body: formData,
+        })
+        return ok(mapModelFromDto(dto))
+      } catch (error) {
+        return err(mapHttpError(error))
+      }
+    },
+    async listVersions(modelId): Promise<Result<ModelVersion[]>> {
+      try {
+        const dto = await http.request<ModelVersionDto[]>(`/api/v1/models/${modelId}/versions`)
+        return ok((dto ?? []).map(mapModelVersionFromDto))
+      } catch (error) {
+        return err(mapHttpError(error))
+      }
+    },
+    async restoreVersion(modelId, archiveName): Promise<Result<ModelAsset>> {
+      try {
+        const dto = await http.request<ModelSummaryDto>(`/api/v1/models/${modelId}/versions/restore`, {
+          method: 'POST',
+          body: JSON.stringify({ archiveName }),
         })
         return ok(mapModelFromDto(dto))
       } catch (error) {
