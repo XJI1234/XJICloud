@@ -5,6 +5,8 @@ import com.xjicloud.common.ApiResponse;
 import com.xjicloud.model.dto.CreateUploadSessionRequest;
 import com.xjicloud.model.dto.DownloadTokenResponse;
 import com.xjicloud.model.dto.ModelResponse;
+import com.xjicloud.model.dto.ModelVersionResponse;
+import com.xjicloud.model.dto.RestoreModelVersionRequest;
 import com.xjicloud.model.dto.SaveViewerConfigRequest;
 import com.xjicloud.model.dto.UploadChunkResponse;
 import com.xjicloud.model.dto.UploadSessionResponse;
@@ -153,5 +155,31 @@ public class ModelController {
             @RequestParam("file") MultipartFile file
     ) {
         return ApiResponse.ok(modelService.exportModel(user, modelId, file));
+    }
+
+    @GetMapping("/models/{modelId}/versions")
+    public ApiResponse<List<ModelVersionResponse>> listModelVersions(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID modelId
+    ) {
+        return ApiResponse.ok(modelService.listModelVersions(user, modelId));
+    }
+
+    @GetMapping("/models/{modelId}/versions/file")
+    public ResponseEntity<StreamingResponseBody> downloadVersionFile(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID modelId,
+            @RequestParam("archiveName") String archiveName
+    ) throws IOException {
+        return modelService.downloadVersionArchive(user, modelId, archiveName);
+    }
+
+    @PostMapping("/models/{modelId}/versions/restore")
+    public ApiResponse<ModelResponse> restoreModelVersion(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID modelId,
+            @Valid @RequestBody RestoreModelVersionRequest request
+    ) {
+        return ApiResponse.ok(modelService.restoreModelVersion(user, modelId, request));
     }
 }

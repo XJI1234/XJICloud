@@ -170,6 +170,73 @@ public class LocalFileStoreService {
         }
     }
 
+    public record ExportArchive(String archiveName, String fileName, long sizeBytes, Instant createdAt) {
+    }
+
+    public java.util.List<ExportArchive> listExports(UserAccount user, Project project, UUID modelId) {
+        Path exportsDir = exportsDirectory(user, project, modelId);
+        if (!Files.isDirectory(exportsDir)) {
+            return java.util.List.of();
+        }
+        try (var stream = Files.list(exportsDir)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(path -> {
+                        String archiveName = path.getFileName().toString();
+                        Instant createdAt = Instant.EPOCH;
+                        try {
+                            createdAt = Files.getLastModifiedTime(path).toInstant();
+                        } catch (IOException ignored) {
+                            // fall back to EPOCH
+                        }
+                        long size = 0L;
+                        try {
+                            size = Files.size(path);
+                        } catch (IOException ignored) {
+                            // fall back to 0
+                        }
+                        return new ExportArchive(archiveName, stripExportTimestamp(archiveName), size, createdAt);
+                    })
+                    .sorted(Comparator.comparing(ExportArchive::createdAt).reversed())
+                    .toList();
+        } catch (IOException ex) {
+            throw new BusinessException("读取导出历史失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public byte[] readExport(UserAccount user, Project project, UUID modelId, String archiveName) {
+        Path exportPath = resolveExportPath(user, project, modelId, archiveName);
+        try {
+            return Files.readAllBytes(exportPath);
+        } catch (IOException ex) {
+            throw new BusinessException("读取导出版本失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public Path resolveExportPath(UserAccount user, Project project, UUID modelId, String archiveName) {
+        if (archiveName == null || archiveName.isBlank() || archiveName.contains("/") || archiveName.contains("\\")
+                || archiveName.contains("..")) {
+            throw new BusinessException("非法版本文件名", HttpStatus.BAD_REQUEST);
+        }
+        Path exportsDir = exportsDirectory(user, project, modelId).normalize();
+        Path exportPath = exportsDir.resolve(archiveName).normalize();
+        if (!exportPath.startsWith(exportsDir)) {
+            throw new BusinessException("非法版本文件名", HttpStatus.BAD_REQUEST);
+        }
+        if (!Files.exists(exportPath) || !Files.isRegularFile(exportPath)) {
+            throw new BusinessException("版本不存在", HttpStatus.NOT_FOUND);
+        }
+        return exportPath;
+    }
+
+    private static String stripExportTimestamp(String archiveName) {
+        int underscore = archiveName.indexOf('_');
+        if (underscore <= 0 || underscore >= archiveName.length() - 1) {
+            return archiveName;
+        }
+        return archiveName.substring(underscore + 1);
+    }
+
     public Path resolveStoredPath(String storagePath) {
         Path resolved = storageRoot.resolve(storagePath).normalize();
         if (!resolved.startsWith(storageRoot)) {

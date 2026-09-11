@@ -2,7 +2,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { PhCloud, PhFolderOpen, PhPlus } from '@phosphor-icons/vue'
+import { PhCloud, PhCloudArrowUp, PhFolderOpen, PhPlus, PhClockCounterClockwise } from '@phosphor-icons/vue'
 import AppButton from '@/presentation/components/AppButton.vue'
 import AppSheet from '@/presentation/components/AppSheet.vue'
 import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
@@ -13,7 +13,7 @@ import { useProjectWorkspace } from '@/features/project/presentation/composables
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import { useEditorSession } from '@/features/editor/presentation/composables/useEditorSession'
 import { CLOUD_SAVE_DONE, CLOUD_SAVE_ERROR, CLOUD_SAVE_REQUEST, isTrustedIframeMessage } from '@/features/editor/infrastructure/supersplat-protocol'
-import type { ModelAsset } from '@/features/model-asset/domain/entities/model-asset.entity'
+import type { ModelAsset, ModelVersion } from '@/features/model-asset/domain/entities/model-asset.entity'
 import { CONTAINER_KEY } from '@/shared/di'
 
 const route = useRoute()
@@ -30,17 +30,25 @@ const models = ref<ModelAsset[]>([])
 const selectedModelId = ref<string | null>(null)
 const localFileName = ref<string | null>(null)
 const pickerVisible = ref(false)
+const versionsVisible = ref(false)
+const versions = ref<ModelVersion[]>([])
 const loadingEditor = ref(false)
+const saving = ref(false)
+const restoring = ref(false)
+const statusMessage = ref('')
 const downloadById = ref<Record<string, { percent: number; speed: string }>>({})
+const uploadProgress = ref<{ percent: number; speed: string } | null>(null)
 const errorMessage = ref('')
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
 let localFile: File | null = null
 
 const editorLang = computed(() => (locale.value === 'en-US' ? 'en' : 'zh-CN'))
 const selectedCloudModel = computed(() => models.value.find((model) => model.id === selectedModelId.value) ?? null)
+const canSaveToCloud = computed(() => Boolean(activeProjectId.value) && !loadingEditor.value && !saving.value)
+const canManageVersions = computed(() => Boolean(selectedModelId.value) && !saving.value && !restoring.value)
 const sessionLabel = computed(() => {
   if (selectedCloudModel.value) {
-    return selectedCloudModel.value.fileName
+    return `${selectedCloudModel.value.fileName} · v${selectedCloudModel.value.version}`
   }
   if (localFileName.value) {
     return localFileName.value
@@ -92,61 +100,69 @@ async function loadCloudEditor(model: ModelAsset) {
     ...downloadById.value,
     [model.id]: { percent: 0, speed: '' },
   }
-  const [downloadError, buffer] = await modelsApi.downloadBytes(model.id, (loadedBytes, total) => {
-    const percent = total > 0 ? Math.min(99, Math.round((loadedBytes / total) * 100)) : 0
-    const rate = tracker.push(loadedBytes, Date.now())
-    downloadById.value = {
-      ...downloadById.value,
-      [model.id]: {
-        percent,
-        speed: rate != null ? formatTransferSpeed(rate) : downloadById.value[model.id]?.speed ?? '',
-      },
+  try {
+    const [downloadError, buffer] = await modelsApi.downloadBytes(
+    model.id,
+    (loadedBytes, total) => {
+      const percent = total > 0 ? Math.min(99, Math.round((loadedBytes / total) * 100)) : 0
+      const rate = tracker.push(loadedBytes, Date.now())
+      downloadById.value = {
+        ...downloadById.value,
+        [model.id]: {
+          percent,
+          speed: rate != null ? formatTransferSpeed(rate) : downloadById.value[model.id]?.speed ?? '',
+        },
+      }
+    },
+    { cacheBust: `${model.version}-${model.updatedAt || Date.now()}` },
+  )
+    if (downloadError || !buffer) {
+      errorMessage.value = formatDomainError(t, downloadError)
+      return
     }
-  })
-  // #region agent log
-  fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'D',location:'SuperSplatEditorView.vue:loadCloudEditor',message:'editor cloud download',data:{ok:!downloadError,fileName:model.fileName,hasSpzExt:/\.spz$/i.test(model.fileName),usedImportLocal:true},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-  if (downloadError || !buffer) {
-    errorMessage.value = formatDomainError(t, downloadError)
+    const file = new File([buffer], model.fileName, { type: 'application/octet-stream' })
+    const [prepareError] = editor.prepareLocal(file)
+    if (prepareError) {
+      errorMessage.value = formatDomainError(t, prepareError)
+      return
+    }
+    const [srcError, src] = editor.src(editor.blank(editorLang.value))
+    if (srcError || !src) {
+      errorMessage.value = formatDomainError(t, srcError)
+      return
+    }
+    await navigateEditor(src)
+    const frame = editorFrame()
+    if (!frame?.contentWindow) {
+      errorMessage.value = formatDomainError(t, new DomainError('EDITOR_NOT_READY'))
+      return
+    }
+    statusMessage.value = t('supersplat.loadingEditor')
+    const [readyError] = await editor.waitReady(frame)
+    if (readyError) {
+      errorMessage.value = formatDomainError(t, readyError)
+      statusMessage.value = ''
+      return
+    }
+    const [importError] = await editor.importLocal(frame, file)
+    if (importError) {
+      errorMessage.value = formatDomainError(t, importError)
+      statusMessage.value = ''
+      return
+    }
+    statusMessage.value = ''
+    pickerVisible.value = false
+    await router.replace({ path: route.path, query: { ...route.query, modelId: model.id } })
+  } finally {
+    const next = { ...downloadById.value }
+    delete next[model.id]
+    downloadById.value = next
     loadingEditor.value = false
-    return
   }
-  const file = new File([buffer], model.fileName, { type: 'application/octet-stream' })
-  const [prepareError] = editor.prepareLocal(file)
-  if (prepareError) {
-    errorMessage.value = formatDomainError(t, prepareError)
-    loadingEditor.value = false
-    return
-  }
-  const [srcError, src] = editor.src(editor.blank(editorLang.value))
-  if (srcError || !src) {
-    errorMessage.value = formatDomainError(t, srcError)
-    loadingEditor.value = false
-    return
-  }
-  await navigateEditor(src)
-  const frame = editorFrame()
-  if (!frame?.contentWindow) {
-    errorMessage.value = formatDomainError(t, new DomainError('EDITOR_NOT_READY'))
-    loadingEditor.value = false
-    return
-  }
-  const [importError] = await editor.importLocal(frame, file)
-  if (importError) {
-    errorMessage.value = formatDomainError(t, importError)
-    loadingEditor.value = false
-    return
-  }
-  const next = { ...downloadById.value }
-  delete next[model.id]
-  downloadById.value = next
-  pickerVisible.value = false
-  await router.replace({ path: route.path, query: { ...route.query, modelId: model.id } })
-  loadingEditor.value = false
 }
 
 async function ensureProjects() {
-  const [error, data] = await workspace.load()
+  const [error] = await workspace.load()
   if (error) {
     return
   }
@@ -177,6 +193,7 @@ async function openBlankSession() {
   selectedModelId.value = null
   localFile = null
   localFileName.value = null
+  statusMessage.value = ''
   await router.replace({ path: route.path, query: { ...route.query, modelId: undefined } })
   await loadBlankEditor()
 }
@@ -186,6 +203,7 @@ async function selectCloudModel(model: ModelAsset) {
     return
   }
   selectedModelId.value = model.id
+  statusMessage.value = ''
   await loadCloudEditor(model)
 }
 
@@ -226,6 +244,12 @@ async function loadLocalEditor(file: File) {
     loadingEditor.value = false
     return
   }
+  const [readyError] = await editor.waitReady(frame)
+  if (readyError) {
+    errorMessage.value = formatDomainError(t, readyError)
+    loadingEditor.value = false
+    return
+  }
   const [importError] = await editor.importLocal(frame, file)
   if (importError) {
     errorMessage.value = formatDomainError(t, importError)
@@ -250,8 +274,160 @@ async function handleLocalFile(event: Event) {
   selectedModelId.value = null
   localFile = file
   localFileName.value = prepared.fileName
+  statusMessage.value = ''
   await loadLocalEditor(file)
   await router.replace({ path: route.path, query: { ...route.query, modelId: undefined } })
+}
+
+async function saveToCloud() {
+  const frame = editorFrame()
+  if (!frame?.contentWindow) {
+    errorMessage.value = formatDomainError(t, new DomainError('EDITOR_NOT_READY'))
+    return
+  }
+  if (!activeProjectId.value) {
+    errorMessage.value = formatDomainError(t, new DomainError('MODEL_PROJECT_REQUIRED'))
+    return
+  }
+
+  saving.value = true
+  errorMessage.value = ''
+  statusMessage.value = t('supersplat.savingToCloud')
+  uploadProgress.value = null
+
+  if (selectedModelId.value) {
+    const [error, saved] = await editor.saveExport({
+      modelId: selectedModelId.value,
+      frame,
+      fileName: selectedCloudModel.value?.fileName ?? localFileName.value ?? undefined,
+    })
+    saving.value = false
+    if (error || !saved) {
+      errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
+      statusMessage.value = ''
+      return
+    }
+    statusMessage.value = t('supersplat.savedToCloud', { version: saved.version })
+    await refreshModels()
+    return
+  }
+
+  const tracker = createTransferRateTracker()
+  const [error, created] = await editor.saveAsNew({
+    projectId: activeProjectId.value,
+    frame,
+    fileName: localFileName.value ?? undefined,
+    onProgress: (progress) => {
+      const percent = progress.total > 0 ? Math.min(99, Math.round((progress.loaded / progress.total) * 100)) : 0
+      const rate = tracker.push(progress.loaded, Date.now())
+      uploadProgress.value = {
+        percent,
+        speed: rate != null ? formatTransferSpeed(rate) : uploadProgress.value?.speed ?? '',
+      }
+    },
+  })
+  saving.value = false
+  uploadProgress.value = null
+  if (error || !created) {
+    errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
+    statusMessage.value = ''
+    return
+  }
+  selectedModelId.value = created.id
+  localFile = null
+  localFileName.value = null
+  statusMessage.value = t('supersplat.savedAsNewModel', { name: created.fileName })
+  await refreshModels()
+  await router.replace({ path: route.path, query: { ...route.query, modelId: created.id } })
+}
+
+async function openVersions() {
+  if (!selectedModelId.value) {
+    return
+  }
+  errorMessage.value = ''
+  const [error, data] = await modelsApi.listVersions(selectedModelId.value)
+  if (error) {
+    errorMessage.value = formatDomainError(t, error)
+    return
+  }
+  versions.value = data ?? []
+  versionsVisible.value = true
+}
+
+async function importBufferIntoEditor(file: File) {
+  const [prepareError] = editor.prepareLocal(file)
+  if (prepareError) {
+    return prepareError
+  }
+  const [srcError, src] = editor.src(editor.blank(editorLang.value))
+  if (srcError || !src) {
+    return srcError ?? new DomainError('EDITOR_NOT_READY')
+  }
+  await navigateEditor(src)
+  const frame = editorFrame()
+  if (!frame?.contentWindow) {
+    return new DomainError('EDITOR_NOT_READY')
+  }
+  const [readyError] = await editor.waitReady(frame)
+  if (readyError) {
+    return readyError
+  }
+  const [importError] = await editor.importLocal(frame, file)
+  return importError
+}
+
+async function previewVersion(version: ModelVersion) {
+  if (!selectedModelId.value || version.current) {
+    return
+  }
+  restoring.value = true
+  errorMessage.value = ''
+  statusMessage.value = t('supersplat.previewingVersion')
+  const [downloadError, buffer] = await modelsApi.downloadVersionBytes(selectedModelId.value, version.id)
+  if (downloadError || !buffer) {
+    restoring.value = false
+    errorMessage.value = formatDomainError(t, downloadError)
+    statusMessage.value = ''
+    return
+  }
+  const file = new File([buffer], version.fileName || 'history.ply', { type: 'application/octet-stream' })
+  const importError = await importBufferIntoEditor(file)
+  restoring.value = false
+  if (importError) {
+    errorMessage.value = formatDomainError(t, importError)
+    statusMessage.value = ''
+    return
+  }
+  versionsVisible.value = false
+  statusMessage.value = t('supersplat.previewedVersion', { name: version.fileName || version.createdAt })
+}
+
+async function restoreVersion(version: ModelVersion) {
+  if (!selectedModelId.value || version.current) {
+    return
+  }
+  if (!window.confirm(t('supersplat.restoreConfirm'))) {
+    return
+  }
+  restoring.value = true
+  errorMessage.value = ''
+  const [error, restored] = await modelsApi.restoreVersion(selectedModelId.value, version.id)
+  if (error || !restored) {
+    restoring.value = false
+    errorMessage.value = formatDomainError(t, error ?? new DomainError('UNKNOWN'))
+    return
+  }
+  versionsVisible.value = false
+  statusMessage.value = t('supersplat.restoredVersion', { version: restored.version })
+  await refreshModels()
+  const model =
+    models.value.find((item) => item.id === restored.id) ??
+    ({
+      ...restored,
+    } satisfies ModelAsset)
+  await loadCloudEditor(model)
+  restoring.value = false
 }
 
 async function handleCloudSaveRequest(event: MessageEvent) {
@@ -277,6 +453,7 @@ async function handleCloudSaveRequest(event: MessageEvent) {
     return
   }
   source.postMessage({ type: CLOUD_SAVE_DONE }, event.origin)
+  statusMessage.value = t('supersplat.savedToCloudShort')
   await refreshModels()
 }
 
@@ -339,6 +516,12 @@ onBeforeRouteLeave(async (_to, _from, next) => {
       <div class="supersplat-chrome__copy">
         <p class="supersplat-chrome__title">{{ sessionLabel }}</p>
         <p class="supersplat-chrome__hint">{{ t('supersplat.localHint') }}</p>
+        <p v-if="statusMessage" class="supersplat-chrome__status">{{ statusMessage }}</p>
+        <UploadProgressBar
+          v-if="uploadProgress"
+          :percent="uploadProgress.percent"
+          :speed="uploadProgress.speed"
+        />
       </div>
       <div class="supersplat-chrome__actions">
         <AppButton compact @click="triggerLocalOpen">
@@ -349,9 +532,17 @@ onBeforeRouteLeave(async (_to, _from, next) => {
           <PhPlus :size="16" weight="regular" />
           {{ t('supersplat.blankEditor') }}
         </AppButton>
-        <AppButton compact variant="primary" @click="pickerVisible = true">
+        <AppButton compact @click="pickerVisible = true">
           <PhCloud :size="16" weight="regular" />
           {{ t('supersplat.pickCloudModel') }}
+        </AppButton>
+        <AppButton compact :disabled="!canManageVersions" @click="openVersions">
+          <PhClockCounterClockwise :size="16" weight="regular" />
+          {{ t('supersplat.versions') }}
+        </AppButton>
+        <AppButton compact variant="primary" :disabled="!canSaveToCloud" @click="saveToCloud">
+          <PhCloudArrowUp :size="16" weight="regular" />
+          {{ selectedModelId ? t('supersplat.saveToCloud') : t('supersplat.saveAsNew') }}
         </AppButton>
       </div>
     </header>
@@ -384,7 +575,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
             @click="selectCloudModel(model)"
           >
             <span class="model-choice-name">{{ model.fileName }}</span>
-            <span class="model-choice-meta">{{ model.format }}</span>
+            <span class="model-choice-meta">{{ model.format }} · v{{ model.version }}</span>
             <span v-if="downloadById[model.id]" class="model-choice-badge">{{ t('supersplat.downloading') }}</span>
             <UploadProgressBar
               v-if="downloadById[model.id]"
@@ -402,6 +593,41 @@ onBeforeRouteLeave(async (_to, _from, next) => {
         <AppButton v-if="models.length === 0" variant="primary" @click="router.push('/app/upload')">
           {{ t('supersplat.goToUpload') }}
         </AppButton>
+      </template>
+    </AppSheet>
+
+    <AppSheet :visible="versionsVisible" :title="t('supersplat.versionsTitle')" @close="versionsVisible = false">
+      <p class="supersplat-picker-hint">{{ t('supersplat.versionsHint') }}</p>
+      <div v-if="versions.length > 0" class="model-choice-list">
+        <div v-for="version in versions" :key="version.id" class="model-choice-row">
+          <div class="model-choice-card" :class="{ 'is-current': version.current }">
+            <span class="model-choice-name">{{ version.fileName }} v{{ version.version }}</span>
+            <span class="model-choice-meta">
+              {{ version.current ? t('supersplat.currentVersion') : version.createdAt }}
+              · {{ Math.max(1, Math.round(version.sizeBytes / 1024)) }} KB
+            </span>
+          </div>
+          <AppButton
+            v-if="!version.current"
+            compact
+            :disabled="restoring"
+            @click="previewVersion(version)"
+          >
+            {{ t('supersplat.previewVersion') }}
+          </AppButton>
+          <AppButton
+            v-if="!version.current"
+            compact
+            variant="primary"
+            :disabled="restoring"
+            @click="restoreVersion(version)"
+          >
+            {{ t('supersplat.restoreVersion') }}
+          </AppButton>
+        </div>
+      </div>
+      <template #footer>
+        <AppButton @click="versionsVisible = false">{{ t('common.cancel') }}</AppButton>
       </template>
     </AppSheet>
   </div>

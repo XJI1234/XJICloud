@@ -8,6 +8,8 @@ export type EditorFrame = {
 
 export interface EditorBridgePort {
   buildSrc(params: EditorLaunchParams): string
+  /** Wait until SuperSplat's postMessage bridge is listening (iframe `load` alone is not enough). */
+  waitReady(frame: EditorFrame): Promise<Result<void>>
   isDirty(frame: EditorFrame): Promise<Result<boolean>>
   importLocal(frame: EditorFrame, file: File): Promise<Result<void>>
   exportPly(frame: EditorFrame, options?: { compressed?: boolean; fileName?: string }): Promise<Result<EditorExportResult>>

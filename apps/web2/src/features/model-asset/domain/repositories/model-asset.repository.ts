@@ -1,5 +1,5 @@
 import type { Result } from '@/shared/result'
-import type { DownloadToken, ModelAsset } from '../entities/model-asset.entity'
+import type { DownloadToken, ModelAsset, ModelVersion } from '../entities/model-asset.entity'
 
 export type ModelUploadSession = {
   sessionId: string
@@ -25,6 +25,17 @@ export interface ModelAssetRepository {
   abortUpload(sessionId: string): Promise<Result<void>>
   delete(modelId: string): Promise<Result<void>>
   createDownloadToken(modelId: string): Promise<Result<DownloadToken>>
-  downloadBytes(modelId: string, onProgress?: (loaded: number, total: number) => void): Promise<Result<ArrayBuffer>>
+  downloadBytes(
+    modelId: string,
+    onProgress?: (loaded: number, total: number) => void,
+    options?: { cacheBust?: string | number },
+  ): Promise<Result<ArrayBuffer>>
+  downloadVersionBytes(
+    modelId: string,
+    archiveName: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<Result<ArrayBuffer>>
   uploadExport(modelId: string, file: Blob, fileName: string): Promise<Result<ModelAsset>>
+  listVersions(modelId: string): Promise<Result<ModelVersion[]>>
+  restoreVersion(modelId: string, archiveName: string): Promise<Result<ModelAsset>>
 }

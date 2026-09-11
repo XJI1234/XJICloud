@@ -82,7 +82,7 @@ export function createHttpClient(options: {
       headers.Authorization = `Bearer ${token}`
     }
 
-    const response = await fetchImpl(`${baseUrl}${path}`, { headers })
+    const response = await fetchImpl(`${baseUrl}${path}`, { headers, cache: 'no-store' })
     if (shouldLogoutOnStatus(response.status, token)) {
       options.unauthorized.notifyUnauthorized()
     }
