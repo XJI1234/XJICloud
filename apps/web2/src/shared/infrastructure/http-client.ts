@@ -15,7 +15,7 @@ export type HttpClient = {
   downloadBytes(path: string, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer>
   uploadBytes<T>(
     path: string,
-    body: Blob,
+    body: Blob | FormData,
     extraHeaders?: Record<string, string>,
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
@@ -121,14 +121,14 @@ export function createHttpClient(options: {
 
   function uploadBytes<T>(
     path: string,
-    body: Blob,
+    body: Blob | FormData,
     extraHeaders: Record<string, string> = {},
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
   ): Promise<T> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
-      xhr.open('PUT', `${baseUrl}${path}`)
+      xhr.open(body instanceof FormData ? 'POST' : 'PUT', `${baseUrl}${path}`)
       const token = options.tokenProvider.getToken()
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)

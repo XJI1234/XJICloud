@@ -3,6 +3,7 @@ import { err, ok } from '@/shared/result'
 import type { EditorBridgePort, EditorFrame } from '../domain/repositories/editor-bridge.port'
 import {
   DIRTY_QUERY_TIMEOUT_MS,
+  EXPORT_MAX_TIMEOUT_MS,
   EXPORT_PLY,
   EXPORT_TIMEOUT_MS,
   IMPORT_LOCAL,
@@ -13,6 +14,7 @@ import {
   buildSuperSplatSrc,
   isDirtyResponse,
   isExportError,
+  isExportProgress,
   isExportResult,
   isImportLocalDone,
   isImportLocalError,
@@ -160,24 +162,60 @@ export function createPostMessageEditorBridge(options?: {
         return Promise.resolve(err(new DomainError('EDITOR_NOT_READY')))
       }
       const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
+      const startedAt = Date.now()
 
       return new Promise((resolve) => {
-        const timer = setTimeout(() => {
+        let lastProgressAt = startedAt
+        let progressEvents = 0
+        let idleTimer: ReturnType<typeof setTimeout> | undefined
+        const maxTimer = setTimeout(() => {
+          finish('max')
+        }, EXPORT_MAX_TIMEOUT_MS)
+
+        function armIdle() {
+          if (idleTimer !== undefined) {
+            clearTimeout(idleTimer)
+          }
+          idleTimer = setTimeout(() => {
+            finish('idle')
+          }, EXPORT_TIMEOUT_MS)
+        }
+
+        function finish(reason: 'idle' | 'max') {
           cleanup()
+          // #region agent log
+          fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:reason==='idle'?'B':'A',location:'post-message-editor.bridge.ts:exportPly',message:'export timed out',data:{reason,elapsedMs:Date.now()-startedAt,progressEvents,sinceProgressMs:Date.now()-lastProgressAt,origin:targetOrigin},timestamp:Date.now()})}).catch(()=>{})
+          // #endregion
           resolve(err(new DomainError('EDITOR_TIMEOUT')))
-        }, EXPORT_TIMEOUT_MS)
+        }
 
         function cleanup() {
-          clearTimeout(timer)
+          if (idleTimer !== undefined) {
+            clearTimeout(idleTimer)
+          }
+          clearTimeout(maxTimer)
           removeListener('message', onMessage)
         }
 
         function onMessage(event: MessageEvent) {
           if (!isTrustedIframeMessage(event, frame, pageOrigin)) {
+            // #region agent log
+            fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:'C',location:'post-message-editor.bridge.ts:exportPly',message:'dropped untrusted export message',data:{origin:event.origin,expected:pageOrigin,type:(event.data as {type?:string})?.type},timestamp:Date.now()})}).catch(()=>{})
+            // #endregion
+            return
+          }
+          if (isExportProgress(event.data)) {
+            lastProgressAt = Date.now()
+            progressEvents += 1
+            armIdle()
+            exportOptions?.onProgress?.(event.data.loaded)
             return
           }
           if (isExportResult(event.data)) {
             cleanup()
+            // #region agent log
+            fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:'A',location:'post-message-editor.bridge.ts:exportPly',message:'export result',data:{elapsedMs:Date.now()-startedAt,progressEvents,bytes:event.data.buffer?.byteLength??0},timestamp:Date.now()})}).catch(()=>{})
+            // #endregion
             resolve(
               ok({
                 blob: new Blob([event.data.buffer], { type: 'application/octet-stream' }),
@@ -193,6 +231,10 @@ export function createPostMessageEditorBridge(options?: {
         }
 
         addListener('message', onMessage)
+        // #region agent log
+        fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:'A',location:'post-message-editor.bridge.ts:exportPly',message:'export started',data:{origin:targetOrigin,fileName:exportOptions?.fileName??null},timestamp:Date.now()})}).catch(()=>{})
+        // #endregion
+        armIdle()
         win.postMessage(
           {
             type: EXPORT_PLY,

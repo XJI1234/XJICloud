@@ -36,16 +36,25 @@ export async function confirmLeaveIfDirtyUseCase(
 
 export async function saveEditorExportUseCase(
   deps: { models: ModelAssetRepository; bridge: EditorBridgePort },
-  input: { modelId: string; frame: EditorFrame; compressed?: boolean; fileName?: string },
+  input: {
+    modelId: string
+    frame: EditorFrame
+    compressed?: boolean
+    fileName?: string
+    onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
+  },
 ): Promise<Result<ModelAsset>> {
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
     compressed: input.compressed,
     fileName: input.fileName,
+    onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
   })
   if (exportError || !exported) {
     return err(exportError ?? new DomainError('EDITOR_EXPORT_FAILED'))
   }
-  return deps.models.uploadExport(input.modelId, exported.blob, exported.fileName)
+  return deps.models.uploadExport(input.modelId, exported.blob, exported.fileName, (loaded, total) => {
+    input.onProgress?.({ phase: 'upload', loaded, total })
+  })
 }
 
 export async function saveEditorAsNewModelUseCase(
@@ -55,7 +64,7 @@ export async function saveEditorAsNewModelUseCase(
     frame: EditorFrame
     compressed?: boolean
     fileName?: string
-    onProgress?: (progress: { loaded: number; total: number }) => void
+    onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
     signal?: AbortSignal
   },
 ): Promise<Result<ModelAsset>> {
@@ -65,6 +74,7 @@ export async function saveEditorAsNewModelUseCase(
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
     compressed: input.compressed,
     fileName: input.fileName,
+    onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
   })
   if (exportError || !exported) {
     return err(exportError ?? new DomainError('EDITOR_EXPORT_FAILED'))
@@ -75,7 +85,7 @@ export async function saveEditorAsNewModelUseCase(
     {
       projectId: input.projectId,
       file,
-      onProgress: input.onProgress,
+      onProgress: (progress) => input.onProgress?.({ phase: 'upload', loaded: progress.loaded, total: progress.total }),
       signal: input.signal,
     },
   )

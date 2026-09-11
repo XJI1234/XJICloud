@@ -12,5 +12,12 @@ export interface EditorBridgePort {
   waitReady(frame: EditorFrame): Promise<Result<void>>
   isDirty(frame: EditorFrame): Promise<Result<boolean>>
   importLocal(frame: EditorFrame, file: File): Promise<Result<void>>
-  exportPly(frame: EditorFrame, options?: { compressed?: boolean; fileName?: string }): Promise<Result<EditorExportResult>>
+  exportPly(
+    frame: EditorFrame,
+    options?: {
+      compressed?: boolean
+      fileName?: string
+      onProgress?: (loaded: number) => void
+    },
+  ): Promise<Result<EditorExportResult>>
 }

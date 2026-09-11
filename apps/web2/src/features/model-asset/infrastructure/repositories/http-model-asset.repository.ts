@@ -124,14 +124,16 @@ export function createHttpModelAssetRepository(http: HttpClient): ModelAssetRepo
         return err(mapHttpError(error))
       }
     },
-    async uploadExport(modelId, file, fileName): Promise<Result<ModelAsset>> {
+    async uploadExport(modelId, file, fileName, onProgress): Promise<Result<ModelAsset>> {
       try {
         const formData = new FormData()
         formData.append('file', file, fileName)
-        const dto = await http.request<ModelSummaryDto>(`/api/v1/models/${modelId}/export`, {
-          method: 'POST',
-          body: formData,
-        })
+        const dto = await http.uploadBytes<ModelSummaryDto>(
+          `/api/v1/models/${modelId}/export`,
+          formData,
+          {},
+          onProgress,
+        )
         return ok(mapModelFromDto(dto))
       } catch (error) {
         return err(mapHttpError(error))

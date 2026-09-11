@@ -35,7 +35,12 @@ export interface ModelAssetRepository {
     versionId: string,
     onProgress?: (loaded: number, total: number) => void,
   ): Promise<Result<ArrayBuffer>>
-  uploadExport(modelId: string, file: Blob, fileName: string): Promise<Result<ModelAsset>>
+  uploadExport(
+    modelId: string,
+    file: Blob,
+    fileName: string,
+    onProgress?: ChunkProgress,
+  ): Promise<Result<ModelAsset>>
   listVersions(modelId: string): Promise<Result<ModelVersion[]>>
   restoreVersion(modelId: string, versionId: string): Promise<Result<ModelAsset>>
 }

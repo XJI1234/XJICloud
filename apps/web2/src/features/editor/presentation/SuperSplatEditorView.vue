@@ -9,6 +9,7 @@ import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
 import { createTransferRateTracker, formatTransferSpeed } from '@/shared/transfer-rate'
 import { formatDomainError } from '@/presentation/errors'
 import { DomainError } from '@/shared/domain-error'
+import { mapCloudSaveBar } from '@/features/editor/domain/services/cloud-save-progress.service'
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import { useEditorSession } from '@/features/editor/presentation/composables/useEditorSession'
@@ -290,52 +291,63 @@ async function saveToCloud() {
   saving.value = true
   errorMessage.value = ''
   statusMessage.value = t('supersplat.savingToCloud')
-  uploadProgress.value = null
+  uploadProgress.value = { percent: 5, speed: '' }
+  const tracker = createTransferRateTracker()
+  let progressPhase: 'export' | 'upload' | null = null
 
-  if (selectedModelId.value) {
-    const [error, saved] = await editor.saveExport({
-      modelId: selectedModelId.value,
+  const onProgress = (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => {
+    if (progressPhase !== progress.phase) {
+      tracker.reset()
+      progressPhase = progress.phase
+    }
+    const rate = tracker.push(progress.loaded, Date.now())
+    uploadProgress.value = {
+      percent: mapCloudSaveBar(progress.phase, progress.loaded, progress.total),
+      speed: rate != null ? formatTransferSpeed(rate) : uploadProgress.value?.speed ?? '',
+    }
+  }
+
+  try {
+    if (selectedModelId.value) {
+      const [error, saved] = await editor.saveExport({
+        modelId: selectedModelId.value,
+        frame,
+        fileName: selectedCloudModel.value?.fileName ?? localFileName.value ?? undefined,
+        onProgress,
+      })
+      if (error || !saved) {
+        errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
+        statusMessage.value = ''
+        return
+      }
+      uploadProgress.value = { percent: 100, speed: uploadProgress.value?.speed ?? '' }
+      statusMessage.value = t('supersplat.savedToCloud', { version: saved.version })
+      await refreshModels()
+      return
+    }
+
+    const [error, created] = await editor.saveAsNew({
+      projectId: activeProjectId.value,
       frame,
-      fileName: selectedCloudModel.value?.fileName ?? localFileName.value ?? undefined,
+      fileName: localFileName.value ?? undefined,
+      onProgress,
     })
-    saving.value = false
-    if (error || !saved) {
+    if (error || !created) {
       errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
       statusMessage.value = ''
       return
     }
-    statusMessage.value = t('supersplat.savedToCloud', { version: saved.version })
+    uploadProgress.value = { percent: 100, speed: uploadProgress.value?.speed ?? '' }
+    selectedModelId.value = created.id
+    localFile = null
+    localFileName.value = null
+    statusMessage.value = t('supersplat.savedAsNewModel', { name: created.fileName })
     await refreshModels()
-    return
+    await router.replace({ path: route.path, query: { ...route.query, modelId: created.id } })
+  } finally {
+    saving.value = false
+    uploadProgress.value = null
   }
-
-  const tracker = createTransferRateTracker()
-  const [error, created] = await editor.saveAsNew({
-    projectId: activeProjectId.value,
-    frame,
-    fileName: localFileName.value ?? undefined,
-    onProgress: (progress) => {
-      const percent = progress.total > 0 ? Math.min(99, Math.round((progress.loaded / progress.total) * 100)) : 0
-      const rate = tracker.push(progress.loaded, Date.now())
-      uploadProgress.value = {
-        percent,
-        speed: rate != null ? formatTransferSpeed(rate) : uploadProgress.value?.speed ?? '',
-      }
-    },
-  })
-  saving.value = false
-  uploadProgress.value = null
-  if (error || !created) {
-    errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
-    statusMessage.value = ''
-    return
-  }
-  selectedModelId.value = created.id
-  localFile = null
-  localFileName.value = null
-  statusMessage.value = t('supersplat.savedAsNewModel', { name: created.fileName })
-  await refreshModels()
-  await router.replace({ path: route.path, query: { ...route.query, modelId: created.id } })
 }
 
 async function openVersions() {

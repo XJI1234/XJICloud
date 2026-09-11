@@ -1,5 +1,6 @@
 export const IS_SCENE_DIRTY = 'supersplat:is-scene-dirty'
 export const EXPORT_PLY = 'supersplat:export-ply'
+export const EXPORT_PLY_PROGRESS = 'supersplat:export-ply-progress'
 export const EXPORT_PLY_RESULT = 'supersplat:export-ply-result'
 export const EXPORT_PLY_ERROR = 'supersplat:export-ply-error'
 export const IMPORT_LOCAL = 'supersplat:import-local'
@@ -7,7 +8,10 @@ export const IMPORT_LOCAL_DONE = 'supersplat:import-local-done'
 export const IMPORT_LOCAL_ERROR = 'supersplat:import-local-error'
 
 export const DIRTY_QUERY_TIMEOUT_MS = 10_000
-export const EXPORT_TIMEOUT_MS = 120_000
+/** Idle cutoff between export heartbeats. scene.write can run minutes before the first chunk. */
+export const EXPORT_TIMEOUT_MS = 180_000
+/** Hard cap so a stuck iframe cannot hang forever. */
+export const EXPORT_MAX_TIMEOUT_MS = 900_000
 export const IMPORT_LOCAL_TIMEOUT_MS = 120_000
 /** One poll while waiting for the iframe listener after navigation. */
 export const READY_PING_TIMEOUT_MS = 400
@@ -16,6 +20,11 @@ export const READY_MAX_ATTEMPTS = 50
 export type DirtyResponse = {
   type: typeof IS_SCENE_DIRTY
   result: boolean
+}
+
+export type ExportPlyProgressMessage = {
+  type: typeof EXPORT_PLY_PROGRESS
+  loaded: number
 }
 
 export type ExportPlyResultMessage = {
@@ -40,6 +49,10 @@ export type ImportLocalErrorMessage = {
 
 export function isDirtyResponse(data: unknown): data is DirtyResponse {
   return Boolean(data && typeof data === 'object' && (data as DirtyResponse).type === IS_SCENE_DIRTY)
+}
+
+export function isExportProgress(data: unknown): data is ExportPlyProgressMessage {
+  return Boolean(data && typeof data === 'object' && (data as ExportPlyProgressMessage).type === EXPORT_PLY_PROGRESS)
 }
 
 export function isExportResult(data: unknown): data is ExportPlyResultMessage {
