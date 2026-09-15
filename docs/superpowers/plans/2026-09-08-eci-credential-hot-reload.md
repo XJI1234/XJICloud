@@ -119,8 +119,8 @@ OssStorageService.applyRuntimeKeys(ak, sk);
 
 独立于云当前钥。Filter 改读 store。`PUT /credentials/http-api-key`，`POST /credentials/revoke-previous-api-key`。`eci.api-key-overlap-sec` 默认 3600。`MessageDigest.isEqual`，禁止 `String.equals`。
 
-- [ ] 新钥立即可用、重叠期内旧钥可用、revoke 后旧钥 401、相同钥 no-op、overlap=0 立即切断
-- [ ] `mvn test`（含 `EciTaskApiTest.rejectsMissingApiKey`）
+- [x] 新钥立即可用、重叠期内旧钥可用、revoke 后旧钥 401、相同钥 no-op、overlap=0 立即切断
+- [x] `mvn test`（含 `EciTaskApiTest.rejectsMissingApiKey`）
 
 ---
 
@@ -128,7 +128,7 @@ OssStorageService.applyRuntimeKeys(ak, sk);
 
 `POST /runtime-credentials/test`。带 AK/SK 则用临时客户端，不改当前。省略则测已保存当前。Mock + ECI → 400。OSS 未配 endpoint → 400。CI 不连真云。禁止测通打 IMDS。
 
-- [ ] 测试 + `mvn test`
+- [x] 测试 + `mvn test`
 - [ ] 可选真云：带真 AK 测 ECI_OPENAPI success
 
 ---
@@ -136,6 +136,8 @@ OssStorageService.applyRuntimeKeys(ak, sk);
 ### Task C5: 文档
 
 AGENT.md、API文档、设计与使用说明、测试说明、README、3dgs 说明。写明：8081 只有当前钥；列表在主后端第二步；`.env` 是种子；`ALIBABA_CLOUD_*` 仅脚本映射。删掉「yml AK 不建客户端」。
+
+- [x] 上述文档已对齐四点；已删「yml AK 不建客户端」
 
 不改 `backend/`、`docs/Deploy.md`。
 

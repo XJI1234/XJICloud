@@ -40,7 +40,8 @@ cd ~/XJI/XJICloud/eci-manager
 |------|------|
 | `SPRING_PROFILES_ACTIVE` | `cloud,local` |
 | `ECI_API_KEY` | 与请求头 `X-Api-Key` 一致 |
-| `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | 调 ECI OpenAPI |
+| `ECI_ACCESS_KEY_ID` / `SECRET` | 调 ECI OpenAPI 的当前钥**种子**（推荐直接填） |
+| `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | 仅 `load-env.sh` 映射到上一行；Java 不读 |
 | `ECI_REGION_ID` / `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 创建容器网络 |
 | `ECI_OSS_ENABLED` | `true` |
 | `ECI_OSS_ENDPOINT` | **内网** `https://oss-cn-hangzhou-internal.aliyuncs.com`（容器无 NAT 时公网会超时） |
@@ -49,7 +50,7 @@ cd ~/XJI/XJICloud/eci-manager
 | `ECI_OSS_PRESIGN_EXPIRATION_MINUTES` | **1440**（默认 60 分钟不够训完；PUT 必须活到训练结束） |
 | `ECI_CREATE_TIMEOUT_SEC` | 建议 **1800**（大镜像首次拉取常超过默认 300 秒） |
 
-改过 `.env` 必须重启 eci-manager。
+改过 `.env` 必须重启 eci-manager。种子只在库中 current 行不存在时写入；若已 `PUT /runtime-credentials` 热切过，重启后仍用库里的当前钥。可 `GET /api/v1/eci/runtime-credentials` 看 hint（无 SK）。8081 没有多钥目录。
 
 ### 1.3 启动服务
 

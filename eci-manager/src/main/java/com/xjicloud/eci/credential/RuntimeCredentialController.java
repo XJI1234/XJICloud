@@ -2,15 +2,17 @@ package com.xjicloud.eci.credential;
 
 import com.xjicloud.eci.common.ApiResponse;
 import com.xjicloud.eci.credential.dto.PutRuntimeCredentialRequest;
+import com.xjicloud.eci.credential.dto.RuntimeCredentialTestResult;
 import com.xjicloud.eci.credential.dto.RuntimeCredentialsResponse;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 当前云钥 GET/PUT。鉴权由 {@link com.xjicloud.eci.auth.ApiKeyAuthFilter} 完成。
+ * 当前云钥 GET/PUT，以及 POST 测通。鉴权由 {@link com.xjicloud.eci.auth.ApiKeyAuthFilter} 完成。
  */
 @RestController
 @RequestMapping("/api/v1/eci/runtime-credentials")
@@ -30,5 +32,10 @@ public class RuntimeCredentialController {
     @PutMapping
     public ApiResponse<RuntimeCredentialsResponse> put(@RequestBody(required = false) PutRuntimeCredentialRequest request) {
         return ApiResponse.ok(service.putCurrent(request));
+    }
+
+    @PostMapping("/test")
+    public ApiResponse<RuntimeCredentialTestResult> test(@RequestBody(required = false) PutRuntimeCredentialRequest request) {
+        return ApiResponse.ok(service.test(request));
     }
 }

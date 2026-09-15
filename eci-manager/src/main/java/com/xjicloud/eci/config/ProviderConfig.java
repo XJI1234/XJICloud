@@ -70,6 +70,10 @@ public class ProviderConfig {
             requirePositive(properties.getCreateTimeoutSec(), "eci.create-timeout-sec");
             requirePositive(properties.getDeleteTimeoutSec(), "eci.delete-timeout-sec");
             requirePositive(properties.getDefaultMaxRuntimeSec(), "eci.default-max-runtime-sec");
+            if (properties.getApiKeyOverlapSec() < 0) {
+                throw new IllegalStateException(
+                        "eci.api-key-overlap-sec 不能为负数，当前=" + properties.getApiKeyOverlapSec());
+            }
         };
     }
 

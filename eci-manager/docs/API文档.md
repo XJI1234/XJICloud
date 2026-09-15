@@ -3,15 +3,15 @@
 > **服务：** `eci-manager`（默认 `http://127.0.0.1:8081`）  
 > **API 前缀：** `/api/v1/eci`  
 > **对应 PRD：** [ECI任务驱动容器编排服务产品需求文档(PRD).md](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) v2.0.3  
-> **更新日期：** 2026-07-30  
+> **更新日期：** 2026-09-09 
 
 本文面向三类读者：
 
 | 读者 | 建议阅读 |
 |------|----------|
 | 非技术 / 产品 | [§1 业务导读](#1-业务导读非技术) |
-| 对接开发 | [§2 通用约定](#2-通用约定) → [§3 任务 API](#3-任务-api主路径) → [§4 实例 API](#4-实例-api运维调试) |
-| 测试 / 联调 | [§6 联调速查](#6-联调速查测试) + [测试说明.md](./测试说明.md) |
+| 对接开发 | [§2 通用约定](#2-通用约定) → [§3 任务 API](#3-任务-api主路径) → [§4 实例 API](#4-实例-api运维调试) → [§5 当前云钥与 HTTP Api-Key](#5-当前云钥与-http-api-key已实现) |
+| 测试 / 联调 | [§7 联调速查](#7-联调速查测试) + [测试说明.md](./测试说明.md) |
 
 ### 状态图例
 
@@ -68,7 +68,7 @@
 | Base | `http://127.0.0.1:8081`（部署时替换主机与端口） |
 | 前缀 | `/api/v1/eci` |
 | 鉴权头 | `X-Api-Key: <密钥>` |
-| 密钥来源 | 配置 `eci.api-key` 或环境变量 `ECI_API_KEY`（默认开发值见配置） |
+| 密钥来源 | 配置 `eci.api-key` / 环境变量 `ECI_API_KEY`；运行时以 `HttpApiKeyStore` 为准（可 `PUT /credentials/http-api-key` 轮换） |
 | 无需鉴权 | `GET /actuator/health` |
 
 缺 Key、错 Key → **HTTP 401**，响应体为统一失败壳；**不会**创建云资源。
@@ -102,7 +102,7 @@
 | 码 | 场景 |
 |----|------|
 | 200 | 业务成功（含幂等取消/删除成功） |
-| 400 | 参数非法（如任务缺 `image`、非法 `restartPolicy`、`maxRuntimeSec≤0`） |
+| 400 | 参数非法（如任务缺 `image`、非法 `restartPolicy`、`maxRuntimeSec≤0`、未知 `resource`、云钥不成对、mock 下测 ECI、OSS 未配 endpoint/bucket） |
 | 401 | 缺少或错误的 `X-Api-Key` |
 | 404 | 任务/实例不存在 |
 | 409 | 冲突（如创建中禁止删实例；任务已终态无法取消） |
@@ -454,7 +454,149 @@ GPU 示例（贵、看库存；测完必须删）：
 
 ---
 
-## 5. 健康检查 — **已实现**
+## 5. 当前云钥与 HTTP Api-Key — **已实现**
+
+8081 每种阿里云资源只持有**一把当前 AccessKey**（`ECI_OPENAPI` / `OSS`），可 HTTP 热切、落盘、测通。
+
+- **没有**多钥目录、没有按 id 选钥。统一 AK 列表在**主后端第二步**；第二步将调用本节省下的同一 URL。
+- GET / 响应 / 日志**永不返回 SK**（只给 `accessKeyHint`）。
+- 均需 `X-Api-Key`。无钥或错钥 → **401**，文案「无效或缺失的 Api-Key」。
+- 本期**不能**清空当前钥（避免误切 IMDS）。要换钥就 PUT 新的一对。
+
+### 5.1 查询当前钥
+
+`GET /api/v1/eci/runtime-credentials`
+
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "mock": true,
+    "resources": {
+      "ECI_OPENAPI": {
+        "configured": true,
+        "accessKeyHint": "LTAI****abcd",
+        "mode": "MOCK"
+      },
+      "OSS": {
+        "configured": true,
+        "accessKeyHint": "LTAI****ss01",
+        "mode": "STATIC_AK"
+      }
+    }
+  }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `mock` | 当前是否 `eci.mock=true` |
+| `resources.*.configured` | 该 resource 是否已有成对当前钥 |
+| `resources.*.accessKeyHint` | `CredentialHint.mask(id)`；未配置为 `""` |
+| `resources.*.mode` | `MOCK`（仅 ECI 且 mock）/ `STATIC_AK` / 当前钥为空时的 `INSTANCE_PROFILE` 或 `DEFAULT_CHAIN` |
+
+### 5.2 设置当前钥并热切换
+
+`PUT /api/v1/eci/runtime-credentials`
+
+```json
+{
+  "resource": "ECI_OPENAPI",
+  "accessKeyId": "<AccessKeyId>",
+  "accessKeySecret": "<AccessKeySecret>"
+}
+```
+
+| 规则 | 结果 |
+|------|------|
+| `resource` 必填，值为 `ECI_OPENAPI` 或 `OSS` | 未知 / 空 → **400** |
+| `accessKeyId` 与 `accessKeySecret` 必须**成对非空** | 只传一个 → **400**「必须成对非空」 |
+| 成功 | 覆盖该 resource 当前钥、落盘、只重建该客户端；返回与 GET 相同结构 |
+| Mock 下 PUT ECI | 仍落盘，**不**建阿里云客户端 |
+
+热切 ECI **不**取消已有任务；之后的 create/describe/delete 用新钥。切账号前应清旧账号实例。选钥不改 region / vswitch / sg / OSS endpoint。
+
+### 5.3 测通（草稿或已保存）
+
+`POST /api/v1/eci/runtime-credentials/test`
+
+```json
+{
+  "resource": "OSS",
+  "accessKeyId": "<可选>",
+  "accessKeySecret": "<可选>"
+}
+```
+
+- 成对非空 id/secret → 用**草稿**建临时 STATIC_AK 客户端测；**不** PUT、不 reload、不改当前。
+- 两者都省略 → 测**已保存当前钥**；当前不成对 → **400**「当前钥未配置」。
+- 只传其中一个 → **400**「必须成对非空」。
+- `ECI_OPENAPI` 且 `eci.mock=true` → **400**，一次探测都不发。
+- `OSS` 且未配 endpoint 或 bucket → **400**。
+
+HTTP 分层：
+
+| 情况 | HTTP | `data` |
+|------|------|--------|
+| 校验失败（用错 API） | **400** | `success=false`，`data=null` |
+| 已真正发起探测 | **200** | `ok` 为 true/false。云 403 等是测通结果，不是 API 用错 |
+
+成功探测时 `data`：
+
+```json
+{
+  "resource": "OSS",
+  "ok": true,
+  "accessKeyHint": "LTAI****ss01",
+  "detail": ""
+}
+```
+
+失败探测：`ok=false`，`detail` 为可读原因，仍无 SK。
+
+探测只走 STATIC_AK（禁止 IMDS / 默认链）：ECI 为临时 `DescribeContainerGroups` Limit=1；OSS 为临时 S3 `ListObjectsV2 maxKeys=1`（endpoint/bucket 仍来自 `eci.oss.*`）。CI / `mvn test` 不连真云。
+
+#### curl 示例（占位符，勿把 SK 写入文档）
+
+```bash
+export BASE=http://127.0.0.1:8081
+source scripts/load-env.sh   # 取得 $ECI_API_KEY
+
+curl -s "$BASE/api/v1/eci/runtime-credentials" -H "X-Api-Key: $ECI_API_KEY"
+
+# 测已保存的 OSS 当前钥（省略 id/secret）
+curl -s -X POST "$BASE/api/v1/eci/runtime-credentials/test" \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $ECI_API_KEY" \
+  -d '{"resource":"OSS"}'
+
+# 测草稿（不落盘）。把占位符换成待测钥
+curl -s -X POST "$BASE/api/v1/eci/runtime-credentials/test" \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $ECI_API_KEY" \
+  -d '{"resource":"OSS","accessKeyId":"<AccessKeyId>","accessKeySecret":"<AccessKeySecret>"}'
+```
+
+Mock 下 `resource=ECI_OPENAPI` 的 test 期望 **400**。真云测 ECI 须 `eci.mock=false`，属手工步骤，**不进** `mvn test`。
+
+### 5.4 HTTP Api-Key 轮换（与云 AK 无关）
+
+`PUT /api/v1/eci/credentials/http-api-key`
+
+```json
+{ "apiKey": "<新的 HTTP 钥>" }
+```
+
+新钥立即生效。默认重叠 **3600** 秒内旧钥仍可用（`eci.api-key-overlap-sec` / `ECI_API_KEY_OVERLAP_SEC`；`0` = 立即切断）。相同钥 no-op。
+
+`POST /api/v1/eci/credentials/revoke-previous-api-key`
+
+立即让上一把失效。`data` 含 `apiKeyHint`、`previousActive`、`previousExpiresAt`，不含明文钥。
+
+---
+
+## 6. 健康检查 — **已实现**
 
 `GET /actuator/health`
 
@@ -463,7 +605,7 @@ GPU 示例（贵、看库存；测完必须删）：
 
 ---
 
-## 6. 联调速查（测试）
+## 7. 联调速查（测试）
 
 变量约定：
 
@@ -474,13 +616,13 @@ export ECI_API_KEY=dev-eci-api-key-change-me   # 须与服务端一致
 export CLOUD_IMAGE='registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2'
 ```
 
-### 6.1 健康检查
+### 7.1 健康检查
 
 ```bash
 curl -s "$BASE/actuator/health"
 ```
 
-### 6.2 提交任务（主路径）
+### 7.2 提交任务（主路径）
 
 ```bash
 curl -s -X POST "$BASE/api/v1/eci/tasks" \
@@ -498,7 +640,7 @@ curl -s "$BASE/api/v1/eci/instances/<INSTANCE_ID>" -H "X-Api-Key: $ECI_API_KEY"
 
 期望：任务 → `RUNNING`；实例 `taskId` 等于任务 ID；真云时 `cloudInstanceId` 非 `mock-eci-` 前缀。
 
-### 6.3 取消任务（当前推荐收尾）
+### 7.3 取消任务（当前推荐收尾）
 
 ```bash
 curl -s -X POST "$BASE/api/v1/eci/tasks/<TASK_ID>/cancel" \
@@ -507,7 +649,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/<TASK_ID>/cancel" \
 
 期望：`status=CANCELLED`；关联实例最终 `TERMINATED`。控制台确认 ECI 已删除。
 
-### 6.4 手动实例（调试）
+### 7.4 手动实例（调试）
 
 ```bash
 curl -s -X POST "$BASE/api/v1/eci/instances" \
@@ -523,7 +665,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 
 ---
 
-## 7. 能力对照表（验收用）
+## 8. 能力对照表（验收用）
 
 | PRD / 能力 | 接口或行为 | 状态 |
 |------------|------------|------|
@@ -542,10 +684,14 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | 云侧 Succeeded/Failed 后自动删 + 任务终态 | 后台轮询 | **已实现** |
 | `maxRuntimeSec` 超时强制删 | 后台 | **已实现** |
 | Mock 时间触发终态自动删 | `mock-auto-complete-sec` | **已实现** |
+| 当前云钥 GET/PUT | `/api/v1/eci/runtime-credentials` | **已实现**（每 resource 一把当前钥） |
+| 测通草稿或当前钥 | `POST /runtime-credentials/test` | **已实现**（CI 不连真云） |
+| HTTP Api-Key 双钥 | `/credentials/http-api-key` | **已实现** |
+| 8081 多钥目录 / 按 id 选钥 | — | **不做**（主后端第二步） |
 
 ---
 
-## 8. 相关文档
+## 9. 相关文档
 
 | 文档 | 用途 |
 |------|------|
@@ -554,3 +700,6 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | [../README.md](../README.md) | 工程入口与进度摘要 |
 | [PRD](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) | 产品需求全文 |
 | [实现计划](../../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md) | 分阶段任务 |
+| [当前钥计划](../../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md) | 第一步 C1–C5 |
+| [当前钥设计](../../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md) | 8081 执行器；第二步目录规划 |
+| [当前钥设计](../../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md) | 8081 当前钥执行器；第二步目录规划 |

@@ -2,6 +2,7 @@ package com.xjicloud.eci.credential;
 
 import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.config.OssProperties;
+import com.xjicloud.eci.credential.dto.PutRuntimeCredentialRequest;
 import com.xjicloud.eci.oss.OssStorageService;
 import com.xjicloud.eci.provider.EciProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ class RuntimeCredentialServiceTest {
 
     private EciProperties eciProperties;
     private OssProperties ossProperties;
+    private RecordingRuntimeCredentialProbe probe;
     private RuntimeCredentialService service;
 
     @BeforeEach
@@ -43,8 +45,10 @@ class RuntimeCredentialServiceTest {
         ossProperties = new OssProperties();
         ossProperties.setAccessKey("LTAIseedoss01");
         ossProperties.setSecretKey("oss-secret");
+        probe = new RecordingRuntimeCredentialProbe();
         service = new RuntimeCredentialService(
-                repository, eciProperties, ossProperties, eciProvider, ossStorageService);
+                repository, eciProperties, ossProperties, eciProvider, ossStorageService,
+                new RuntimeCredentialTester(eciProperties, ossProperties, probe));
     }
 
     @Test
@@ -98,6 +102,28 @@ class RuntimeCredentialServiceTest {
         service.afterSingletonsInstantiated();
 
         verify(oss).applyRuntimeKeys("LTAIseedoss01", "oss-secret");
+    }
+
+    @Test
+    void testDraftDoesNotWriteOrReloadClients() {
+        ossProperties.setEndpoint("https://oss-cn-hangzhou-internal.aliyuncs.com");
+        ossProperties.setBucket("test-bucket");
+        stubPair(AliyunResource.OSS, "LTAIseedoss01", "oss-secret");
+        PutRuntimeCredentialRequest request = new PutRuntimeCredentialRequest();
+        request.setResource("OSS");
+        request.setAccessKeyId("LTAIdraftoss99");
+        request.setAccessKeySecret("draft-oss-secret");
+
+        var result = service.test(request);
+
+        assertThat(result.isOk()).isTrue();
+        assertThat(result.getAccessKeyHint()).isEqualTo(CredentialHint.mask("LTAIdraftoss99"));
+        assertThat(probe.ossCalls()).isEqualTo(1);
+        assertThat(probe.lastOssAccessKeyId()).isEqualTo("LTAIdraftoss99");
+        assertThat(probe.lastOssAccessKeySecret()).isEqualTo("draft-oss-secret");
+        verify(repository, never()).save(any());
+        verify(eciProvider, never()).getIfAvailable();
+        verify(ossStorageService, never()).getIfAvailable();
     }
 
     private void stubPair(AliyunResource resource, String accessKeyId, String accessKeySecret) {

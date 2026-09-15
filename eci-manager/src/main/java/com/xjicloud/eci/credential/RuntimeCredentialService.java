@@ -4,6 +4,7 @@ import com.xjicloud.eci.common.BusinessException;
 import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.config.OssProperties;
 import com.xjicloud.eci.credential.dto.PutRuntimeCredentialRequest;
+import com.xjicloud.eci.credential.dto.RuntimeCredentialTestResult;
 import com.xjicloud.eci.credential.dto.RuntimeCredentialsResponse;
 import com.xjicloud.eci.credential.dto.RuntimeResourceStatus;
 import com.xjicloud.eci.oss.OssStorageService;
@@ -35,6 +36,7 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
     private final OssProperties ossProperties;
     private final ObjectProvider<EciProvider> eciProvider;
     private final ObjectProvider<OssStorageService> ossStorageService;
+    private final RuntimeCredentialTester tester;
     private final ReentrantLock putLock = new ReentrantLock();
     private TransactionTemplate transactionTemplate;
 
@@ -43,12 +45,14 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
             EciProperties eciProperties,
             OssProperties ossProperties,
             ObjectProvider<EciProvider> eciProvider,
-            ObjectProvider<OssStorageService> ossStorageService) {
+            ObjectProvider<OssStorageService> ossStorageService,
+            RuntimeCredentialTester tester) {
         this.repository = repository;
         this.eciProperties = eciProperties;
         this.ossProperties = ossProperties;
         this.eciProvider = eciProvider;
         this.ossStorageService = ossStorageService;
+        this.tester = tester;
     }
 
     @Autowired(required = false)
@@ -97,6 +101,21 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
         resources.put(AliyunResource.ECI_OPENAPI.name(), eciStatus());
         resources.put(AliyunResource.OSS.name(), ossStatus());
         return new RuntimeCredentialsResponse(eciProperties.isMock(), resources);
+    }
+
+    /**
+     * 测通草稿或已保存当前钥。只读 {@link #currentPair}，不写库、不热切。
+     */
+    public RuntimeCredentialTestResult test(PutRuntimeCredentialRequest request) {
+        if (request == null) {
+            throw new BusinessException("resource 必填");
+        }
+        AliyunResource resource = parseResource(request.getResource());
+        return tester.test(
+                request.getResource(),
+                request.getAccessKeyId(),
+                request.getAccessKeySecret(),
+                currentPair(resource));
     }
 
     public RuntimeCredentialsResponse putCurrent(PutRuntimeCredentialRequest request) {

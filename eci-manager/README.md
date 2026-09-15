@@ -30,7 +30,7 @@ source ../.tools/env.sh    # 在 eci-manager/ 下
 
 ## 配置（`.env`，推荐）
 
-真云联调时，Api-Key、VPC、阿里云 AK 建议统一写在 **`eci-manager/.env`**。
+真云联调时，HTTP Api-Key、VPC、**当前钥种子**建议统一写在 **`eci-manager/.env`**（种子只在库行缺失时写入）。
 
 ```bash
 cd eci-manager
@@ -43,13 +43,14 @@ chmod +x scripts/*.sh
 | 变量 | 说明 |
 |------|------|
 | `SPRING_PROFILES_ACTIVE` | 真云：`cloud,local`；Mock：`dev` |
-| `ECI_API_KEY` | HTTP 请求头 `X-Api-Key` |
-| `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | 调 ECI OpenAPI（yml 里 `access-key-id` **不生效**） |
+| `ECI_API_KEY` | HTTP 请求头 `X-Api-Key`（可再经 `PUT /credentials/http-api-key` 轮换） |
+| `ECI_ACCESS_KEY_ID` / `SECRET` | ECI 当前钥**种子**；成对则 `STATIC_AK`。已落盘的热切结果启动时不会被 `.env` 打回 |
+| `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | Java **不读**；仅 `load-env.sh` 在 `ECI_ACCESS_KEY_*` 为空且无 STS token 时映射为种子 |
 | `ECI_REGION_ID` / `ECI_VPC_ID` / `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 创建容器网络 |
 
 **脚本：**
 
-- `scripts/load-env.sh` — 加载 `.env` 并导出 `ALIBABA_CLOUD_*`；无 `.env` 时用 Mock 默认 Api-Key。
+- `scripts/load-env.sh` — 加载 `.env`；`ALIBABA_CLOUD_*` 仅在此时映射到 `ECI_ACCESS_KEY_*`。无 `.env` 时用 Mock 默认 Api-Key。
 - `scripts/start.sh` — 要求已有 `.env`，然后 `mvn spring-boot:run`
 
 curl 联调（另开终端）：
@@ -167,7 +168,7 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 
 ## 真实 ECI 模式
 
-1. `cp .env.example .env`，填写 Api-Key、网络、`ALIBABA_CLOUD_*`  
+1. `cp .env.example .env`，填写 Api-Key、网络、种子 `ECI_ACCESS_KEY_*`（或 `ALIBABA_CLOUD_*` 仅供脚本映射）  
 2. `./scripts/start.sh`  
 
 详解见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4.2。
@@ -183,9 +184,14 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 | DELETE | `/api/v1/eci/instances/{id}` | 删除（幂等） |
 | GET | `/api/v1/eci/instances` / `/{id}` | 列表 / 详情 |
 | POST | `/api/v1/eci/instances/{id}/refresh` | 拉云状态 |
+| GET | `/api/v1/eci/runtime-credentials` | 当前云钥 hint（无 SK） |
+| PUT | `/api/v1/eci/runtime-credentials` | 覆盖该 resource 当前钥并热切 |
+| POST | `/api/v1/eci/runtime-credentials/test` | 测草稿或已保存；不落盘 |
+| PUT | `/api/v1/eci/credentials/http-api-key` | 轮换 HTTP Api-Key |
+| POST | `/api/v1/eci/credentials/revoke-previous-api-key` | 吊销上一把 HTTP 钥 |
 | GET | `/actuator/health` | 健康检查（无 Api-Key） |
 
-响应：`{ "success", "message", "data" }`。
+响应：`{ "success", "message", "data" }`。当前钥与 HTTP 钥完整字段见 [docs/API文档.md](docs/API文档.md) §5。8081 **没有**多钥目录（列表在主后端第二步）。
 
 ## 一期验收清单（mock）
 

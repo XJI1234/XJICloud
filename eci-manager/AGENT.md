@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-09-06（3DGS 使用说明收敛为单篇；POST 15k 已跑通）
+**最后更新：** 2026-09-09（C1–C5 当前钥执行器：STATIC_AK、落盘热切、HTTP 双钥、POST test、文档）
 
 **3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → grace → delete；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
@@ -31,13 +31,20 @@
   - ✅ 可选宽限 `eci.failure-log-grace-sec` 默认 90（方案 C；`0` 关闭）
   - ✅ TIMEOUT 与 Failed 同序（先抓日志再删）；成功任务不存全量日志
   - ✅ Mock/单测锁定 fetch→persist→delete；详节见下方 **§5.1**
+- **已交付（当前钥执行器 C1–C5，2026-09-08～09-09）：**
+  - ✅ 成对运行时 AK → `STATIC_AK`（`DefaultProfile.getProfile(region, ak, sk)`）
+  - ✅ 每 resource 一把**当前钥**落盘 + GET/PUT `/runtime-credentials` + 热重建
+  - ✅ HTTP Api-Key 双钥轮换（`/credentials/http-api-key`）
+  - ✅ `POST /runtime-credentials/test`（草稿或已保存；不改当前）
+  - ✅ 文档：8081 只有当前钥；列表在主后端第二步；`.env` 是种子
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 - **OSS 增量 PRD：** [`ECI任务OSS对象存储集成产品需求文档(PRD).md`](../ECI任务OSS对象存储集成产品需求文档(PRD).md) **v1.0**
 - **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
 - **OSS 计划 / 续跑：** [`docs/superpowers/plans/2026-07-30-eci-oss-integration.md`](../docs/superpowers/plans/2026-07-30-eci-oss-integration.md)、[`docs/superpowers/2026-07-31-eci-oss-handoff.md`](../docs/superpowers/2026-07-31-eci-oss-handoff.md)
+- **当前钥（第一步 C1–C5）：** [`docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md`](../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md)、[设计](../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md)
 
-**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）；实时流式日志 UI；OSS 存全量容器日志（方案 B）。
+**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）；实时流式日志 UI；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（第二步主后端）。
 
 ---
 
@@ -65,7 +72,8 @@ eci-manager/
 │   └── 3dgs-ECI使用说明.md          # 3DGS 真云一键提交与注意事项
 └── src/main/java/com/xjicloud/eci/
     ├── config/          # EciProperties（含 failure-log-*）、OssProperties、…
-    ├── oss/             # OssStorageService
+    ├── credential/      # 当前钥 GET/PUT/test、HTTP Api-Key 双钥
+    ├── oss/             # OssStorageService（含 applyRuntimeKeys）
     ├── task/storage/    # TaskStorageResolver、DTO
     ├── instance/ … task/ … provider/ … lifecycle/
 ```
@@ -74,8 +82,8 @@ eci-manager/
 
 | 文件 | 作用 |
 |------|------|
-| `.env` / `.env.example` | **推荐**：Api-Key、网络、`ALIBABA_CLOUD_*`、`ECI_OSS_*`、可选 `ECI_FAILURE_LOG_*`（`.env` gitignore） |
-| `scripts/load-env.sh` / `start.sh` | 加载 `.env` 并启动 |
+| `.env` / `.env.example` | **推荐**：HTTP Api-Key、网络、**种子** `ECI_ACCESS_KEY_*` / `ECI_OSS_*`（`.env` gitignore） |
+| `scripts/load-env.sh` / `start.sh` | 加载 `.env`；`ALIBABA_CLOUD_*` **仅脚本**映射到 `ECI_ACCESS_KEY_*`（Java 不读） |
 | `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`failure-log-tail-lines` / `failure-log-grace-sec` |
 | `application-dev.yml` | `mock=true` |
 | `application-cloud.yml` | `mock=false` + 推荐阿里云镜像 |
@@ -119,7 +127,9 @@ flowchart LR
 | AsyncLifecycleWorker | 创建/删除轮询；Succeeded 视为创建成功路径 markRunning；cancel 竞态 abort→删；回调任务状态 |
 | TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；Failed/TIMEOUT：**抓日志→落库→宽限→删**；SUCCEEDED 门闩 |
 | StartupCompensationRunner | 启动扫实例 CREATING/STOPPING/RUNNING + 非终态任务对齐 |
-| ApiKeyAuthFilter | `/api/v1/eci/**`；`/actuator/health` 公开 |
+| ApiKeyAuthFilter | `/api/v1/eci/**`；读 `HttpApiKeyStore`（当前钥或重叠期内上一把）；`/actuator/health` 公开 |
+| RuntimeCredentialService | 每 resource 当前云钥：种子、GET/PUT、热切；`test` 只读 |
+| HttpApiKeyStore | HTTP Api-Key 双钥；与云 AK 无关 |
 
 ### 实例状态机（本地权威）
 
@@ -157,20 +167,18 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 
 | 名称 | 用途 | 来源 |
 |------|------|------|
-| `eci.api-key` / `X-Api-Key` | 保护本服务 HTTP | **自建** |
-| 阿里云调用身份 | 调 ECI OpenAPI | ECS RAM 角色 **或** `ALIBABA_CLOUD_*` 环境变量 |
+| HTTP Api-Key（`eci.api-key` / `X-Api-Key`） | 保护本服务 REST | **自建**；可 `PUT /credentials/http-api-key` 轮换 |
+| 阿里云当前钥 | 调 ECI OpenAPI / 本服务 OSS presign | 每种 `resource` **一把当前 AK**（库表 `eci_runtime_config`） |
 
-**重要：** `application-local.yml` 里的 `access-key-id/secret` **不会**用于建客户端（字段废弃兼容）。本机 WSL 必须：
+**8081 只有当前钥**，没有多钥目录、没有按 id 选钥。统一 AK 列表在**主后端第二步**；第二步将调用同一套 `GET/PUT /runtime-credentials`、`POST .../test`。
 
-```bash
-export ALIBABA_CLOUD_ACCESS_KEY_ID=...
-export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
-# STS 时再加 ALIBABA_CLOUD_SECURITY_TOKEN
-```
+**`.env` 是种子，不是运行时权威：** `ECI_ACCESS_KEY_*` / `ECI_OSS_*` 只在对应 current 行**不存在**时写入。已 PUT 落盘的热切结果，启动时**不会**被 `.env` 打回。
 
-否则 SDK 探 `100.100.100.200`（IMDS）超时属预期。local yml 仍要填：`api-key`、`region-id`、`vswitch-id`、`security-group-id` 等网络项。
+**`ALIBABA_CLOUD_*` 仅脚本映射：** Java **不读**该变量。`scripts/load-env.sh` 在 `ECI_ACCESS_KEY_*` 为空且无 `ALIBABA_CLOUD_SECURITY_TOKEN` 时，才把它 export 成 `ECI_ACCESS_KEY_*`。成对非空的 `eci.access-key-id/secret`（通常来自该种子）走 **STATIC_AK**。当前钥为空时才回退 ECS RAM 角色 / SDK 默认链；非 ECS 且无种子时探 `100.100.100.200`（IMDS）超时属预期。
 
-启动时 `ProviderConfig` 还会校验 `poll-interval-ms`、`task-poll-interval-sec`、超时等为正数。
+网络项仍要配：`api-key`、`region-id`、`vswitch-id`、`security-group-id`。启动时 `ProviderConfig` 还会校验轮询/超时间隔为正数。
+
+契约与 curl：[docs/API文档.md](docs/API文档.md) §5；配置详解：[docs/设计与使用说明.md](docs/设计与使用说明.md) §4。
 
 ---
 
@@ -205,6 +213,20 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 
 失败取证字段：`failureReason` 仍为短文案（≤1000）；容器日志尾部落独立字段 **`containerLogTail`**（`@Lob`），实例删除后仍可从 `GET /tasks/{id}` 读取。
 
+### 当前云钥与 HTTP Api-Key
+
+均需 `X-Api-Key`。GET/响应/日志**永不含 SK**。本期**不能**清空当前钥（避免误切 IMDS）。
+
+| 方法 | 路径 | 行为 |
+|------|------|------|
+| GET | `/runtime-credentials` | 当前钥 hint + `mode`（`MOCK` / `STATIC_AK` / RAM 链名） |
+| PUT | `/runtime-credentials` | 成对 id/secret 覆盖该 `resource` 并热重建 |
+| POST | `/runtime-credentials/test` | 测草稿或已保存当前钥；**不**落盘、不热切 |
+| PUT | `/credentials/http-api-key` | 轮换 HTTP 钥；重叠默认 3600s |
+| POST | `/credentials/revoke-previous-api-key` | 立即切断上一把 |
+
+`resource`：`ECI_OPENAPI` \| `OSS`。Mock 下测 ECI → 400。OSS 缺 endpoint/bucket → 400。完整字段见 [docs/API文档.md](docs/API文档.md) §5。
+
 ### 其它
 
 | GET | `/actuator/health` | 无 Api-Key |
@@ -227,7 +249,8 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
 | `failure-log-grace-sec` | 默认 **90**（`ECI_FAILURE_LOG_GRACE_SEC`）；测试 / 可配 `0` |
 | 成功任务日志 | **不存** `containerLogTail`（防磁盘膨胀） |
 | 生产选型 ECI/CCI | 待定，不阻塞 |
-| 云凭证 | ECS RAM / `ALIBABA_CLOUD_*`；**yml AK 不建客户端** |
+| 云凭证 | 每 resource 一把当前钥（落盘+热切）；`.env` 仅种子；Java 不读 `ALIBABA_CLOUD_*`；成对 AK → STATIC_AK；空则 RAM/默认链 |
+| 8081 目录 | **不做**；列表与绑定在主后端第二步 |
 | T1 范围 | Task 1–7 完成；一期 mock 验收 closure |
 | `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 `TaskLifecycleWatcher` 在 Describe=Succeeded 且实例 TERMINATED 后写入 |
 | 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
@@ -298,7 +321,8 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 - **T3+** 生命周期测试补强（2026-07-30）  
 - **O1–O5.2** OSS 配置/解析/API/联调镜像/文档（2026-07-31）  
 - **L1** 失败日志可观测性（删前 Tail + 宽限，2026-09-02）  
-- **下一刀** 联合 3dgs（traceback / `PYTHONUNBUFFERED`）；可选真云失败取证冒烟；O5.3 云端验收清单收尾  
+- **C1–C5** 当前钥执行器（STATIC_AK、落盘热切、HTTP 双钥、POST test、文档，2026-09-09）  
+- **下一刀** 联合 3dgs（traceback / `PYTHONUNBUFFERED`）；可选真云失败取证冒烟；O5.3 云端验收清单收尾；**第二步**主后端 AK 目录  
 
 ### §5.1 变更记录：失败日志可观测性（2026-09-02）
 
@@ -362,9 +386,9 @@ export ECI_API_KEY=dev-eci-api-key-change-me
 mvn spring-boot:run
 
 # 真实（推荐 .env）:
-#   cp .env.example .env  # 填 ECI_*、ALIBABA_CLOUD_*、ECI_OSS_*（内网 endpoint）
+#   cp .env.example .env  # 填 ECI_*、种子 ECI_ACCESS_KEY_*（或 ALIBABA_CLOUD_* 仅供 load-env 映射）、ECI_OSS_*（内网 endpoint）
 ./scripts/start.sh
-# 日志：ECI provider mode: ALIYUN …；OSS enabled 时勿见 skipped（除非故意关闭）
+# 日志：成对种子时 credentialMode=STATIC_AK；OSS enabled 时勿见 skipped（除非故意关闭）
 ```
 
 自动化：`mvn test`（Mock，不调云）。
@@ -389,7 +413,7 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 
 - **不要**修改 `backend/`，除非用户明确要求  
 - **不要**把 `application-local.yml`、长期 AccessKey、Api-Key 写入 Git 或文档明文  
-- 云身份用 **ECS RAM / `ALIBABA_CLOUD_*`**，勿假设 yml AK 生效  
+- 云身份：当前钥成对则 **STATIC_AK**（种子 `ECI_ACCESS_KEY_*`；`ALIBABA_CLOUD_*` 仅 `load-env.sh` 映射）；空则 ECS RAM / 默认链  
 - 保持：本地状态权威、异步创建、删除=删云、一任务一实例  
 - 实现进度与下一刀以计划文件勾选为准；逐步测试命令看 `docs/测试说明.md`  
 - 用户未明确要求时：**不要**自动 `git commit` / `git push`  
@@ -405,14 +429,18 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | `../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md` | 编排实现计划 |
 | `../docs/superpowers/plans/2026-07-30-eci-oss-integration.md` | OSS 实现计划 |
 | `../docs/superpowers/2026-07-31-eci-oss-handoff.md` | OSS 续跑摘要 |
+| `../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md` | 当前钥第一步 C1–C5 |
+| `../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md` | 当前钥设计（第二步目录规划） |
 | `scripts/run-hello-python.sh` | 真云普通 Python 任务 |
 | `scripts/debug-oss-smoke.sh` | 真云 OSS storage 冒烟 |
 | `scripts/submit-3dgs-standard.sh` | POST 标准档 3DGS |
 | `scripts/3dgs-bootstrap.py` | 容器内 3DGS bootstrap |
 | `docs/测试说明.md` | Mock/真云逐步测试 |
 | `docs/设计与使用说明.md` | 结构 / 配置 / §4.4 OSS |
-| `docs/API文档.md` | HTTP 契约 / storage / `containerLogTail` |
+| `docs/API文档.md` | HTTP 契约 / storage / 当前钥 §5 / `containerLogTail` |
 | `docs/3dgs-ECI使用说明.md` | 3DGS 真云提交、验收、踩坑与失败取证 |
+| `src/.../credential/RuntimeCredentialController.java` | GET/PUT 当前钥、POST test |
+| `src/.../credential/HttpApiKeyController.java` | HTTP Api-Key 轮换 / 吊销 |
 | `src/.../task/EciTaskService.java` | 任务业务（含 `onInstanceFailed(..., logTail)`） |
 | `src/.../task/storage/TaskStorageResolver.java` | storage → env |
 | `src/.../oss/OssStorageService.java` | presign |

@@ -1,9 +1,11 @@
 package com.xjicloud.eci.config;
 
 import com.xjicloud.eci.credential.AliyunResource;
+import com.xjicloud.eci.credential.RecordingRuntimeCredentialProbe;
 import com.xjicloud.eci.credential.RuntimeCredentialEntity;
 import com.xjicloud.eci.credential.RuntimeCredentialRepository;
 import com.xjicloud.eci.credential.RuntimeCredentialService;
+import com.xjicloud.eci.credential.RuntimeCredentialTester;
 import com.xjicloud.eci.oss.OssStorageService;
 import com.xjicloud.eci.provider.AliyunEciProvider;
 import com.xjicloud.eci.provider.EciProvider;
@@ -49,6 +51,24 @@ class ProviderConfigValidationTest {
     @Test
     void acceptsPositiveIntervals() {
         ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(validProperties());
+        assertThatCode(() -> runner.run(null)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsNegativeApiKeyOverlapSec() throws Exception {
+        EciProperties properties = validProperties();
+        properties.setApiKeyOverlapSec(-1);
+        ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(properties);
+        assertThatThrownBy(() -> runner.run(null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("eci.api-key-overlap-sec");
+    }
+
+    @Test
+    void acceptsZeroApiKeyOverlapSec() {
+        EciProperties properties = validProperties();
+        properties.setApiKeyOverlapSec(0);
+        ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(properties);
         assertThatCode(() -> runner.run(null)).doesNotThrowAnyException();
     }
 
@@ -118,7 +138,8 @@ class ProviderConfigValidationTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<OssStorageService> ossStorage = mock(ObjectProvider.class);
         RuntimeCredentialService service = new RuntimeCredentialService(
-                repository, properties, new OssProperties(), eciProvider, ossStorage);
+                repository, properties, new OssProperties(), eciProvider, ossStorage,
+                new RuntimeCredentialTester(properties, new OssProperties(), new RecordingRuntimeCredentialProbe()));
 
         new ProviderConfig().eciProvider(properties, service);
 

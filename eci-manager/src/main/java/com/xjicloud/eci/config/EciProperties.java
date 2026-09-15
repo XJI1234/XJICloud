@@ -15,6 +15,10 @@ public class EciProperties {
     /** HTTP 鉴权密钥，对应请求头 X-Api-Key。 */
     private String apiKey = "";
     /**
+     * 轮换 HTTP Api-Key 后旧钥仍可用的秒数；{@code 0} 立即切断。默认 3600。
+     */
+    private int apiKeyOverlapSec = 3600;
+    /**
      * 成对非空时 {@link com.xjicloud.eci.provider.AliyunEciProvider} 走 STATIC_AK。
      * 对应环境变量 {@code ECI_ACCESS_KEY_ID}（可由 {@code load-env.sh} 从 {@code ALIBABA_CLOUD_*} 映射）。
      */
@@ -77,6 +81,14 @@ public class EciProperties {
 
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
+    }
+
+    public int getApiKeyOverlapSec() {
+        return apiKeyOverlapSec;
+    }
+
+    public void setApiKeyOverlapSec(int apiKeyOverlapSec) {
+        this.apiKeyOverlapSec = apiKeyOverlapSec;
     }
 
     public String getAccessKeyId() {

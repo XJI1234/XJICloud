@@ -35,6 +35,7 @@ management:
 eci:
   mock: true
   api-key: ${ECI_API_KEY:dev-eci-api-key-change-me}
+  api-key-overlap-sec: ${ECI_API_KEY_OVERLAP_SEC:3600}
   region-id: ${ECI_REGION_ID:cn-hangzhou}
   vpc-id: ${ECI_VPC_ID:}
   vswitch-id: ${ECI_VSWITCH_ID:}

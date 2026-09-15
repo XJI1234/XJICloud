@@ -6,10 +6,11 @@
 # WARNING: real ECI instances incur cost (GPU much higher). Always DELETE when done.
 # Task path auto-deletes on Succeeded/Failed/TIMEOUT; still confirm in console.
 #
-# Cloud identity (yml AccessKey is IGNORED for the Aliyun client):
-#   Production ECS: bind instance RAM role; set ecs-ram-role-name (or ALIBABA_CLOUD_ECS_METADATA).
-#   Local WSL (no IMDS): export ALIBABA_CLOUD_ACCESS_KEY_ID / SECRET (+ SECURITY_TOKEN for STS).
-#   Without env or role, startup may wait ~1–2s probing 100.100.100.200 then fail (expected).
+# Cloud identity: eci.access-key-id/secret (or ECI_ACCESS_KEY_* / mapped ALIBABA_CLOUD_*)
+# are the current-key *seed* — written only if the DB row is missing. Paired keys → STATIC_AK.
+# Java does not read ALIBABA_CLOUD_*; load-env.sh maps them when ECI_ACCESS_KEY_* is empty.
+#   Production ECS with empty current key: bind instance RAM role; set ecs-ram-role-name.
+#   Without seed or role, startup may wait ~1–2s probing 100.100.100.200 then fail (expected).
 #
 # Create GPU example (POST body): instanceType=ecs.gn7i-c32g1.8xlarge, gpu=1
 #   May fail with OperationDenied.NoStock if the vSwitch zone has no capacity.
