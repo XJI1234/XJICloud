@@ -1,12 +1,12 @@
-# eci-manager — Agent 上下文（AGENT.md）
+# eci-manager — Agent 上下文（AGENT_CONTEXT.md）
 
-> 供 Cursor / 其他 AI Agent 快速理解 **eci-manager** 子工程：结构、架构、已锁定决策、联调结论与约束。  
+> 供 Cursor / 其他 AI Agent 快速理解 **eci-manager** 子工程：结构、架构、已锁定决策、联调结论与约束。执行规则见 [AGENTS.md](AGENTS.md)。  
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-09-09（C1–C5 当前钥执行器：STATIC_AK、落盘热切、HTTP 双钥、POST test、文档）
+**最后更新：** 2026-09-16（`shmSize`：Create 挂 Memory EmptyDir 到 `/dev/shm`；3dgs 标准档 8Gi）
 
-**3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → grace → delete；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
+**3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`，默认 `shmSize=8Gi`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → grace → delete；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
 ---
 
@@ -37,6 +37,10 @@
   - ✅ HTTP Api-Key 双钥轮换（`/credentials/http-api-key`）
   - ✅ `POST /runtime-credentials/test`（草稿或已保存；不改当前）
   - ✅ 文档：8081 只有当前钥；列表在主后端第二步；`.env` 是种子
+- **已交付（shm EmptyDir，2026-09-16）：**
+  - ✅ `POST /tasks` / `POST /instances` 可选 `shmSize`；配置 `eci.default-shm-size`（默认空）
+  - ✅ `AliyunEciProvider` 挂 Memory EmptyDir 到 `/dev/shm`；须 >64Mi 且严格小于容器 memory
+  - ✅ 3dgs 标准档传 `8Gi`；bootstrap 不再 remount / 强制 `num_workers=0`
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 - **OSS 增量 PRD：** [`ECI任务OSS对象存储集成产品需求文档(PRD).md`](../ECI任务OSS对象存储集成产品需求文档(PRD).md) **v1.0**
@@ -54,8 +58,9 @@
 eci-manager/
 ├── pom.xml
 ├── README.md
-├── AGENT.md                         # 本文件
-├── .env.example                     # 含 ECI_OSS_*、ECI_FAILURE_LOG_*（.env gitignore）
+├── AGENTS.md                        # Agent 执行规则与硬约束
+├── AGENT_CONTEXT.md                 # 详细上下文、决策、联调与测试记录（本文件）
+├── .env.example                     # 含 ECI_OSS_*、ECI_FAILURE_LOG_*、ECI_DEFAULT_SHM_SIZE（.env gitignore）
 ├── scripts/
 │   ├── load-env.sh / start.sh
 │   ├── run-hello-python.sh          # 真云：普通 Python 任务（无 storage）
@@ -196,13 +201,13 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 | GET | `/instances/{id}` | 详情（含 `taskId`） |
 | POST | `/instances/{id}/refresh` | Describe 回写；可推进任务 Running/Failed |
 
-创建可选：`name`、`image`、`cpu`、`memory`、`env`、`instanceType`、`gpu`、`imageSnapshotId`、`restartPolicy`、`command`、`args`。
+创建可选：`name`、`image`、`cpu`、`memory`、`env`、`instanceType`、`gpu`、`imageSnapshotId`、`shmSize`、`restartPolicy`、`command`、`args`。
 
 ### 任务
 
 | 方法 | 路径 | 行为 |
 |------|------|------|
-| POST | `/tasks` | **`image` 必填**；可选 `storage`；立即返回 taskId + STARTING + instanceId |
+| POST | `/tasks` | **`image` 必填**；可选 `storage`、`shmSize`；立即返回 taskId + STARTING + instanceId |
 | GET | `/tasks?status=` | 列表 |
 | GET | `/tasks/{id}` | 详情（失败时含 `failureReason` + `containerLogTail`） |
 | POST | `/tasks/{id}/cancel` | 幂等 CANCELLED + 删关联实例 |
@@ -256,6 +261,7 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 | 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
 | Always/OnFailure | 忽略云 Failed/Succeeded 时**不**误调 `onInstanceRunning`（Watcher 2026-07-28 修正） |
 | 测试文档 | `docs/测试说明.md` §0.3 自动化覆盖表 |
+| `/dev/shm` | 可选 `shmSize` 挂 Memory EmptyDir；默认不挂（64Mi）；3dgs 标准档 `8Gi`；计入实例内存，须小于 `memory` |
 
 ### 真云联调脚本（2026-07-31）
 
@@ -322,6 +328,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 - **O1–O5.2** OSS 配置/解析/API/联调镜像/文档（2026-07-31）  
 - **L1** 失败日志可观测性（删前 Tail + 宽限，2026-09-02）  
 - **C1–C5** 当前钥执行器（STATIC_AK、落盘热切、HTTP 双钥、POST test、文档，2026-09-09）  
+- **shm** Memory EmptyDir 放大 `/dev/shm`（`shmSize`，2026-09-16）  
 - **下一刀** 联合 3dgs（traceback / `PYTHONUNBUFFERED`）；可选真云失败取证冒烟；O5.3 云端验收清单收尾；**第二步**主后端 AK 目录  
 
 ### §5.1 变更记录：失败日志可观测性（2026-09-02）
@@ -340,7 +347,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 | `TaskLifecycleWatcher` | Failed + TIMEOUT：`failPersistThenDelete`；TIMEOUT 不再先删后标失败 |
 | `EciProperties` / yml / `.env.example` | `failure-log-tail-lines=1000`，`failure-log-grace-sec=90` |
 | 测试 | `TaskLifecycleWatcherUnitTest` InOrder；`EciTaskLifecycleMockFailedIT` 删后仍可读 Tail |
-| 文档 | `docs/API文档.md`、本文件、`docs/3dgs-ECI使用说明.md` |
+| 文档 | `docs/API文档.md`、`AGENT_CONTEXT.md`、`docs/3dgs-ECI使用说明.md` |
 
 **范围外（留给联合 3dgs）：** bootstrap 异常 traceback→stderr+flush；POST env `PYTHONUNBUFFERED=1`；方案 B（OSS 全量日志）。
 
@@ -353,6 +360,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 5. 启动校验：轮询/超时间隔必须为正  
 6. OSS：ECI 任务用内网 endpoint；`storage` 门控 400 不落库  
 7. 失败取证：`fetchContainerLog` 异常返回可读串/空，**不阻断**后续 delete；测试勿用 yml `eci:` 整树覆盖（会抹掉 `task-poll-interval-sec`），用 `application.properties` 扁平键  
+8. shm：`shmSize` 创建时挂 Memory EmptyDir 到 `/dev/shm`；须 >64Mi 且严格小于容器 memory；SDK 1.3.3 无 SizeLimit setter，用 `Volume.1.EmptyDirVolume.SizeLimit` 查询参数；3dgs 勿再 `num_workers=0`  
 
 ### 真实联调结论（基座 + OSS）
 
@@ -369,7 +377,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 ### 运维注意
 
 - 真实模式**计费**：测完必须 DELETE/cancel，并到控制台确认无残留  
-- **不要**把长期 AK / Api-Key 写入 Git 或 AGENT.md 明文  
+- **不要**把长期 AK / Api-Key 写入 Git 或 `AGENTS.md` / `AGENT_CONTEXT.md` 明文  
 - 路径参数用真实 UUID，勿写字面量 `{id}`  
 - `ECI_API_KEY` 须与配置 `api-key` 一致；新终端先 `source scripts/load-env.sh`  
 - ECI 拉个人 ACR：用 **-vpc** 域名；本机 push 用公网 ACR 域名  
@@ -445,8 +453,9 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | `src/.../task/storage/TaskStorageResolver.java` | storage → env |
 | `src/.../oss/OssStorageService.java` | presign |
 | `src/.../provider/EciProvider.java` | Create/Describe/**fetchContainerLog**/Delete |
-| `src/.../provider/AliyunEciProvider.java` | 真实云 SDK + DescribeContainerLog + Failed 诊断串 |
+| `src/.../provider/AliyunEciProvider.java` | 真实云 SDK + DescribeContainerLog + Failed 诊断串 + shm EmptyDir |
+| `src/.../provider/ShmSize.java` | shm SizeLimit 规范化与相对 memory 校验 |
 | `src/.../lifecycle/TaskLifecycleWatcher.java` | 终态轮询；失败删前抓日志 |
 | `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 / 任务回调 |
-| `src/.../config/EciProperties.java` | 含 `failureLogTailLines` / `failureLogGraceSec` |
+| `src/.../config/EciProperties.java` | 含 `failureLogTailLines` / `failureLogGraceSec` / `defaultShmSize` |
 | `src/.../config/ProviderConfig.java` | Mock/Aliyun 装配 |

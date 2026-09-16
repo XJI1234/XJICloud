@@ -38,6 +38,9 @@ class EciTaskApiTest {
     @Autowired
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
+    @Autowired
+    private EciTaskRepository taskRepository;
+
     @Test
     void rejectsMissingApiKey() throws Exception {
         mockMvc.perform(post("/api/v1/eci/tasks")
@@ -108,6 +111,50 @@ class EciTaskApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.imageSnapshotId").value("imc-test-snapshot-id"));
+    }
+
+    @Test
+    void submitTaskWithShmSizeEchoesCanonicalValue() throws Exception {
+        mockMvc.perform(post("/api/v1/eci/tasks")
+                        .header("X-Api-Key", "test-api-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"nginx:alpine\",\"shmSize\":\"256M\",\"memory\":2.0,\"restartPolicy\":\"Never\",\"maxRuntimeSec\":60}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.shmSize").value("256Mi"));
+    }
+
+    @Test
+    void submitTaskRejectsInvalidOrOversizedShmSizeWithoutPersisting() throws Exception {
+        long before = taskRepository.count();
+
+        mockMvc.perform(post("/api/v1/eci/tasks")
+                        .header("X-Api-Key", "test-api-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"nginx:alpine\",\"shmSize\":\"8Gi\",\"restartPolicy\":\"Never\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("严格小于")));
+
+        mockMvc.perform(post("/api/v1/eci/tasks")
+                        .header("X-Api-Key", "test-api-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"nginx:alpine\",\"shmSize\":\"8\",\"restartPolicy\":\"Never\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("带单位")));
+
+        assertThat(taskRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    void submitTaskWithoutShmSizeLeavesFieldNull() throws Exception {
+        mockMvc.perform(post("/api/v1/eci/tasks")
+                        .header("X-Api-Key", "test-api-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"nginx:alpine\",\"restartPolicy\":\"Never\",\"maxRuntimeSec\":60}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shmSize").value(nullValue()));
     }
 
     @Test

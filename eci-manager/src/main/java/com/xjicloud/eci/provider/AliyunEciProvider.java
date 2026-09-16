@@ -156,17 +156,20 @@ public class AliyunEciProvider implements EciProvider {
             container.setEnvironmentVars(envVars);
         }
 
+        attachShmVolume(request, container, spec.shmSize());
+
         request.setContainers(List.of(container));
 
         try {
             long start = System.currentTimeMillis();
             CreateContainerGroupResponse response = client.getAcsResponse(request);
-            log.info("ECI create ok cloudInstanceId={} instanceType={} gpu={} restartPolicy={} imageSnapshotId={} elapsedMs={}",
+            log.info("ECI create ok cloudInstanceId={} instanceType={} gpu={} restartPolicy={} imageSnapshotId={} shmSize={} elapsedMs={}",
                     response.getContainerGroupId(),
                     spec.instanceType(),
                     spec.gpu(),
                     spec.restartPolicy(),
                     spec.imageSnapshotId(),
+                    spec.shmSize(),
                     System.currentTimeMillis() - start);
             return response.getContainerGroupId();
         } catch (ClientException e) {
@@ -344,6 +347,32 @@ public class AliyunEciProvider implements EciProvider {
         }
         String detail = joiner.toString();
         return StringUtils.hasText(detail) ? detail : null;
+    }
+
+    /**
+     * 将 Memory 类型 EmptyDir 挂到 {@code /dev/shm}，以放大 ECI 默认 64Mi 共享内存。
+     */
+    static void attachShmVolume(
+            CreateContainerGroupRequest request,
+            CreateContainerGroupRequest.Container container,
+            String shmSize) {
+        if (!StringUtils.hasText(shmSize)) {
+            return;
+        }
+        CreateContainerGroupRequest.Volume volume = new CreateContainerGroupRequest.Volume();
+        volume.setName(ShmSize.VOLUME_NAME);
+        volume.setType(ShmSize.VOLUME_TYPE);
+        volume.setEmptyDirVolumeMedium(ShmSize.MEDIUM_MEMORY);
+        request.setVolumes(List.of(volume));
+        // aliyun-java-sdk-eci 1.3.3 的 Volume 只有 Medium，没有 SizeLimit setter；
+        // OpenAPI 仍认 Volume.N.EmptyDirVolume.SizeLimit，须单独写入查询参数。
+        request.putQueryParameter("Volume.1.EmptyDirVolume.SizeLimit", shmSize.trim());
+
+        CreateContainerGroupRequest.Container.VolumeMount mount =
+                new CreateContainerGroupRequest.Container.VolumeMount();
+        mount.setName(ShmSize.VOLUME_NAME);
+        mount.setMountPath(ShmSize.MOUNT_PATH);
+        container.setVolumeMounts(List.of(mount));
     }
 
     /**

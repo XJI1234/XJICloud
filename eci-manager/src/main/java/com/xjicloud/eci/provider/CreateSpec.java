@@ -21,6 +21,8 @@ public record CreateSpec(
         /** 可选；覆盖镜像 CMD（ECI Container.Args）。 */
         List<String> args,
         /** 可选；镜像缓存 ID，透传 ECI ImageSnapshotId。 */
-        String imageSnapshotId
+        String imageSnapshotId,
+        /** 可选；规范化后的 shm SizeLimit（如 {@code 8Gi}）；空则不挂 EmptyDir。 */
+        String shmSize
 ) {
 }

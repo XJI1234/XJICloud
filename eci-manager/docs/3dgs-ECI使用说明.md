@@ -21,7 +21,7 @@
 | 地域 | `cn-hangzhou`（ACR / ECI / OSS 一致） |
 | 镜像 | `crpi-urdof1biefqsi8uj-vpc.cn-hangzhou.personal.cr.aliyuncs.com/ylif4/3dgs:1.0.0`（**固定 tag**，勿用 `:latest`） |
 | 镜像缓存（默认） | `imc-bp15yiuttnxf8fh9n9fy` |
-| 规格（默认） | `ecs.gn7i-c16g1.4xlarge`（A10 24GB），`cpu=16` `memory=60` **`gpu=1`** |
+| 规格（默认） | `ecs.gn7i-c16g1.4xlarge`（A10 24GB），`cpu=16` `memory=60` **`gpu=1`**，`shmSize=8Gi` |
 | OSS 输入 | `oss://eci-manager-bucket/3dgs/raw/<建筑名>.zip` |
 | OSS 输出 | `oss://eci-manager-bucket/3dgs/exports/<建筑名>.ply` |
 
@@ -130,6 +130,7 @@ cd ~/XJI/XJICloud/eci-manager
 | `PACKED` / `ANTIALIASED` | `1` / `1` |
 | `MAX_LONG_EDGE` | `2048` |
 | `MAX_RUNTIME_SEC` | `21600`（6 小时） |
+| `SHM_SIZE` | `8Gi`（POST `shmSize`；Memory EmptyDir 挂 `/dev/shm`） |
 | `IMAGE_SNAPSHOT_ID` | `imc-bp15yiuttnxf8fh9n9fy` |
 | 轮询 | `POLL_SLEEP_SEC=15`，最多约 5 小时（`POLL_MAX=1200`） |
 
@@ -141,6 +142,9 @@ BUILDING=某楼 ./scripts/submit-3dgs-standard.sh
 
 # 短测（约十余分钟量级，含 COLMAP + 首次 CUDA 编译）
 MAX_STEPS=100 ./scripts/submit-3dgs-standard.sh
+
+# 覆盖 shm（须小于任务 memory=60）
+SHM_SIZE=16Gi ./scripts/submit-3dgs-standard.sh
 
 # 后台跑
 POLL_SLEEP_SEC=20 nohup ./scripts/submit-3dgs-standard.sh > /tmp/eci_3dgs_run.log 2>&1 &
@@ -185,13 +189,10 @@ curl -s "$ECI_BASE/api/v1/eci/tasks/<TASK_ID>" -H "X-Api-Key: $ECI_API_KEY"
 
 云控制台 / `DescribeContainerLog` 里常见假象：
 
-1. **`DataLoader patch failed: No module named 'torch'`**  
-   系统 Python 无 torch 的噪声。后面若有 **`DataLoader num_workers=0 (ECI shm)`**，说明 venv 补丁已生效，可忽略前者。
-
-2. **`ensuring CUDA extension is compiled...` 数分钟无新行**  
+1. **`ensuring CUDA extension is compiled...` 数分钟无新行**  
    首次编译 CUDA 扩展正常，实测约 **5–6 分钟**（例如 ~350s）后才会出现 `CUDA extension ready`。
 
-3. **进度条一直显示 `0%| … 0/15000`**  
+2. **进度条一直显示 `0%| … 0/15000`**  
    tqdm 用 `\r` 原地刷新，阿里云日志 Tail 常常只留下一行开头。任务仍是 `RUNNING` 时，**不等于**卡在第 0 步。可看换行里程碑（COLMAP QC、`Model initialized`、中段 **7500** eval/save、最终 ply/PUT）。
 
 eci-manager **成功路径不落库** `containerLogTail`（防膨胀）；**没有**实时「训练进度 %」API。进度需看阿里云容器日志，或自行用 OpenAPI `DescribeContainerLog` 解析 tqdm 中的 `step/total`。
@@ -225,7 +226,7 @@ curl -s "$ECI_BASE/api/v1/eci/tasks/<TASK_ID>" -H "X-Api-Key: $ECI_API_KEY" \
 | 一任务一容器 | 不能拆成「这个容器 prepare、下一个 colmap」；下一容器本地盘是空的 |
 | Presign 时长 | `ECI_OSS_PRESIGN_EXPIRATION_MINUTES=1440`；训到一半链接过期会导致 PUT 失败 |
 | OSS endpoint | 容器侧必须用 **内网**；本机上传用 **公网** |
-| `/dev/shm` | ECI 默认约 64MiB。bootstrap 强制 `DataLoader num_workers=0`，避免 step-0 shared memory 分配失败 |
+| `/dev/shm` | ECI 默认约 64MiB。创建任务传 `shmSize`（标准档 `8Gi`）挂 Memory EmptyDir 到 `/dev/shm`。Memory 计入实例内存，须小于 `memory`。启动日志 `df -h /dev/shm` 应约为 8G，且不应再出现 `DataLoader num_workers=0 (ECI shm)` |
 | 临时盘 | 默认 ephemeral 约 30GiB。大场景 + 长训 densify 后 `results/` 很大，后期可能 ENOSPC；必要时提高规格临时盘或缩短步数 / 限 densify |
 | 显存 | A10 24GB + `PACKED=1` 为当前默认；极长训 densify 仍可能顶满显存导致 Failed |
 | 镜像 | 固定 `:1.0.0` + Ready 的镜像缓存，避免每次在 GPU 上解压大镜像 |

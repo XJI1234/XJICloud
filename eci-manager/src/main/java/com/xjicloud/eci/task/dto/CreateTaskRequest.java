@@ -20,6 +20,11 @@ public class CreateTaskRequest {
     private Integer gpu;
     /** 可选；镜像缓存 ID（如 imc-xxx），透传阿里云 ImageSnapshotId。 */
     private String imageSnapshotId;
+    /**
+     * 可选；挂 Memory EmptyDir 到 {@code /dev/shm} 的大小，如 {@code 8Gi} / {@code 256Mi}。
+     * 未传则用 {@code eci.default-shm-size}；二者皆空则保持 ECI 默认 64Mi。
+     */
+    private String shmSize;
     /** Never / OnFailure / Always。 */
     private String restartPolicy;
     /** 正整数；未传则用 {@code eci.default-max-runtime-sec}。 */
@@ -98,6 +103,14 @@ public class CreateTaskRequest {
 
     public void setImageSnapshotId(String imageSnapshotId) {
         this.imageSnapshotId = imageSnapshotId;
+    }
+
+    public String getShmSize() {
+        return shmSize;
+    }
+
+    public void setShmSize(String shmSize) {
+        this.shmSize = shmSize;
     }
 
     public String getRestartPolicy() {

@@ -152,6 +152,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `eci.default-memory` | `2.0` | |
 | `eci.default-restart-policy` | `Never` | |
 | `eci.default-max-runtime-sec` | `14400`（4 小时） | 未传 `maxRuntimeSec` 时写入任务；超时强制删 |
+| `eci.default-shm-size` | 空 | 未传 `shmSize` 时使用；空则不挂 EmptyDir，保留 64Mi `/dev/shm` |
 | `eci.task-poll-interval-sec` | `10` | 运行中任务轮询云终态周期 |
 | `eci.failure-log-tail-lines` | `1000` | Failed/TIMEOUT 删前 `DescribeContainerLog` 尾部行数 |
 | `eci.failure-log-grace-sec` | `90` | 落库后、删实例前取证宽限（秒）；`0` 关闭 |
@@ -188,6 +189,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `instanceType` | string | 否 | ECS 规格，如 GPU：`ecs.gn7i-c32g1.8xlarge` |
 | `gpu` | integer | 否 | 容器 GPU 个数；GPU 规格时通常传 `1` |
 | `imageSnapshotId` | string | 否 | 镜像缓存 ID（如 `imc-xxx`）；透传阿里云 `ImageSnapshotId`，加速镜像拉取 |
+| `shmSize` | string | 否 | 放大 `/dev/shm`：创建时挂 Memory EmptyDir。如 `8Gi` / `256Mi`（也接受 `8G` / `256M`）。未传则用 `eci.default-shm-size`；二者皆空则保持 ECI 默认 64Mi。必须 **大于 64Mi** 且 **严格小于** 容器 `memory`（GiB），否则 **400，不落库**。Memory EmptyDir 计入实例内存 |
 | `restartPolicy` | string | 否 | `Never` / `OnFailure` / `Always`；默认 `Never` |
 | `maxRuntimeSec` | integer | 否 | 正整数；默认 `14400`。超时强制删 + `FAILED`/`TIMEOUT` |
 | `env` | object | 否 | 透传到容器的环境变量；与 `storage` 同时存在时，**调用方同名键覆盖** OSS 注入键 |
@@ -230,6 +232,7 @@ RUNNING → STOPPING → TERMINATED | FAILED
   "name": "cloud-task-1",
   "image": "registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2",
   "imageSnapshotId": "imc-2zebxkiifuyzzlhl",
+  "shmSize": "256Mi",
   "restartPolicy": "Never",
   "maxRuntimeSec": 600,
   "cpu": 1.0,
@@ -270,6 +273,7 @@ OSS 联调（`mode=test` + 联调镜像）：
 | `instanceType` | string \| null | |
 | `gpu` | integer \| null | |
 | `imageSnapshotId` | string \| null | 镜像缓存 ID；未使用时为 `null` |
+| `shmSize` | string \| null | 规范化后的 shm SizeLimit（如 `8Gi`）；未放大时为 `null` |
 | `restartPolicy` | string | |
 | `maxRuntimeSec` | integer | |
 | `env` | object | 含合并后的 OSS 注入键（若请求带了 `storage`） |
@@ -366,10 +370,11 @@ OSS 联调（`mode=test` + 联调镜像）：
 | `instanceType` | string | 可选 ECS 规格 |
 | `gpu` | integer | 可选 GPU 个数 |
 | `imageSnapshotId` | string | 可选镜像缓存 ID（如 `imc-xxx`） |
+| `shmSize` | string | 可选；Memory EmptyDir 挂到 `/dev/shm`。规则同任务 §3.1 |
 | `restartPolicy` | string | 默认 `Never` |
 | `command` / `args` | string[] | 覆盖 ENTRYPOINT / CMD |
 
-> 创建时可传 `restartPolicy` / `command` / `args` / `instanceType` / `gpu` / `imageSnapshotId`，会落库并调云；**当前 `InstanceResponse` 响应体不含这些字段**（以任务详情或后续版本为准）。
+> 创建时可传 `restartPolicy` / `command` / `args` / `instanceType` / `gpu` / `imageSnapshotId` / `shmSize`，会落库并调云；**当前 `InstanceResponse` 响应体不含这些字段**（以任务详情或后续版本为准）。
 
 #### 请求示例（真云推荐 VPC 镜像）
 
@@ -674,6 +679,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | 手动实例 CRUD / refresh | `/api/v1/eci/instances` | **已实现** |
 | `restartPolicy` / `command` / `args` 透传创建 | 创建请求体 | **已实现** |
 | `imageSnapshotId` 镜像缓存加速 | 创建请求体；透传 `CreateContainerGroup.ImageSnapshotId` | **已实现** |
+| `shmSize` 放大 `/dev/shm` | 创建请求体；Memory EmptyDir 挂 `/dev/shm` | **已实现** |
 | 任务提交（`image` 必填） | `POST /tasks` | **已实现** |
 | 可选 `storage`（OSS presign 注入 env） | `POST /tasks` | **已实现**（一期无响应 `storageResolved`） |
 | 任务列表 / 详情 | `GET /tasks`、`GET /tasks/{id}` | **已实现** |

@@ -66,6 +66,11 @@ public class EciProperties {
      * 失败落库后、发起删除前的取证宽限秒数；{@code 0} 关闭。
      */
     private int failureLogGraceSec = 90;
+    /**
+     * 任务/实例未传 {@code shmSize} 时的默认 {@code /dev/shm} 大小（如 {@code 256Mi}）。
+     * 空则不挂 Memory EmptyDir，保留 ECI 默认 64Mi。
+     */
+    private String defaultShmSize = "";
 
     public boolean isMock() {
         return mock;
@@ -249,5 +254,13 @@ public class EciProperties {
 
     public void setFailureLogGraceSec(int failureLogGraceSec) {
         this.failureLogGraceSec = failureLogGraceSec;
+    }
+
+    public String getDefaultShmSize() {
+        return defaultShmSize;
+    }
+
+    public void setDefaultShmSize(String defaultShmSize) {
+        this.defaultShmSize = defaultShmSize;
     }
 }

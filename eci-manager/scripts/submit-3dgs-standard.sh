@@ -19,6 +19,7 @@ export PACKED="${PACKED:-1}"
 export ANTIALIASED="${ANTIALIASED:-1}"
 export MAX_LONG_EDGE="${MAX_LONG_EDGE:-2048}"
 export MAX_RUNTIME_SEC="${MAX_RUNTIME_SEC:-21600}"
+export SHM_SIZE="${SHM_SIZE:-8Gi}"
 export ECI_MANAGER_ROOT="$ROOT"
 # 与手动 Shell 标准档一致：默认不设 EXTRA_TRAIN_ARGS。限 densify 可：
 #   export EXTRA_TRAIN_ARGS='--strategy.refine-stop-iter 8000'
@@ -42,7 +43,6 @@ env = {
     "ANTIALIASED": os.environ.get("ANTIALIASED", "1"),
     "MAX_LONG_EDGE": os.environ.get("MAX_LONG_EDGE", "2048"),
     "EXPECTED_DRIVER_MAJOR": "550",
-    "TORCH_FILE_SYSTEM_SHARING": "1",
 }
 extra = os.environ.get("EXTRA_TRAIN_ARGS", "").strip()
 if extra:
@@ -57,6 +57,7 @@ body = {
     "gpu": 1,
     "restartPolicy": "Never",
     "maxRuntimeSec": int(os.environ.get("MAX_RUNTIME_SEC", "21600")),
+    "shmSize": os.environ.get("SHM_SIZE", "8Gi"),
     "imageSnapshotId": os.environ.get("IMAGE_SNAPSHOT_ID") or None,
     "command": ["/opt/3dgs/docker/entrypoint.sh"],
     "args": [

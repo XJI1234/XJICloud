@@ -11,6 +11,7 @@ import com.xjicloud.eci.lifecycle.AsyncLifecycleWorker;
 import com.xjicloud.eci.provider.CloudInstanceView;
 import com.xjicloud.eci.provider.CreateSpec;
 import com.xjicloud.eci.provider.EciProvider;
+import com.xjicloud.eci.provider.ShmSize;
 import com.xjicloud.eci.task.EciTaskService;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
@@ -105,6 +106,7 @@ public class EciInstanceService {
         String imageSnapshotId = StringUtils.hasText(request.getImageSnapshotId())
                 ? request.getImageSnapshotId().trim()
                 : null;
+        String shmSize = resolveShmSize(request.getShmSize(), memory);
         String restartPolicy = StringUtils.hasText(request.getRestartPolicy())
                 ? request.getRestartPolicy().trim()
                 : properties.getDefaultRestartPolicy();
@@ -125,6 +127,7 @@ public class EciInstanceService {
         entity.setInstanceType(instanceType);
         entity.setGpu(gpu);
         entity.setImageSnapshotId(imageSnapshotId);
+        entity.setShmSize(shmSize);
         entity.setRestartPolicy(restartPolicy);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -142,7 +145,8 @@ public class EciInstanceService {
                 restartPolicy,
                 command,
                 args,
-                imageSnapshotId);
+                imageSnapshotId,
+                shmSize);
         scheduleCreateAfterCommit(id, spec);
 
         return toResponse(entity);
@@ -438,6 +442,14 @@ public class EciInstanceService {
     private EciInstanceEntity findEntity(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new BusinessException("实例不存在: " + id, HttpStatus.NOT_FOUND));
+    }
+
+    private String resolveShmSize(String raw, double memoryGiB) {
+        try {
+            return ShmSize.resolve(raw, properties.getDefaultShmSize(), memoryGiB);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(e.getMessage());
+        }
     }
 
     private InstanceResponse toResponse(EciInstanceEntity entity) {

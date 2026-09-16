@@ -45,6 +45,8 @@ eci:
   default-image: nginx:alpine
   default-cpu: 1.0
   default-memory: 2.0
+  # 空=不挂 EmptyDir，保留 ECI 默认 64Mi /dev/shm；可设 256Mi 等（须小于容器 memory）
+  default-shm-size: ${ECI_DEFAULT_SHM_SIZE:}
   create-timeout-sec: ${ECI_CREATE_TIMEOUT_SEC:300}
   delete-timeout-sec: 300
   poll-interval-ms: 3000

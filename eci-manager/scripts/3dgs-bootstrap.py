@@ -7,7 +7,6 @@ import os
 import pathlib
 import re
 import shutil
-import site
 import subprocess
 import urllib.request
 import zipfile
@@ -21,84 +20,19 @@ def log(msg: str) -> None:
     print(f"[3dgs-bootstrap] {msg}", flush=True)
 
 
-def enlarge_shm() -> None:
-    """ECI 默认 /dev/shm 约 64MiB；gsplat DataLoader 与 compose 的 shm_size=8gb 同量级。"""
-    size = os.environ.get("SHM_SIZE", "8G")
-    if not pathlib.Path("/dev/shm").exists():
-        log("/dev/shm 不存在，跳过")
-        return
-    remount = subprocess.run(
-        ["mount", "-o", f"remount,size={size}", "/dev/shm"],
-        capture_output=True,
-        text=True,
-    )
-    if remount.returncode != 0:
-        remount = subprocess.run(
-            ["mount", "-t", "tmpfs", "-o", f"size={size}", "tmpfs", "/dev/shm"],
-            capture_output=True,
-            text=True,
-        )
-    err = (remount.stderr or remount.stdout or "").strip()
-    log(f"shm size={size} rc={remount.returncode}" + (f" {err}" if err else ""))
+def log_shm() -> None:
+    """创建时已挂 Memory EmptyDir 到 /dev/shm；这里只打 df 便于真云验收。"""
     df = subprocess.run(["df", "-h", "/dev/shm"], capture_output=True, text=True)
     if df.stdout:
         log(df.stdout.strip())
-
-
-PATCH_CODE = """import sys
-try:
-    import torch.multiprocessing as mp
-    mp.set_sharing_strategy("file_system")
-except Exception:
-    pass
-try:
-    import torch.utils.data as _tud
-    _orig = _tud.DataLoader.__init__
-    def _init(self, *args, **kwargs):
-        kwargs["num_workers"] = 0
-        kwargs["persistent_workers"] = False
-        return _orig(self, *args, **kwargs)
-    _tud.DataLoader.__init__ = _init
-    print("[3dgs-bootstrap] DataLoader num_workers=0 (ECI shm)", file=sys.stderr, flush=True)
-except Exception as exc:
-    print(f"[3dgs-bootstrap] DataLoader patch failed: {exc}", file=sys.stderr, flush=True)
-"""
-
-
-def install_python_hooks() -> pathlib.Path:
-    """Ubuntu 自带 /usr/lib/python3.12/sitecustomize.py，写进 site-packages 不会被 import。
-
-    PYTHONPATH 排在标准库前面，能盖过发行版 sitecustomize；venv 里再放 .pth 双保险。
-    """
-    hook_dir = ROOT / ".eci-site"
-    hook_dir.mkdir(parents=True, exist_ok=True)
-    (hook_dir / "sitecustomize.py").write_text(PATCH_CODE, encoding="utf-8")
-    pth_body = "import eci_shm_patch\n"
-    py_name = "eci_shm_patch.py"
-    dirs = [hook_dir]
-    dirs.extend(pathlib.Path(d) for d in site.getsitepackages())
-    dirs.append(pathlib.Path("/opt/3dgs/.venv/lib/python3.12/site-packages"))
-    dirs.append(pathlib.Path("/usr/local/lib/python3.12/dist-packages"))
-    written = 0
-    for path in dirs:
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-            (path / py_name).write_text(PATCH_CODE, encoding="utf-8")
-            (path / "eci_shm_patch.pth").write_text(pth_body, encoding="utf-8")
-            written += 1
-        except OSError as exc:
-            log(f"python hook skip {path}: {exc}")
-    log(f"python hooks dir={hook_dir} written={written}")
-    return hook_dir
+    elif df.stderr:
+        log("/dev/shm: " + df.stderr.strip())
 
 
 def run(script: str, extra: list[str] | None = None) -> None:
     cmd = ["bash", str(SCRIPTS / script), BUILDING] + (extra or [])
     env = os.environ.copy()
     env["ROOT_DIR"] = str(ROOT)
-    hook = str(ROOT / ".eci-site")
-    old = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = hook if not old else hook + os.pathsep + old
     log("RUN " + " ".join(cmd))
     subprocess.check_call(cmd, env=env)
 
@@ -174,8 +108,7 @@ def put_ply(local: pathlib.Path) -> None:
 
 
 def main() -> int:
-    enlarge_shm()
-    install_python_hooks()
+    log_shm()
     ingest()
     src = ROOT / BUILDING
     if not src.is_dir():

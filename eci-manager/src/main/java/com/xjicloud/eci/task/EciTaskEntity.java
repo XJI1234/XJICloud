@@ -60,6 +60,10 @@ public class EciTaskEntity {
     @Column(length = 128)
     private String imageSnapshotId;
 
+    /** 可选；规范化后的 shm SizeLimit（如 8Gi）；空则未挂 EmptyDir。 */
+    @Column(length = 32)
+    private String shmSize;
+
     @Column(nullable = false, length = 32)
     private String restartPolicy;
 
@@ -186,6 +190,14 @@ public class EciTaskEntity {
 
     public void setImageSnapshotId(String imageSnapshotId) {
         this.imageSnapshotId = imageSnapshotId;
+    }
+
+    public String getShmSize() {
+        return shmSize;
+    }
+
+    public void setShmSize(String shmSize) {
+        this.shmSize = shmSize;
     }
 
     public String getRestartPolicy() {

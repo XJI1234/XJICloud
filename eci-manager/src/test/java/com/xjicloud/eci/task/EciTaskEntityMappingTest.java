@@ -83,6 +83,7 @@ class EciTaskEntityMappingTest {
         task.setMemory(2.0);
         task.setGpu(1);
         task.setImageSnapshotId("imc-mapping-test");
+        task.setShmSize("8Gi");
         task.setRestartPolicy("Never");
         task.setMaxRuntimeSec(60);
         task.setCreatedAt(now);
@@ -95,6 +96,7 @@ class EciTaskEntityMappingTest {
         assertThat(loaded.getImage()).isEqualTo("nginx:alpine");
         assertThat(loaded.getRestartPolicy()).isEqualTo("Never");
         assertThat(loaded.getImageSnapshotId()).isEqualTo("imc-mapping-test");
+        assertThat(loaded.getShmSize()).isEqualTo("8Gi");
         assertThat(loaded.getMaxRuntimeSec()).isEqualTo(60);
         assertThat(loaded.getInstanceId()).isNull();
     }
@@ -112,6 +114,7 @@ class EciTaskEntityMappingTest {
         entity.setMemory(2.0);
         entity.setStatus(InstanceStatus.CREATING);
         entity.setRestartPolicy("Never");
+        entity.setShmSize("256Mi");
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
 
@@ -120,5 +123,6 @@ class EciTaskEntityMappingTest {
         EciInstanceEntity loaded = instanceRepository.findById(id).orElseThrow();
         assertThat(loaded.getTaskId()).isNull();
         assertThat(loaded.getRestartPolicy()).isEqualTo("Never");
+        assertThat(loaded.getShmSize()).isEqualTo("256Mi");
     }
 }

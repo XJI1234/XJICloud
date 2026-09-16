@@ -8,6 +8,7 @@ import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.instance.EciInstanceService;
 import com.xjicloud.eci.instance.dto.CreateInstanceRequest;
 import com.xjicloud.eci.instance.dto.InstanceResponse;
+import com.xjicloud.eci.provider.ShmSize;
 import com.xjicloud.eci.task.dto.CreateTaskRequest;
 import com.xjicloud.eci.task.dto.TaskResponse;
 import com.xjicloud.eci.task.storage.TaskStorageResolver;
@@ -70,6 +71,7 @@ public class EciTaskService {
         int maxRuntimeSec = resolveMaxRuntimeSec(request.getMaxRuntimeSec());
         double cpu = request.getCpu() != null ? request.getCpu() : properties.getDefaultCpu();
         double memory = request.getMemory() != null ? request.getMemory() : properties.getDefaultMemory();
+        String shmSize = resolveShmSize(request.getShmSize(), memory);
         String image = request.getImage().trim();
         Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
         Instant now = Instant.now();
@@ -94,6 +96,7 @@ public class EciTaskService {
         entity.setInstanceType(StringUtils.hasText(request.getInstanceType()) ? request.getInstanceType().trim() : null);
         entity.setGpu(request.getGpu());
         entity.setImageSnapshotId(resolveImageSnapshotId(request.getImageSnapshotId()));
+        entity.setShmSize(shmSize);
         entity.setRestartPolicy(restartPolicy);
         entity.setMaxRuntimeSec(maxRuntimeSec);
         entity.setEnvJson(toJson(env));
@@ -110,6 +113,7 @@ public class EciTaskService {
         instanceRequest.setInstanceType(entity.getInstanceType());
         instanceRequest.setGpu(entity.getGpu());
         instanceRequest.setImageSnapshotId(entity.getImageSnapshotId());
+        instanceRequest.setShmSize(shmSize);
         instanceRequest.setRestartPolicy(restartPolicy);
         instanceRequest.setCommand(request.getCommand());
         instanceRequest.setArgs(request.getArgs());
@@ -269,6 +273,14 @@ public class EciTaskService {
         return StringUtils.hasText(raw) ? raw.trim() : null;
     }
 
+    private String resolveShmSize(String raw, double memoryGiB) {
+        try {
+            return ShmSize.resolve(raw, properties.getDefaultShmSize(), memoryGiB);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(e.getMessage());
+        }
+    }
+
     private EciTaskEntity findEntity(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new BusinessException("任务不存在: " + id, HttpStatus.NOT_FOUND));
@@ -288,6 +300,7 @@ public class EciTaskService {
                 entity.getInstanceType(),
                 entity.getGpu(),
                 entity.getImageSnapshotId(),
+                entity.getShmSize(),
                 entity.getRestartPolicy(),
                 entity.getMaxRuntimeSec(),
                 parseEnv(entity.getEnvJson()),

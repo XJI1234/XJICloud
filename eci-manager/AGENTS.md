@@ -1,0 +1,47 @@
+# eci-manager Agent 规则
+
+本文是 `eci-manager/` 的执行规则。详细架构、API、联调结论和历史上下文见 [AGENT_CONTEXT.md](AGENT_CONTEXT.md)；人类使用文档见 [README.md](README.md)、[docs/设计与使用说明.md](docs/设计与使用说明.md) 和 [docs/测试说明.md](docs/测试说明.md)。
+
+## 项目边界
+
+- 这是独立的 Spring Boot 3.3.5 / Java 17 服务，端口为 `8081`，通过阿里云 ECI OpenAPI 管理容器实例。
+- 本任务范围默认限于 `eci-manager/`；不要修改 `backend/`，除非用户明确要求。
+- 不要扩展当前非目标：训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交，以及 8081 多钥目录。
+
+## 必须保持的不变量
+
+- 本地实例状态是权威状态；创建是异步受理，必须先落库再进入异步调云；关闭语义是删除实例。
+- 一个任务只对应一个实例。任务成功必须同时满足云侧 `Succeeded` 和本地实例已 `TERMINATED`。
+- 手动实例不进入任务生命周期自动删除；任务实例由生命周期 watcher 管理。
+- `Failed` 和 `TIMEOUT` 的处理顺序固定为：抓取容器日志尾部 → 持久化失败状态和日志 → 可选宽限 → 删除实例。抓日志失败不能阻断删除。
+- 当前钥按 resource 各一把并持久化热切；成对 AK 走 `STATIC_AK`。`.env` 只作初始化种子，Java 不直接读取 `ALIBABA_CLOUD_*`。
+
+## 安全与配置
+
+- 不要把长期 AccessKey、Secret、HTTP Api-Key、`application-local.yml` 或其他凭据写入 Git、日志、测试输出或本文档。
+- GET、API 响应和日志不得暴露 Secret。不要把 AK/SK 注入 ECI 容器；任务输出存储使用预签名 URL。
+- 真云 ECI 任务访问 OSS 必须使用对应地域的内网 endpoint；真云测试会产生费用，测试完成后必须删除或取消实例并确认无残留。
+- 需要凭据的真云联调使用 `.env` 和 `scripts/load-env.sh`；优先使用现有脚本，不要在文档中写入真实密钥。
+
+## 模型与任务路由
+
+- 主对话固定使用 `gpt-5.6-sol`，推理强度为 `high`；用于需求澄清、方案设计、代码审查、结果汇总和最终决策。
+- 执行代码任务固定使用 `gpt-5.6-luna`，推理强度为 `xhigh`（Extra High）；包括代码实现、测试编写、调试、构建和验证。
+- 不要因为任务规模小而降低上述配置，也不要在代码执行阶段改用主对话模型；只有当前运行环境不支持指定模型时，才报告限制并使用可用的最近配置。
+- 任务切换时保持职责分离：主对话负责判断和审查，`gpt-5.6-luna` 负责执行代码变更及其技术验证。
+
+## WSL 与 Windows 环境
+
+- 本项目运行在 Windows 主机的 WSL `Ubuntu-24.04` 中；Linux 工作区路径为 `/home/YLiF4/XJI/XJICloud`，Windows 访问路径为 `\\wsl.localhost\Ubuntu-24.04\home\YLiF4\XJI\XJICloud`。
+- 项目源码、Maven、Git、Shell 脚本和测试命令默认在 WSL 内执行，使用 Linux 命令和 Linux 路径；不要在 Windows PowerShell 或 CMD 中直接运行 Linux 项目命令。
+- Windows PowerShell 仅用于调用宿主机工具或启动 `wsl.exe`；从 Windows 调用 WSL 时，明确指定发行版和 Linux 工作目录，避免把 Windows 当前目录误当成项目目录。
+- 同一条命令中不要混用 `C:\...`、UNC 路径和 `/home/...` 路径；Linux 工具使用 `/home/...`，只有 Windows 工具明确要求时才使用 Windows 或 UNC 路径。
+- 编辑 WSL 文件时保持 UTF-8、LF 换行和现有 Unix 可执行权限；不要让 Windows 工具把 Shell 脚本转换为 CRLF 或移除执行位。
+- 依赖、缓存和构建产物优先放在 WSL 文件系统内；不要未经需要把项目复制到 Windows 盘符路径后再构建或测试。
+
+## 工作方式
+
+- 修改前先读相关源码、测试和文档；实现进度与下一步以计划文件为准。
+- 本地环境先执行 `source ../.tools/env.sh`。自动化测试使用 `mvn test`，默认 Mock、不调用云。
+- 真云操作优先使用 `scripts/run-hello-python.sh`、`scripts/debug-oss-smoke.sh` 和 `scripts/submit-3dgs-standard.sh`，不要随意创建长期残留资源。
+- 不要自动执行 `git commit` 或 `git push`，除非用户明确要求。

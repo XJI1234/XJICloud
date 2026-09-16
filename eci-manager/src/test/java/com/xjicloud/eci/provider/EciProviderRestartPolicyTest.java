@@ -26,6 +26,7 @@ class EciProviderRestartPolicyTest {
                 restartPolicy,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -43,6 +44,7 @@ class EciProviderRestartPolicyTest {
                 "OnFailure",
                 List.of("python", "train.py"),
                 List.of("--mode", "3dgs"),
+                null,
                 null);
 
         String cloudId = provider.create(spec);
@@ -69,11 +71,34 @@ class EciProviderRestartPolicyTest {
                 "Never",
                 null,
                 null,
-                "imc-test-snapshot-id");
+                "imc-test-snapshot-id",
+                null);
 
         String cloudId = provider.create(spec);
 
         assertThat(provider.getCreateSpec(cloudId).imageSnapshotId()).isEqualTo("imc-test-snapshot-id");
+    }
+
+    @Test
+    void mockCreateRecordsShmSize() {
+        MockEciProvider provider = new MockEciProvider();
+        CreateSpec spec = new CreateSpec(
+                "shm-demo",
+                "nginx:alpine",
+                1.0,
+                16.0,
+                Map.of(),
+                null,
+                null,
+                "Never",
+                null,
+                null,
+                null,
+                "8Gi");
+
+        String cloudId = provider.create(spec);
+
+        assertThat(provider.getCreateSpec(cloudId).shmSize()).isEqualTo("8Gi");
     }
 
     @Test
