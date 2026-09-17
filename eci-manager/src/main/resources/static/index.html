@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eci-manager 操作台</title>
+  <link rel="stylesheet" href="/console/console.css">
+  <link rel="icon" href="/favicon.ico">
+</head>
+<body id="eci-console">
+  <div id="key-gate" class="gate" hidden>
+    <form id="key-form" class="gate-card" autocomplete="off">
+      <h1>eci-manager 操作台</h1>
+      <p>填写 HTTP Api-Key。密钥只写入本页 sessionStorage，请求头为 <code>X-Api-Key</code>。不要把密钥提交进 Git 或贴进日志。</p>
+      <label for="key-input">Api-Key</label>
+      <input id="key-input" name="apiKey" type="password" required spellcheck="false" placeholder="见 README / .env 的 ECI_API_KEY">
+      <p id="key-error" class="error" hidden></p>
+      <button type="submit">进入</button>
+    </form>
+  </div>
+
+  <header class="top">
+    <div id="mode-lamp" class="lamp" aria-hidden="true"></div>
+    <div class="top-main">
+      <div class="top-row">
+        <strong class="brand">eci-manager</strong>
+        <span id="mode-badge" class="badge">…</span>
+        <span id="meta-line" class="meta-line muted"></span>
+        <button id="change-key" type="button" class="ghost">更换 Api-Key</button>
+      </div>
+      <p id="cloud-warn" class="cloud-warn" hidden>CLOUD 模式会创建计费的阿里云 ECI。测完请确认实例已删除。切换 Mock/真云须重启：<code>./scripts/start.sh mock</code> 或 <code>./scripts/start.sh cloud</code>。</p>
+      <p id="mock-hint" class="muted mock-hint" hidden>当前为 MOCK，不调云。切真云须重启：<code>./scripts/start.sh cloud</code>。</p>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab is-active" data-tab="tasks" aria-selected="true">任务</button>
+    <button type="button" class="tab" data-tab="instances" aria-selected="false">实例</button>
+    <button type="button" class="tab" data-tab="creds" aria-selected="false">当前云钥</button>
+    <button type="button" class="tab" data-tab="httpkey" aria-selected="false">HTTP Api-Key</button>
+  </nav>
+
+  <main>
+    <section id="tab-tasks" class="panel is-active" data-panel="tasks">
+      <div class="split">
+        <aside class="col form-col">
+          <h2>提交任务</h2>
+          <div class="presets">
+            <button type="button" data-preset="hello">hello-python</button>
+            <button type="button" data-preset="oss" id="preset-oss">OSS test</button>
+            <button type="button" data-preset="custom">自定义</button>
+            <button type="button" data-preset="json">粘贴 JSON</button>
+          </div>
+          <p class="muted small">3DGS 标准档请用 <code>scripts/submit-3dgs-standard.sh</code>，不要把 bootstrap 贴进本页。</p>
+          <form id="task-form" autocomplete="off">
+            <label>name <input id="f-name" name="name"></label>
+            <label>image * <input id="f-image" name="image" required></label>
+            <div class="row2">
+              <label>cpu <input id="f-cpu" name="cpu" type="number" step="0.1" min="0"></label>
+              <label>memory GiB <input id="f-memory" name="memory" type="number" step="0.1" min="0"></label>
+            </div>
+            <div class="row2">
+              <label>instanceType <input id="f-instanceType" name="instanceType"></label>
+              <label>gpu <input id="f-gpu" name="gpu" type="number" min="0" step="1"></label>
+            </div>
+            <div class="row2">
+              <label>shmSize <input id="f-shmSize" name="shmSize" placeholder="如 256Mi"></label>
+              <label>restartPolicy
+                <select id="f-restartPolicy" name="restartPolicy">
+                  <option value="Never">Never</option>
+                  <option value="OnFailure">OnFailure</option>
+                  <option value="Always">Always</option>
+                </select>
+              </label>
+            </div>
+            <label>maxRuntimeSec <input id="f-maxRuntimeSec" name="maxRuntimeSec" type="number" min="1" step="1"></label>
+            <label>imageSnapshotId <input id="f-imageSnapshotId" name="imageSnapshotId"></label>
+            <label>command JSON 数组 <input id="f-command" name="command" placeholder='["python3","-c"]'></label>
+            <label>args JSON 数组 <input id="f-args" name="args" placeholder='["print(1)"]'></label>
+            <label>env JSON 对象 <textarea id="f-env" name="env" rows="4">{}</textarea></label>
+            <label>storage
+              <select id="f-storage" name="storage">
+                <option value="">无</option>
+                <option value="test">test</option>
+                <option value="keys">keys</option>
+              </select>
+            </label>
+            <label id="output-key-wrap" hidden>outputKey <input id="f-outputKey" name="outputKey"></label>
+            <p id="task-form-error" class="error" hidden></p>
+            <button type="submit" id="task-submit">提交任务</button>
+          </form>
+          <div id="json-paste" class="json-paste" hidden>
+            <label>粘贴 CreateTaskRequest JSON
+              <textarea id="f-json" rows="10" placeholder='{"image":"nginx:alpine"}'></textarea>
+            </label>
+            <button type="button" id="apply-json">填入表单</button>
+          </div>
+        </aside>
+        <section class="col detail-col">
+          <div class="list-head">
+            <h2>任务</h2>
+            <button type="button" id="refresh-tasks">刷新列表</button>
+          </div>
+          <p id="task-list-status" class="muted small"></p>
+          <ul id="task-list" class="item-list"></ul>
+          <div id="task-empty" class="empty">还没有任务。用左侧表单提交，或刷新列表。</div>
+          <div id="task-detail" hidden>
+            <h3 id="task-detail-title">任务详情</h3>
+            <p id="task-status-line" class="status-line"></p>
+            <p id="task-timer" class="timer mono"></p>
+            <p id="task-remain" class="remain mono"></p>
+            <div class="timeout-track" aria-hidden="true"><span id="timeout-fill"></span></div>
+            <pre id="task-json" class="mono block"></pre>
+            <div class="actions">
+              <button type="button" id="refresh-task">刷新状态</button>
+              <button type="button" id="refresh-task-instance">刷新关联实例</button>
+              <button type="button" id="cancel-task">取消任务</button>
+            </div>
+            <h3>日志尾部</h3>
+            <p id="log-note" class="muted small"></p>
+            <pre id="task-log" class="mono log-block"></pre>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="tab-instances" class="panel" data-panel="instances" hidden>
+      <div class="split">
+        <aside class="col form-col">
+          <h2>创建实例</h2>
+          <p class="muted small">手动实例不会被任务 watcher 自动删除。真云测完必须手动删除。</p>
+          <form id="instance-form" autocomplete="off">
+            <label>name <input id="i-name"></label>
+            <label>image <input id="i-image" placeholder="空则用默认镜像"></label>
+            <div class="row2">
+              <label>cpu <input id="i-cpu" type="number" step="0.1" min="0"></label>
+              <label>memory GiB <input id="i-memory" type="number" step="0.1" min="0"></label>
+            </div>
+            <div class="row2">
+              <label>instanceType <input id="i-instanceType"></label>
+              <label>gpu <input id="i-gpu" type="number" min="0" step="1"></label>
+            </div>
+            <div class="row2">
+              <label>shmSize <input id="i-shmSize"></label>
+              <label>restartPolicy
+                <select id="i-restartPolicy">
+                  <option value="">默认</option>
+                  <option value="Never">Never</option>
+                  <option value="OnFailure">OnFailure</option>
+                  <option value="Always">Always</option>
+                </select>
+              </label>
+            </div>
+            <label>command JSON 数组 <input id="i-command"></label>
+            <label>args JSON 数组 <input id="i-args"></label>
+            <p id="instance-form-error" class="error" hidden></p>
+            <button type="submit">创建实例</button>
+          </form>
+        </aside>
+        <section class="col detail-col">
+          <div class="list-head">
+            <h2>实例</h2>
+            <button type="button" id="refresh-instances">刷新列表</button>
+          </div>
+          <p id="instance-list-status" class="muted small"></p>
+          <ul id="instance-list" class="item-list"></ul>
+          <div id="instance-empty" class="empty">还没有实例。</div>
+          <div id="instance-detail" hidden>
+            <h3>实例详情</h3>
+            <pre id="instance-json" class="mono block"></pre>
+            <div class="actions">
+              <button type="button" id="refresh-instance">刷新云状态</button>
+              <button type="button" id="delete-instance" class="danger">删除实例</button>
+            </div>
+            <p id="instance-action-error" class="error" hidden></p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="tab-creds" class="panel" data-panel="creds" hidden>
+      <h2>当前云钥</h2>
+      <p class="muted">GET/PUT 永不回传 Secret。密码框只用于写入，成功后会被清空。</p>
+      <pre id="cred-snapshot" class="mono block"></pre>
+      <p id="cred-error" class="error" hidden></p>
+      <form id="cred-form" class="narrow" autocomplete="off">
+        <label>resource
+          <select id="c-resource">
+            <option value="ECI_OPENAPI">ECI_OPENAPI</option>
+            <option value="OSS">OSS</option>
+          </select>
+        </label>
+        <label>accessKeyId <input id="c-id" spellcheck="false"></label>
+        <label>accessKeySecret <input id="c-secret" type="password" spellcheck="false"></label>
+        <div class="actions">
+          <button type="submit">保存当前钥</button>
+          <button type="button" id="test-cred">测通（不落盘）</button>
+        </div>
+      </form>
+      <pre id="cred-test-result" class="mono block" hidden></pre>
+    </section>
+
+    <section id="tab-httpkey" class="panel" data-panel="httpkey" hidden>
+      <h2>HTTP Api-Key</h2>
+      <p class="muted">轮换后旧钥在重叠期内仍可用。成功后请更新本页 sessionStorage。服务端不回传明文钥。</p>
+      <form id="httpkey-form" class="narrow" autocomplete="off">
+        <label>新 Api-Key <input id="h-key" type="password" required spellcheck="false"></label>
+        <div class="actions">
+          <button type="submit">轮换</button>
+          <button type="button" id="revoke-prev">吊销上一把</button>
+        </div>
+      </form>
+      <p id="httpkey-msg" class="muted"></p>
+      <pre id="httpkey-status" class="mono block"></pre>
+    </section>
+  </main>
+
+  <script src="/console/console.js"></script>
+</body>
+</html>

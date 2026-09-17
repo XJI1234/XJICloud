@@ -59,6 +59,8 @@ eci:
   # 失败/超时：删实例前抓容器日志尾部行数；宽限秒数（0=立即删）
   failure-log-tail-lines: ${ECI_FAILURE_LOG_TAIL_LINES:1000}
   failure-log-grace-sec: ${ECI_FAILURE_LOG_GRACE_SEC:90}
+  console:
+    open-browser: ${ECI_CONSOLE_OPEN_BROWSER:true}
   oss:
     enabled: ${ECI_OSS_ENABLED:false}
     endpoint: ${ECI_OSS_ENDPOINT:}

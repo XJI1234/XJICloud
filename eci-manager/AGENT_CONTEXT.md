@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-09-16（`shmSize`：Create 挂 Memory EmptyDir 到 `/dev/shm`；3dgs 标准档 8Gi）
+**最后更新：** 2026-09-16（本地操作台：静态页 + `/meta` + `/tasks/{id}/logs` + 就绪开浏览器）
 
 **3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`，默认 `shmSize=8Gi`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → grace → delete；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
@@ -41,6 +41,11 @@
   - ✅ `POST /tasks` / `POST /instances` 可选 `shmSize`；配置 `eci.default-shm-size`（默认空）
   - ✅ `AliyunEciProvider` 挂 Memory EmptyDir 到 `/dev/shm`；须 >64Mi 且严格小于容器 memory
   - ✅ 3dgs 标准档传 `8Gi`；bootstrap 不再 remount / 强制 `num_workers=0`
+- **已交付（本地操作台，2026-09-16）：**
+  - ✅ `SecurityConfig` 放行 `/`、`/index.html`、`/console/**`、`/favicon.ico`
+  - ✅ 静态操作台（无 Node）：Api-Key 闸门、MOCK/CLOUD 徽章、任务提交/轮询/计时/日志尾部、实例与当前钥/HTTP 钥 Tab
+  - ✅ `GET /api/v1/eci/meta`（无密钥）；`GET /api/v1/eci/tasks/{id}/logs`
+  - ✅ `ApplicationReadyEvent` 打开 `http://127.0.0.1:{port}/`（WSL: `cmd.exe /c start`）；`./scripts/start.sh mock|cloud`
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 - **OSS 增量 PRD：** [`ECI任务OSS对象存储集成产品需求文档(PRD).md`](../ECI任务OSS对象存储集成产品需求文档(PRD).md) **v1.0**
@@ -48,7 +53,7 @@
 - **OSS 计划 / 续跑：** [`docs/superpowers/plans/2026-07-30-eci-oss-integration.md`](../docs/superpowers/plans/2026-07-30-eci-oss-integration.md)、[`docs/superpowers/2026-07-31-eci-oss-handoff.md`](../docs/superpowers/2026-07-31-eci-oss-handoff.md)
 - **当前钥（第一步 C1–C5）：** [`docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md`](../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md)、[设计](../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md)
 
-**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、前端、业务回调、镜像注册表、批量提交；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）；实时流式日志 UI；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（第二步主后端）。
+**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、独立 Node/React 前端、业务回调、镜像注册表、批量提交、运行时切换 `EciProvider`；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）；SSE/WebSocket 流式日志；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（第二步主后端）。本地静态操作台已交付，不另起构建步骤。
 
 ---
 
@@ -75,12 +80,14 @@ eci-manager/
 │   ├── API文档.md                   # §3.1 storage；TaskResponse.containerLogTail
 │   ├── 测试说明.md
 │   └── 3dgs-ECI使用说明.md          # 3DGS 真云一键提交与注意事项
-└── src/main/java/com/xjicloud/eci/
-    ├── config/          # EciProperties（含 failure-log-*）、OssProperties、…
-    ├── credential/      # 当前钥 GET/PUT/test、HTTP Api-Key 双钥
-    ├── oss/             # OssStorageService（含 applyRuntimeKeys）
-    ├── task/storage/    # TaskStorageResolver、DTO
-    ├── instance/ … task/ … provider/ … lifecycle/
+└── src/
+    ├── main/java/com/xjicloud/eci/
+    │   ├── config/          # EciProperties、OssProperties、EciMetaController、ConsoleBrowserLauncher
+    │   ├── credential/      # 当前钥 GET/PUT/test、HTTP Api-Key 双钥
+    │   ├── oss/             # OssStorageService（含 applyRuntimeKeys）
+    │   ├── task/storage/    # TaskStorageResolver、DTO
+    │   └── instance/ … task/ … provider/ … lifecycle/
+    └── main/resources/static/       # 本地操作台 index.html + console/
 ```
 
 配置：
@@ -89,7 +96,7 @@ eci-manager/
 |------|------|
 | `.env` / `.env.example` | **推荐**：HTTP Api-Key、网络、**种子** `ECI_ACCESS_KEY_*` / `ECI_OSS_*`（`.env` gitignore） |
 | `scripts/load-env.sh` / `start.sh` | 加载 `.env`；`ALIBABA_CLOUD_*` **仅脚本**映射到 `ECI_ACCESS_KEY_*`（Java 不读） |
-| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`failure-log-tail-lines` / `failure-log-grace-sec` |
+| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`failure-log-*`、`eci.console.open-browser` |
 | `application-dev.yml` | `mock=true` |
 | `application-cloud.yml` | `mock=false` + 推荐阿里云镜像 |
 | `application-local.yml.example` | 旧模板（推荐改用 `.env`） |
@@ -103,8 +110,10 @@ eci-manager/
 
 ```mermaid
 flowchart LR
+  Browser["console_/"] -->|"static"| Page["index.html"]
   Client["curl_or_caller"] -->|"X-Api-Key"| InstAPI["EciInstanceController"]
   Client -->|"X-Api-Key"| TaskAPI["EciTaskController"]
+  Page -->|"X-Api-Key"| TaskAPI
   InstAPI --> Filter["ApiKeyAuthFilter"]
   TaskAPI --> Filter
   Filter --> InstSvc["EciInstanceService"]
@@ -125,14 +134,14 @@ flowchart LR
 | 层 | 职责 |
 |----|------|
 | Instance Controller | 手动实例 HTTP |
-| Task Controller | 任务提交/查询/取消 |
+| Task Controller | 任务提交/查询/取消/只读 logs |
 | EciTaskService | 任务落库、驱动 `createForTask`、cancel、`onInstanceRunning`/`onInstanceFailed`(可带 `containerLogTail`)/`markSucceeded` |
 | EciInstanceService | **本地实例状态权威**；`createForTask` 写 `taskId`；`deleteForTaskCancel`（允许 CREATING）；refresh 钩子通知任务 |
 | EciProvider | 云侧 Create / Describe / **fetchContainerLog** / Delete |
 | AsyncLifecycleWorker | 创建/删除轮询；Succeeded 视为创建成功路径 markRunning；cancel 竞态 abort→删；回调任务状态 |
 | TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；Failed/TIMEOUT：**抓日志→落库→宽限→删**；SUCCEEDED 门闩 |
 | StartupCompensationRunner | 启动扫实例 CREATING/STOPPING/RUNNING + 非终态任务对齐 |
-| ApiKeyAuthFilter | `/api/v1/eci/**`；读 `HttpApiKeyStore`（当前钥或重叠期内上一把）；`/actuator/health` 公开 |
+| ApiKeyAuthFilter | `/api/v1/eci/**`；读 `HttpApiKeyStore`（当前钥或重叠期内上一把）；`/` 操作台与 `/actuator/health` 公开 |
 | RuntimeCredentialService | 每 resource 当前云钥：种子、GET/PUT、热切；`test` 只读 |
 | HttpApiKeyStore | HTTP Api-Key 双钥；与云 AK 无关 |
 
@@ -210,6 +219,7 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 | POST | `/tasks` | **`image` 必填**；可选 `storage`、`shmSize`；立即返回 taskId + STARTING + instanceId |
 | GET | `/tasks?status=` | 列表 |
 | GET | `/tasks/{id}` | 详情（失败时含 `failureReason` + `containerLogTail`） |
+| GET | `/tasks/{id}/logs?tailLines=` | 运行中走 `fetchContainerLog`；终态走 `containerLogTail`；尚无 cloudId → 200 空日志 |
 | POST | `/tasks/{id}/cancel` | 幂等 CANCELLED + 删关联实例 |
 
 未传规格/重启/超时 → 用配置默认值，**实际值写入任务行**。
@@ -234,6 +244,8 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 
 ### 其它
 
+| GET | `/` | 本地操作台静态页（无 Api-Key） |
+| GET | `/api/v1/eci/meta` | 模式与默认规格；`ossEnabled`/`ossConfigured`；**无** endpoint/bucket/密钥 |
 | GET | `/actuator/health` | 无 Api-Key |
 
 ---
@@ -329,6 +341,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 - **L1** 失败日志可观测性（删前 Tail + 宽限，2026-09-02）  
 - **C1–C5** 当前钥执行器（STATIC_AK、落盘热切、HTTP 双钥、POST test、文档，2026-09-09）  
 - **shm** Memory EmptyDir 放大 `/dev/shm`（`shmSize`，2026-09-16）  
+- **console** 本地静态操作台（`GET /`、`/meta`、`/tasks/{id}/logs`、就绪开浏览器，2026-09-16）  
 - **下一刀** 联合 3dgs（traceback / `PYTHONUNBUFFERED`）；可选真云失败取证冒烟；O5.3 云端验收清单收尾；**第二步**主后端 AK 目录  
 
 ### §5.1 变更记录：失败日志可观测性（2026-09-02）
@@ -389,14 +402,17 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 cd eci-manager
 source ../.tools/env.sh
 
-# Mock:
-export ECI_API_KEY=dev-eci-api-key-change-me
-mvn spring-boot:run
+# Mock 操作台（启动后打开 http://127.0.0.1:8081/）:
+./scripts/start.sh mock
 
-# 真实（推荐 .env）:
-#   cp .env.example .env  # 填 ECI_*、种子 ECI_ACCESS_KEY_*（或 ALIBABA_CLOUD_* 仅供 load-env 映射）、ECI_OSS_*（内网 endpoint）
-./scripts/start.sh
+# 真云操作台（计费；须 .env）:
+#   cp .env.example .env
+./scripts/start.sh cloud
+
+# 或无子命令：沿用 .env 的 SPRING_PROFILES_ACTIVE
+# ./scripts/start.sh
 # 日志：成对种子时 credentialMode=STATIC_AK；OSS enabled 时勿见 skipped（除非故意关闭）
+# 无桌面/CI：ECI_CONSOLE_OPEN_BROWSER=false
 ```
 
 自动化：`mvn test`（Mock，不调云）。
@@ -420,7 +436,8 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 ## 7. Agent 工作约束（本子工程）
 
 - **不要**修改 `backend/`，除非用户明确要求  
-- **不要**把 `application-local.yml`、长期 AccessKey、Api-Key 写入 Git 或文档明文  
+- **不要**把 `application-local.yml`、长期 AccessKey、Api-Key 写入 Git、静态操作台或文档明文  
+- 本地操作台已交付；不要另起 Node/React 工程，不要运行时热切 Provider  
 - 云身份：当前钥成对则 **STATIC_AK**（种子 `ECI_ACCESS_KEY_*`；`ALIBABA_CLOUD_*` 仅 `load-env.sh` 映射）；空则 ECS RAM / 默认链  
 - 保持：本地状态权威、异步创建、删除=删云、一任务一实例  
 - 实现进度与下一刀以计划文件勾选为准；逐步测试命令看 `docs/测试说明.md`  
@@ -457,5 +474,8 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | `src/.../provider/ShmSize.java` | shm SizeLimit 规范化与相对 memory 校验 |
 | `src/.../lifecycle/TaskLifecycleWatcher.java` | 终态轮询；失败删前抓日志 |
 | `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 / 任务回调 |
-| `src/.../config/EciProperties.java` | 含 `failureLogTailLines` / `failureLogGraceSec` / `defaultShmSize` |
+| `src/.../config/EciProperties.java` | 含 `failureLogTailLines` / `failureLogGraceSec` / `defaultShmSize` / `console.openBrowser` |
+| `src/main/resources/static/` | 本地操作台（无构建） |
+| `src/.../config/EciMetaController.java` | `GET /meta` |
+| `src/.../task/EciTaskLogService.java` | `GET /tasks/{id}/logs` |
 | `src/.../config/ProviderConfig.java` | Mock/Aliyun 装配 |

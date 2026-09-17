@@ -2,6 +2,7 @@ package com.xjicloud.eci.task;
 
 import com.xjicloud.eci.common.ApiResponse;
 import com.xjicloud.eci.task.dto.CreateTaskRequest;
+import com.xjicloud.eci.task.dto.TaskLogResponse;
 import com.xjicloud.eci.task.dto.TaskResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,9 +25,11 @@ import java.util.UUID;
 public class EciTaskController {
 
     private final EciTaskService service;
+    private final EciTaskLogService logService;
 
-    public EciTaskController(EciTaskService service) {
+    public EciTaskController(EciTaskService service, EciTaskLogService logService) {
         this.service = service;
+        this.logService = logService;
     }
 
     /** 提交任务：立即返回 taskId + STARTING。 */
@@ -45,6 +48,14 @@ public class EciTaskController {
     @GetMapping("/{id}")
     public ApiResponse<TaskResponse> get(@PathVariable UUID id) {
         return ApiResponse.ok(service.get(id));
+    }
+
+    /** 只读日志尾部：运行中走 Provider；终态走已落库 containerLogTail。 */
+    @GetMapping("/{id}/logs")
+    public ApiResponse<TaskLogResponse> logs(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "200") int tailLines) {
+        return ApiResponse.ok(logService.logs(id, tailLines));
     }
 
     /** 取消任务；已 CANCELLED 时幂等成功。 */

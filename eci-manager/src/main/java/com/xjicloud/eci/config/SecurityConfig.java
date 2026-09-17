@@ -12,7 +12,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Spring Security：无状态；健康检查公开；ECI API 放行给过滤器做 Api-Key 校验；其余拒绝。
+ * Spring Security：无状态；健康检查与本地操作台静态页公开；ECI API 放行给过滤器做 Api-Key 校验；其余拒绝。
  */
 @Configuration
 @EnableWebSecurity
@@ -33,8 +33,9 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // ECI 路径 permitAll：真正鉴权由 ApiKeyAuthFilter 完成
+                // 操作台静态页公开；ECI API permitAll 后由 ApiKeyAuthFilter 做真正鉴权
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/", "/index.html", "/console/**", "/favicon.ico").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/api/v1/eci/**").permitAll()
                         .anyRequest().denyAll())

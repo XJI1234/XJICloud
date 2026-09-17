@@ -3,7 +3,7 @@
 > **服务：** `eci-manager`（默认 `http://127.0.0.1:8081`）  
 > **API 前缀：** `/api/v1/eci`  
 > **对应 PRD：** [ECI任务驱动容器编排服务产品需求文档(PRD).md](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) v2.0.3  
-> **更新日期：** 2026-09-09 
+> **更新日期：** 2026-09-16 
 
 本文面向三类读者：
 
@@ -69,7 +69,7 @@
 | 前缀 | `/api/v1/eci` |
 | 鉴权头 | `X-Api-Key: <密钥>` |
 | 密钥来源 | 配置 `eci.api-key` / 环境变量 `ECI_API_KEY`；运行时以 `HttpApiKeyStore` 为准（可 `PUT /credentials/http-api-key` 轮换） |
-| 无需鉴权 | `GET /actuator/health` |
+| 无需鉴权 | `GET /actuator/health`；操作台 `GET /`、`/index.html`、`/console/**`、`/favicon.ico` |
 
 缺 Key、错 Key → **HTTP 401**，响应体为统一失败壳；**不会**创建云资源。
 
@@ -160,8 +160,26 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `eci.mock-auto-complete-status` | `Succeeded` | Mock 自动终态：`Succeeded` / `Failed` |
 | `eci.create-timeout-sec` | `300` | 创建等待上限 |
 | `eci.delete-timeout-sec` | `300` | 删除等待上限 |
+| `eci.console.open-browser` | `true` | 就绪后打开 `http://127.0.0.1:{port}/`；测试 / 无桌面设 `false` |
 
 `restartPolicy` 合法值：`Never` | `OnFailure` | `Always`。
+
+### 2.7 本地操作台与元数据 — **已实现**
+
+静态操作台由 8081 同源提供，无 Node 构建。浏览器打开 `http://127.0.0.1:8081/` 后，把 HTTP Api-Key 写入 **sessionStorage**（请求头 `X-Api-Key`）。Mock/真云仍由启动 profile 锁定，页面只展示当前模式。
+
+`GET /api/v1/eci/meta`（需 Api-Key）返回只读默认规格，**不含** OSS endpoint/bucket/密钥：
+
+| 字段 | 说明 |
+|------|------|
+| `mock` | 是否 Mock Provider |
+| `regionId` | `eci.region-id` |
+| `defaultImage` / `defaultCpu` / `defaultMemory` / `defaultShmSize` / `defaultRestartPolicy` / `defaultMaxRuntimeSec` | 表单预填 |
+| `ossEnabled` | `eci.oss.enabled` |
+| `ossConfigured` | OSS endpoint/bucket/种子钥是否齐全（布尔；无明文） |
+| `taskPollIntervalSec` | 任务 watcher 周期 |
+
+无/错 Key → **401**。启动：`./scripts/start.sh mock`（dev）或 `./scripts/start.sh cloud`（`cloud,local`）。
 
 ---
 
@@ -318,6 +336,23 @@ OSS 联调（`mode=test` + 联调镜像）：
 | 条件 | HTTP |
 |------|------|
 | 不存在 | 404 |
+
+### 3.3.1 任务日志尾部 — **已实现**
+
+`GET /api/v1/eci/tasks/{id}/logs?tailLines=200`
+
+只读，不改变 Failed/TIMEOUT「抓日志 → 落库 → 删除」顺序。
+
+| 场景 | HTTP | `data.source` | `data.content` |
+|------|------|----------------|----------------|
+| 无/错 Key | 401 | | |
+| 任务不存在 | 404 | | |
+| `tailLines≤0` | 400 | | |
+| 非终态且已有 `cloudInstanceId` | 200 | `LIVE` | `EciProvider.fetchContainerLog`；失败则为可读错误串 |
+| 非终态尚无 cloudId | 200 | `EMPTY` | 空字符串 |
+| 终态 | 200 | `PERSISTED` | 已落库 `containerLogTail`；成功且空时 `note` 说明「成功任务不保留全量日志」 |
+
+`tailLines` 默认 200，须为正整数（过大时服务端上限 10000）。
 
 ---
 
@@ -608,6 +643,8 @@ Mock 下 `resource=ECI_OPENAPI` 的 test 期望 **400**。真云测 ECI 须 `eci
 - **无需** `X-Api-Key`  
 - 期望：HTTP 200，体含 `"status":"UP"`（或同类健康状态）
 
+操作台 `GET /` 同样无需 Api-Key；API 仍走 `X-Api-Key`。
+
 ---
 
 ## 7. 联调速查（测试）
@@ -683,6 +720,9 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | 任务提交（`image` 必填） | `POST /tasks` | **已实现** |
 | 可选 `storage`（OSS presign 注入 env） | `POST /tasks` | **已实现**（一期无响应 `storageResolved`） |
 | 任务列表 / 详情 | `GET /tasks`、`GET /tasks/{id}` | **已实现** |
+| 任务日志尾部 | `GET /tasks/{id}/logs` | **已实现** |
+| 操作台元数据 | `GET /meta` | **已实现**（无密钥） |
+| 本地操作台静态页 | `GET /` | **已实现** |
 | 任务取消（幂等） | `POST /tasks/{id}/cancel` | **已实现** |
 | 一任务一实例绑定 | `taskId` ↔ `instanceId` | **已实现** |
 | 创建失败 → 任务 `FAILED` | 回写 | **已实现** |

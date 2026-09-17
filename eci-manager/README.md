@@ -51,7 +51,7 @@ chmod +x scripts/*.sh
 **脚本：**
 
 - `scripts/load-env.sh` — 加载 `.env`；`ALIBABA_CLOUD_*` 仅在此时映射到 `ECI_ACCESS_KEY_*`。无 `.env` 时用 Mock 默认 Api-Key。
-- `scripts/start.sh` — 要求已有 `.env`，然后 `mvn spring-boot:run`
+- `scripts/start.sh [mock|cloud]` — 要求已有 `.env`，打印将打开的 `http://127.0.0.1:8081/`，然后 `mvn spring-boot:run`
 
 curl 联调（另开终端）：
 
@@ -68,13 +68,21 @@ curl -s -H "X-Api-Key: $ECI_API_KEY" http://127.0.0.1:8081/actuator/health
 ```bash
 cd eci-manager
 source ../.tools/env.sh
-export ECI_API_KEY=dev-eci-api-key-change-me   # 可选；默认见 application.yml
-mvn spring-boot:run
-# 或
-mvn -DskipTests package && java -jar target/eci-manager-1.0.0.jar
+./scripts/start.sh mock
+# 浏览器打开 http://127.0.0.1:8081/ ，Api-Key 见 README / .env 的 ECI_API_KEY
+# 无桌面：ECI_CONSOLE_OPEN_BROWSER=false
 ```
 
-默认：`server.port=8081`，`eci.mock=true`，创建约 `mock-auto-complete-sec`（默认 3）秒后 Mock 云状态变为 `Succeeded`，watcher 自动删实例并将任务置 `SUCCEEDED`。
+也可用 `mvn spring-boot:run`（默认 Mock）。`server.port=8081`，创建约 `mock-auto-complete-sec`（默认 3）秒后 Mock 云状态变为 `Succeeded`，watcher 自动删实例并将任务置 `SUCCEEDED`。
+
+顶栏徽章为 `MOCK` 或 `CLOUD`（后者带计费警告）。切换须重启：`./scripts/start.sh mock` 或 `./scripts/start.sh cloud`。真云提交前操作台会二次确认。
+
+无 `.env` 时也可：
+
+```bash
+export ECI_API_KEY=dev-eci-api-key-change-me
+mvn spring-boot:run
+```
 
 ### 任务全流程 curl（Mock）
 
@@ -169,7 +177,7 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 ## 真实 ECI 模式
 
 1. `cp .env.example .env`，填写 Api-Key、网络、种子 `ECI_ACCESS_KEY_*`（或 `ALIBABA_CLOUD_*` 仅供脚本映射）  
-2. `./scripts/start.sh`  
+2. `./scripts/start.sh cloud`（或无参数沿用 `.env` 的 profile）
 
 详解见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4.2。
 
@@ -177,8 +185,11 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/` | 本地操作台（无 Api-Key） |
+| GET | `/api/v1/eci/meta` | 模式与默认规格（无密钥） |
 | POST | `/api/v1/eci/tasks` | 提交任务（`image` 必填） |
 | GET | `/api/v1/eci/tasks` / `/{id}` | 列表 / 详情 |
+| GET | `/api/v1/eci/tasks/{id}/logs` | 日志尾部（运行中拉云；终态走落库） |
 | POST | `/api/v1/eci/tasks/{id}/cancel` | 取消（幂等） |
 | POST | `/api/v1/eci/instances` | 手动创建（可选默认 image） |
 | DELETE | `/api/v1/eci/instances/{id}` | 删除（幂等） |
@@ -202,7 +213,8 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 - [x] 超过 `maxRuntimeSec` → 强制删 + 任务 `FAILED`/`TIMEOUT`  
 - [x] `/instances` 手动能力仍可用  
 - [x] 错误/缺失 Api-Key → 401 且不建云资源  
-- [x] `mock=true` 全流程不调云可演练（`mvn test` 75 项 + 文档 curl）
+- [x] `mock=true` 全流程不调云可演练（`mvn test` + 文档 curl）
+- [x] 本地操作台 `GET /` 无需 Api-Key；`/meta` 与 `/tasks/{id}/logs` 需 Key
 
 与 PRD §1.4 对照；逐步命令见 [docs/测试说明.md](docs/测试说明.md) §11。
 

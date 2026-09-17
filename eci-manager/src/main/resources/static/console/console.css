@@ -1,0 +1,309 @@
+:root {
+  --bg: #14161c;
+  --raised: #1c1f28;
+  --input: #101218;
+  --line: #2a2f3c;
+  --text: #e8eaf0;
+  --muted: #8b91a3;
+  --mock: #3d9b8f;
+  --cloud: #d89a3a;
+  --danger: #d16b6b;
+  --ok: #6dbf8a;
+  --focus: #c4a574;
+  --radius: 6px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.mono, code, pre { font-family: var(--mono); }
+
+code {
+  font-size: 0.92em;
+  background: var(--input);
+  padding: 0.05em 0.35em;
+  border-radius: 3px;
+}
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.error { color: var(--danger); margin: 0.4rem 0; }
+.empty { color: var(--muted); padding: 1rem 0; }
+
+.gate {
+  position: fixed;
+  inset: 0;
+  background: rgb(12 14 18 / 0.92);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.gate[hidden] { display: none; }
+
+.gate-card {
+  width: min(28rem, calc(100% - 2rem));
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.gate-card h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.top {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised);
+}
+
+.lamp {
+  width: 8px;
+  background: var(--muted);
+  flex: 0 0 8px;
+}
+
+.lamp.mock { background: var(--mock); }
+.lamp.cloud { background: var(--cloud); }
+
+.top-main { flex: 1; padding: 0.7rem 1rem 0.8rem; }
+
+.top-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.9rem;
+  align-items: center;
+}
+
+.brand { letter-spacing: 0.02em; }
+
+.badge {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+
+.badge.mock { color: var(--mock); border-color: var(--mock); }
+.badge.cloud { color: var(--cloud); border-color: var(--cloud); }
+
+.meta-line { font-size: 12px; }
+
+.cloud-warn {
+  margin: 0.45rem 0 0;
+  color: var(--cloud);
+  font-size: 13px;
+}
+
+.mock-hint { margin: 0.35rem 0 0; font-size: 12px; }
+
+.ghost, .tabs .tab, .presets button, .list-head button, .actions button, form button {
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.ghost:hover, .tabs .tab:hover, .presets button:hover, button:hover {
+  border-color: var(--focus);
+}
+
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+button:active { transform: translateY(1px); }
+
+button.danger { color: var(--danger); border-color: var(--danger); }
+
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.tabs .tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.55rem 1rem;
+  color: var(--muted);
+}
+
+.tabs .tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--focus);
+}
+
+main { padding: 0.9rem 1rem 2rem; }
+
+.panel[hidden] { display: none; }
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+  gap: 1.1rem;
+}
+
+.form-col, .detail-col {
+  min-width: 0;
+}
+
+h2, h3 { margin: 0 0 0.6rem; font-size: 1rem; }
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+
+form, .narrow {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.narrow { max-width: 28rem; }
+
+label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+input, select, textarea {
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.5rem;
+  width: 100%;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.item-list {
+  list-style: none;
+  margin: 0 0 0.8rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.item-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.item-list li:last-child { border-bottom: 0; }
+
+.item-list li.is-active { background: rgb(196 165 116 / 0.12); }
+
+.status-pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.status-pill.RUNNING, .status-pill.STARTING { color: var(--focus); }
+.status-pill.SUCCEEDED, .status-pill.TERMINATED { color: var(--ok); }
+.status-pill.FAILED { color: var(--danger); }
+.status-pill.CANCELLED, .status-pill.STOPPING { color: var(--muted); }
+
+.timer, .remain { margin: 0.25rem 0; }
+
+.timeout-track {
+  height: 4px;
+  background: var(--line);
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 0.35rem 0 0.8rem;
+}
+
+.timeout-track span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--focus);
+}
+
+.block, .log-block {
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.7rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-block {
+  min-height: 8rem;
+  max-height: 22rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0.9rem;
+}
+
+.json-paste { margin-top: 0.8rem; }
+
+@media (max-width: 860px) {
+  .split { grid-template-columns: 1fr; }
+  .top-row { align-items: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active { transform: none; }
+}

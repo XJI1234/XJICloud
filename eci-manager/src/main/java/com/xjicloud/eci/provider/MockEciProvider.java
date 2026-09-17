@@ -38,6 +38,7 @@ public class MockEciProvider implements EciProvider {
     private final List<String> lifecycleCallOrder = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger fetchContainerLogCalls = new AtomicInteger();
     private final ConcurrentHashMap<String, String> containerLogs = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> fetchFailures = new ConcurrentHashMap<>();
 
     /** 单元测试默认：关闭时间触发，仅钩子。 */
     public MockEciProvider() {
@@ -95,6 +96,10 @@ public class MockEciProvider implements EciProvider {
     public String fetchContainerLog(String cloudInstanceId, int tailLines) {
         fetchContainerLogCalls.incrementAndGet();
         lifecycleCallOrder.add("fetch");
+        String failure = fetchFailures.remove(cloudInstanceId);
+        if (failure != null) {
+            throw new IllegalStateException(failure);
+        }
         String configured = containerLogs.get(cloudInstanceId);
         if (configured != null) {
             return configured;
@@ -102,6 +107,13 @@ public class MockEciProvider implements EciProvider {
         return "mock-container-log cloudInstanceId=" + cloudInstanceId
                 + " tailLines=" + Math.max(tailLines, 1)
                 + "\nline-last: process exited";
+    }
+
+    /** 测试钩子：下一次 fetchContainerLog 对该 cloudId 抛错。 */
+    public void failNextFetch(String cloudInstanceId, String message) {
+        if (cloudInstanceId != null && message != null) {
+            fetchFailures.put(cloudInstanceId, message);
+        }
     }
 
     @Override

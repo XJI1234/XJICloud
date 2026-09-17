@@ -71,6 +71,8 @@ public class EciProperties {
      * 空则不挂 Memory EmptyDir，保留 ECI 默认 64Mi。
      */
     private String defaultShmSize = "";
+    /** 本地操作台：就绪后是否打开浏览器。测试应关闭。 */
+    private Console console = new Console();
 
     public boolean isMock() {
         return mock;
@@ -262,5 +264,27 @@ public class EciProperties {
 
     public void setDefaultShmSize(String defaultShmSize) {
         this.defaultShmSize = defaultShmSize;
+    }
+
+    public Console getConsole() {
+        return console;
+    }
+
+    public void setConsole(Console console) {
+        this.console = console == null ? new Console() : console;
+    }
+
+    /** {@code eci.console.*} 操作台开关。 */
+    public static class Console {
+        /** 启动后打开 {@code http://127.0.0.1:{port}/}。 */
+        private boolean openBrowser = true;
+
+        public boolean isOpenBrowser() {
+            return openBrowser;
+        }
+
+        public void setOpenBrowser(boolean openBrowser) {
+            this.openBrowser = openBrowser;
+        }
     }
 }
