@@ -1,5 +1,7 @@
 package com.xjicloud.eci.config;
 
+import java.nio.charset.StandardCharsets;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -66,6 +68,47 @@ class ConsoleStaticResourceTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("X-Api-Key")))
                 .andExpect(content().string(containsString("sessionStorage")));
+    }
+
+    @Test
+    void consoleHtmlKeepsGateAndCloudCredentialTabWithoutHttpKeyRotationUi() throws Exception {
+        String html = mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(html)
+                .contains("id=\"key-gate\"")
+                .contains("id=\"key-form\"")
+                .contains("id=\"change-key\" type=\"button\" class=\"ghost\">更换 Api-Key</button>")
+                .contains("data-tab=\"creds\"")
+                .contains("id=\"tab-creds\"")
+                .contains("当前云钥")
+                .doesNotContain("tab-httpkey")
+                .doesNotContain("revoke-prev")
+                .doesNotContain("/credentials/http-api-key")
+                .doesNotContain("/credentials/revoke-previous-api-key");
+    }
+
+    @Test
+    void consoleScriptKeepsSessionStorageApiKeyGateAndTopBarRePromptWithoutHttpKeyCalls() throws Exception {
+        String script = mockMvc.perform(get("/console/console.js"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(script)
+                .contains("sessionStorage.getItem(STORAGE_KEY)")
+                .contains("sessionStorage.setItem(STORAGE_KEY, value)")
+                .contains("\"X-Api-Key\": getKey()")
+                .contains("$(\"change-key\").addEventListener(\"click\", function () {\n    showGate(\"\");\n  });")
+                .doesNotContain("tab-httpkey")
+                .doesNotContain("revoke-prev")
+                .doesNotContain("/credentials/http-api-key")
+                .doesNotContain("/credentials/revoke-previous-api-key");
     }
 
     @Test

@@ -661,29 +661,5 @@
     });
   });
 
-  $("httpkey-form").addEventListener("submit", function (ev) {
-    ev.preventDefault();
-    var next = $("h-key").value;
-    api("/credentials/http-api-key", { method: "PUT", body: JSON.stringify({ apiKey: next }) }).then(function (data) {
-      setKey(next);
-      $("h-key").value = "";
-      setText($("httpkey-msg"), "已轮换。本页 sessionStorage 已更新为新钥。重叠期内旧钥仍可用。");
-      setText($("httpkey-status"), JSON.stringify(data, null, 2));
-    }).catch(function (err) {
-      if (err.status === 401) return;
-      setText($("httpkey-msg"), err.message);
-    });
-  });
-
-  $("revoke-prev").addEventListener("click", function () {
-    api("/credentials/revoke-previous-api-key", { method: "POST" }).then(function (data) {
-      setText($("httpkey-msg"), "已吊销上一把。");
-      setText($("httpkey-status"), JSON.stringify(data, null, 2));
-    }).catch(function (err) {
-      if (err.status === 401) return;
-      setText($("httpkey-msg"), err.message);
-    });
-  });
-
   boot();
 })();

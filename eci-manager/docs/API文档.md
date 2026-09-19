@@ -68,10 +68,11 @@
 | Base | `http://127.0.0.1:8081`（部署时替换主机与端口） |
 | 前缀 | `/api/v1/eci` |
 | 鉴权头 | `X-Api-Key: <密钥>` |
-| 密钥来源 | 配置 `eci.api-key` / 环境变量 `ECI_API_KEY`；运行时以 `HttpApiKeyStore` 为准（可 `PUT /credentials/http-api-key` 轮换） |
+| 密钥来源 | 进程配置 `eci.api-key`；`ECI_API_KEY` 只是配置注入方式。请求头必须精确传同值 `X-Api-Key`，改钥需修改配置并重启 |
 | 无需鉴权 | `GET /actuator/health`；操作台 `GET /`、`/index.html`、`/console/**`、`/favicon.ico` |
 
 缺 Key、错 Key → **HTTP 401**，响应体为统一失败壳；**不会**创建云资源。
+如果部署设置 `server.servlet.context-path`（如 `/manager`），外部请求路径变为 `/manager/api/v1/eci/...`；该前缀不改变应用内 `/api/v1/eci/**` 的鉴权要求。
 
 ### 2.2 统一响应壳
 
@@ -106,7 +107,7 @@
 | 401 | 缺少或错误的 `X-Api-Key` |
 | 404 | 任务/实例不存在 |
 | 409 | 冲突（如创建中禁止删实例；任务已终态无法取消） |
-| 500 | 未预期服务器错误；真云创建时镜像缓存不存在或未就绪（`ImageSnapshot.NotFound` / `ImageSnapshot.IncorrectStatus`）会经此路径回写 `failureReason` |
+| 500 | 未预期服务器错误；真云创建时镜像缓存不存在或未就绪（`ImageSnapshot.NotFound` / `ImageSnapshot.IncorrectStatus`）会经此路径回写 `failureReason`；当前无映射的旧 HTTP 钥路由也被全局兜底异常处理转为 500 |
 
 ### 2.4 任务状态（`TaskStatus`）
 
@@ -496,7 +497,7 @@ GPU 示例（贵、看库存；测完必须删）：
 
 ## 5. 当前云钥与 HTTP Api-Key — **已实现**
 
-8081 每种阿里云资源只持有**一把当前 AccessKey**（`ECI_OPENAPI` / `OSS`），可 HTTP 热切、落盘、测通。
+8081 每种阿里云资源只持有**一把当前 AccessKey**（`ECI_OPENAPI` / `OSS`），可通过 GET/PUT 热切、落盘、测通；以下云当前钥语义与 HTTP Api-Key 配置鉴权相互独立。
 
 - **没有**多钥目录、没有按 id 选钥。统一 AK 列表在**主后端第二步**；第二步将调用本节省下的同一 URL。
 - GET / 响应 / 日志**永不返回 SK**（只给 `accessKeyHint`）。
@@ -620,19 +621,15 @@ curl -s -X POST "$BASE/api/v1/eci/runtime-credentials/test" \
 
 Mock 下 `resource=ECI_OPENAPI` 的 test 期望 **400**。真云测 ECI 须 `eci.mock=false`，属手工步骤，**不进** `mvn test`。
 
-### 5.4 HTTP Api-Key 轮换（与云 AK 无关）
+### 5.4 HTTP Api-Key 配置权威
 
-`PUT /api/v1/eci/credentials/http-api-key`
-
-```json
-{ "apiKey": "<新的 HTTP 钥>" }
-```
-
-新钥立即生效。默认重叠 **3600** 秒内旧钥仍可用（`eci.api-key-overlap-sec` / `ECI_API_KEY_OVERLAP_SEC`；`0` = 立即切断）。相同钥 no-op。
-
-`POST /api/v1/eci/credentials/revoke-previous-api-key`
-
-立即让上一把失效。`data` 含 `apiKeyHint`、`previousActive`、`previousExpiresAt`，不含明文钥。
+- 唯一权威是进程配置 `eci.api-key`；`ECI_API_KEY` 只用于向该配置注入值。
+- 所有受保护 REST API 继续使用 `X-Api-Key`，请求头与配置值精确匹配才返回非 `401`。
+- HTTP Api-Key 不运行时热切、不写入 `eci_runtime_config`，也不从 H2 恢复。修改密钥必须改部署 env/yml 并重启服务；不存在 HTTP Api-Key 轮换或吊销接口。
+- 旧 `PUT /api/v1/eci/credentials/http-api-key` 和 `POST /api/v1/eci/credentials/revoke-previous-api-key` 已无业务映射；带正确钥请求时，当前全局异常处理会将无资源异常返回为 **500**，不是轮换成功，也不是 404。缺钥请求仍先返回 **401**。调用方不得再调用这两个路径。
+- 主后端第二步调用 8081 时仍传部署配置中的 `X-Api-Key`，不依赖 H2 旧行。
+- 升级时 H2 中可能残留旧 `eci.api-key`、`previous`、`previous-expires-at` 行，但新版本全部忽略，不能覆盖配置或继续授权。曾通过旧 PUT 轮换过的部署，升级前必须把当时仍有效的当前 HTTP Api-Key 回写到受保护的 env/yml，再停止旧版本并启动新版本；只回写当前有效钥，不回写已撤销或仅处于旧重叠窗口的钥。
+- HTTP Api-Key 不写入日志、响应、静态控制台或本文档明文。
 
 ---
 
@@ -732,7 +729,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | Mock 时间触发终态自动删 | `mock-auto-complete-sec` | **已实现** |
 | 当前云钥 GET/PUT | `/api/v1/eci/runtime-credentials` | **已实现**（每 resource 一把当前钥） |
 | 测通草稿或当前钥 | `POST /runtime-credentials/test` | **已实现**（CI 不连真云） |
-| HTTP Api-Key 双钥 | `/credentials/http-api-key` | **已实现** |
+| HTTP Api-Key 配置鉴权 | `eci.api-key` / `ECI_API_KEY` + `X-Api-Key` | **已实现** |
 | 8081 多钥目录 / 按 id 选钥 | — | **不做**（主后端第二步） |
 
 ---

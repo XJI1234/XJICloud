@@ -45,7 +45,7 @@
 
 资源枚举（两步共用，便于第二步直接调）：`ECI_OPENAPI`、`OSS`。以后加 ACR 只加枚举，8081 对未知 resource 返回 400。
 
-HTTP `ECI_API_KEY` 不是阿里云钥。第一步可做双钥轮换，第二步 backend 用它当调用 8081 的客户端密钥。
+HTTP `ECI_API_KEY` 不是阿里云钥。它只用于注入进程配置 `eci.api-key`，是 HTTP 鉴权的唯一权威；改钥必须改部署配置并重启。第二步 backend 调用 8081 时传部署配置中的 `X-Api-Key`。
 
 ## 4. 第一步：8081 当前钥执行器
 
@@ -57,9 +57,10 @@ HTTP `ECI_API_KEY` 不是阿里云钥。第一步可做双钥轮换，第二步 
 |-----|------|
 | `current.ECI_OPENAPI.access-key-id` / `.secret` | 当前 ECI OpenAPI 钥 |
 | `current.OSS.access-key-id` / `.secret` | 当前 OSS 钥（eci-manager 预签名） |
-| `eci.api-key` / `previous` / `previous-expires-at` | HTTP 鉴权（独立） |
 
 种子：上述 current 行 **不存在** 时从 `ECI_ACCESS_KEY_*`、`ECI_OSS_*` 写入。已存在则启动不覆盖（热切结果不能被 `.env` 打回）。
+
+HTTP Api-Key 不写入 `eci_runtime_config`，也不从该表恢复。H2 中可能残留旧版本的 `eci.api-key`、`previous`、`previous-expires-at` 行，但升级后全部忽略。曾通过旧 PUT 轮换过的部署，升级前必须把当时仍有效的当前 HTTP Api-Key 回写到受保护的 env/yml，再停止旧版本并启动新版本；不要回写已撤销或仅处于旧重叠窗口的钥。
 
 ### 4.2 客户端
 
@@ -124,7 +125,7 @@ HTTP `ECI_API_KEY` 不是阿里云钥。第一步可做双钥轮换，第二步 
 `OSS`：对当前配置的 bucket ListObjects；endpoint/bucket 未配 → 400。  
 也可不传 id/secret，表示测 **已保存的当前钥**。
 
-**HTTP Api-Key：** `PUT /api/v1/eci/credentials/http-api-key`、`POST .../revoke-previous-api-key`，重叠默认 3600 秒。与云 AK 无关。
+**HTTP Api-Key：** 所有受保护接口使用 `X-Api-Key`，并与进程配置 `eci.api-key` 精确匹配；不存在运行时轮换或吊销接口。配置变更后重启服务，与云当前钥的 GET/PUT/test 和热切语义无关。
 
 ### 4.4 第一步分期（仅 eci-manager）
 
@@ -132,7 +133,7 @@ HTTP `ECI_API_KEY` 不是阿里云钥。第一步可做双钥轮换，第二步 
 |------|------|
 | **C1** | STATIC_AK + env 映射 |
 | **C2** | 当前钥落盘 + GET/PUT `runtime-credentials` + 热重建 |
-| **C3** | HTTP Api-Key 双钥 |
+| **C3** | HTTP Api-Key 配置权威（无运行时轮换） |
 | **C4** | `POST .../test`（可测草稿或当前） |
 | **C5** | 文档 |
 
@@ -146,7 +147,7 @@ HTTP `ECI_API_KEY` 不是阿里云钥。第一步可做双钥轮换，第二步 
 - 绑定 `ECI_OPENAPI`（以及若 eci-manager 任务预签名要用另一把/同一把 OSS）：`PUT 8081 /runtime-credentials` 带明文 AK/SK（8080→8081 内网，不进浏览器）。
 - 8081 调用失败：绑定事务失败或回滚，避免「库里选了 A、8081 仍是 B」。
 - 删除目录项：若仍被绑定 → 409，与先前产品规则相同。
-- backend 配置：`eci-manager.base-url` + 用于调 8081 的 Api-Key（来自第一步的 HTTP 钥）。
+- backend 配置：`eci-manager.base-url` + 用于调 8081 的 Api-Key（与 8081 的 `eci.api-key` / `ECI_API_KEY` 配置一致）。
 
 eci-manager 内网 OSS 与主后端公网 OSS 可能同一把 AK、不同 endpoint：第二步列表里一条钥，绑定两次（OSS 给 8080，ECI 或再 PUT OSS 给 8081）。8081 的 OSS endpoint 仍用它自己的 yml，不随选钥改。
 

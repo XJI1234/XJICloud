@@ -30,7 +30,7 @@ source ../.tools/env.sh    # 在 eci-manager/ 下
 
 ## 配置（`.env`，推荐）
 
-真云联调时，HTTP Api-Key、VPC、**当前钥种子**建议统一写在 **`eci-manager/.env`**（种子只在库行缺失时写入）。
+真云联调时，HTTP Api-Key、VPC、**当前云钥种子**建议统一写在 **`eci-manager/.env`**。HTTP Api-Key 由配置直接决定；只有云当前钥种子在对应库行缺失时才写入。
 
 ```bash
 cd eci-manager
@@ -43,7 +43,7 @@ chmod +x scripts/*.sh
 | 变量 | 说明 |
 |------|------|
 | `SPRING_PROFILES_ACTIVE` | 真云：`cloud,local`；Mock：`dev` |
-| `ECI_API_KEY` | HTTP 请求头 `X-Api-Key`（可再经 `PUT /credentials/http-api-key` 轮换） |
+| `ECI_API_KEY` | 进程唯一 HTTP Api-Key 配置；受保护请求头必须传同值 `X-Api-Key`，改钥后重启 |
 | `ECI_ACCESS_KEY_ID` / `SECRET` | ECI 当前钥**种子**；成对则 `STATIC_AK`。已落盘的热切结果启动时不会被 `.env` 打回 |
 | `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | Java **不读**；仅 `load-env.sh` 在 `ECI_ACCESS_KEY_*` 为空且无 STS token 时映射为种子 |
 | `ECI_REGION_ID` / `ECI_VPC_ID` / `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 创建容器网络 |
@@ -60,6 +60,8 @@ cd eci-manager
 source scripts/load-env.sh
 curl -s -H "X-Api-Key: $ECI_API_KEY" http://127.0.0.1:8081/actuator/health
 ```
+
+HTTP Api-Key 不运行时热切、不写入 `eci_runtime_config`，也不从 H2 恢复。部署改钥必须修改受保护的 env/yml 配置并重启；主后端第二步调用 8081 时仍传配置中的 `X-Api-Key`。升级时 H2 中可能残留旧 `eci.api-key`、`previous`、`previous-expires-at` 行，新版本完全忽略它们。曾通过旧 PUT 轮换过的部署，升级前必须把当时仍有效的当前 HTTP Api-Key 回写到 env/yml，再停止旧版本并启动新版本。
 
  `application-local.yml` 仍被保留（见 [设计与使用说明](docs/设计与使用说明.md) §4.2）。省事。
 
@@ -197,12 +199,10 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 | POST | `/api/v1/eci/instances/{id}/refresh` | 拉云状态 |
 | GET | `/api/v1/eci/runtime-credentials` | 当前云钥 hint（无 SK） |
 | PUT | `/api/v1/eci/runtime-credentials` | 覆盖该 resource 当前钥并热切 |
-| POST | `/api/v1/eci/runtime-credentials/test` | 测草稿或已保存；不落盘 |
-| PUT | `/api/v1/eci/credentials/http-api-key` | 轮换 HTTP Api-Key |
-| POST | `/api/v1/eci/credentials/revoke-previous-api-key` | 吊销上一把 HTTP 钥 |
+| POST | `/api/v1/eci/runtime-credentials/test` | 测草稿或已保存云当前钥；不改当前云钥 |
 | GET | `/actuator/health` | 健康检查（无 Api-Key） |
 
-响应：`{ "success", "message", "data" }`。当前钥与 HTTP 钥完整字段见 [docs/API文档.md](docs/API文档.md) §5。8081 **没有**多钥目录（列表在主后端第二步）。
+响应：`{ "success", "message", "data" }`。云当前钥与 HTTP 鉴权完整说明见 [docs/API文档.md](docs/API文档.md) §5。8081 **没有**多钥目录（列表在主后端第二步）。
 
 ## 一期验收清单（mock）
 

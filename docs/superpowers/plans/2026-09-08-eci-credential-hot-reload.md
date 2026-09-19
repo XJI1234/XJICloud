@@ -1,5 +1,7 @@
 # eci-manager 当前钥热切换 Implementation Plan（第一步）
 
+> **醒目提示（2026-09-17）：C3 双钥方案已撤回，HTTP Api-Key 以 [`2026-09-17-eci-http-api-key-config-authority.md`](../specs/2026-09-17-eci-http-api-key-config-authority.md) 为准。**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **How to resume in a new chat:** `@docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md` 并说明要从哪个未完成 Task 继续。  

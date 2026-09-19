@@ -55,24 +55,6 @@ class ProviderConfigValidationTest {
     }
 
     @Test
-    void rejectsNegativeApiKeyOverlapSec() throws Exception {
-        EciProperties properties = validProperties();
-        properties.setApiKeyOverlapSec(-1);
-        ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(properties);
-        assertThatThrownBy(() -> runner.run(null))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("eci.api-key-overlap-sec");
-    }
-
-    @Test
-    void acceptsZeroApiKeyOverlapSec() {
-        EciProperties properties = validProperties();
-        properties.setApiKeyOverlapSec(0);
-        ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(properties);
-        assertThatCode(() -> runner.run(null)).doesNotThrowAnyException();
-    }
-
-    @Test
     void mockProviderReceivesAutoCompleteConfig() {
         EciProperties properties = validProperties();
         properties.setMock(true);

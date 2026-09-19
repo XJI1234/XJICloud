@@ -1,112 +1,132 @@
 package com.xjicloud.eci.auth;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.config.EciProperties;
-import com.xjicloud.eci.credential.HttpApiKeyStore;
-import com.xjicloud.eci.credential.MapRuntimeConfigStore;
-import jakarta.servlet.ServletException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.mock.web.MockFilterChain;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-
-import java.io.IOException;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Filter 两种 401：未配置当前钥 vs 无效/缺失 Api-Key。不 mock SUT。
+ * HTTP Api-Key 的外部行为：配置钥是唯一权威，不能被落盘旧钥取代。
  */
+@SpringBootTest(properties = {
+        "eci.mock=true",
+        "eci.api-key=configured-http-key",
+        "spring.datasource.url=jdbc:h2:mem:eci-api-key-filter;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.sql.init.mode=always",
+        "spring.jpa.defer-datasource-initialization=true",
+        "spring.sql.init.data-locations=classpath:api-key-filter-legacy.sql"
+})
+@AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ApiKeyAuthFilterTest {
 
-    private static final String SEED = "seed-http-api-key";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String PATH = "/api/v1/eci/meta";
+    private static final String HEADER = "X-Api-Key";
+    private static final String CURRENT_KEY = "configured-http-key";
+    private static final String LEGACY_KEY = "legacy-http-key";
+    private static final String LEGACY_PREVIOUS_KEY = "legacy-previous-http-key";
 
-    private MapRuntimeConfigStore config;
-    private EciProperties properties;
-    private HttpApiKeyStore store;
-    private ApiKeyAuthFilter filter;
+    @Autowired
+    private MockMvc mockMvc;
 
-    @BeforeEach
-    void setUp() {
-        config = new MapRuntimeConfigStore();
-        properties = new EciProperties();
-        properties.setApiKey(SEED);
-        properties.setApiKeyOverlapSec(3600);
-        store = new HttpApiKeyStore(config, properties, Clock.fixed(Instant.parse("2026-09-09T00:00:00Z"), ZoneOffset.UTC));
-        store.afterSingletonsInstantiated();
-        filter = new ApiKeyAuthFilter(store, MAPPER);
+    @Test
+    void missingHeaderReturns401AndDoesNotReachEndpoint() throws Exception {
+        mockMvc.perform(get(PATH))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("无效或缺失的 Api-Key"));
     }
 
     @Test
-    void unconfiguredCurrentKeyReturns401ConfiguredMessageAndDoesNotContinue() throws Exception {
-        properties.setApiKey("");
-        config.delete("eci.api-key");
-        store = new HttpApiKeyStore(config, properties, Clock.systemUTC());
-        store.afterSingletonsInstantiated();
-        filter = new ApiKeyAuthFilter(store, MAPPER);
-
-        MockHttpServletResponse response = perform("GET", "/api/v1/eci/tasks", null);
-
-        assertUnauthorized(response, "服务器未配置 eci.api-key");
+    void wrongKeyReturns401AndDoesNotReachEndpoint() throws Exception {
+        mockMvc.perform(get(PATH).header(HEADER, "wrong-http-key"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("无效或缺失的 Api-Key"));
     }
 
     @Test
-    void missingHeaderReturns401InvalidMessage() throws Exception {
-        MockHttpServletResponse response = perform("GET", "/api/v1/eci/tasks", null);
-
-        assertUnauthorized(response, "无效或缺失的 Api-Key");
+    void exactConfiguredKeyContinuesFilterChain() throws Exception {
+        mockMvc.perform(get(PATH).header(HEADER, CURRENT_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
     }
 
     @Test
-    void wrongKeyReturns401InvalidMessage() throws Exception {
-        MockHttpServletResponse response = perform("GET", "/api/v1/eci/tasks", "wrong-http-api-key");
-
-        assertUnauthorized(response, "无效或缺失的 Api-Key");
+    void requestHeaderWhitespaceIsNotTrimmed() throws Exception {
+        mockMvc.perform(get(PATH).header(HEADER, " " + CURRENT_KEY + " "))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("无效或缺失的 Api-Key"));
     }
 
     @Test
-    void matchingKeyContinuesFilterChain() throws Exception {
-        MockHttpServletRequest request = request("GET", "/api/v1/eci/tasks", SEED);
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        MockFilterChain chain = new MockFilterChain();
-
-        filter.doFilter(request, response, chain);
-
-        assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
-        assertThat(chain.getRequest()).isSameAs(request);
+    void persistedLegacyKeyIsNotAccepted() throws Exception {
+        mockMvc.perform(get(PATH).header(HEADER, LEGACY_KEY))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("无效或缺失的 Api-Key"));
     }
 
-    private MockHttpServletResponse perform(String method, String uri, String apiKey)
-            throws ServletException, IOException {
-        MockHttpServletRequest request = request(method, uri, apiKey);
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        MockFilterChain chain = new MockFilterChain();
-        filter.doFilter(request, response, chain);
-        assertThat(chain.getRequest()).isNull();
-        return response;
+    @Test
+    void persistedLegacyPreviousKeyIsNotAccepted() throws Exception {
+        mockMvc.perform(get(PATH).header(HEADER, LEGACY_PREVIOUS_KEY))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("无效或缺失的 Api-Key"));
+    }
+}
+
+/**
+ * 空白配置仍必须阻断请求，即使客户端提供了任意请求头。
+ * 仅替换启动校验 runner，让应用能启动到实际 HTTP 过滤器；不替换被测组件。
+ */
+@SpringBootTest(properties = {
+        "eci.mock=true",
+        "spring.datasource.url=jdbc:h2:mem:eci-api-key-filter-empty;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.sql.init.mode=always",
+        "spring.jpa.defer-datasource-initialization=true",
+        "spring.sql.init.data-locations=classpath:api-key-filter-legacy.sql"
+})
+@AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+class ApiKeyAuthFilterEmptyConfigurationTest {
+
+    @DynamicPropertySource
+    static void registerWhitespaceApiKey(DynamicPropertyRegistry registry) {
+        registry.add("eci.api-key", () -> "   ");
     }
 
-    private static MockHttpServletRequest request(String method, String uri, String apiKey) {
-        MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
-        request.setRequestURI(uri);
-        if (apiKey != null) {
-            request.addHeader(ApiKeyAuthFilter.HEADER_API_KEY, apiKey);
-        }
-        return request;
-    }
+    @MockBean(name = "apiKeyStartupCheck")
+    private ApplicationRunner startupCheck;
 
-    private static void assertUnauthorized(MockHttpServletResponse response, String message) throws Exception {
-        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
-        JsonNode body = MAPPER.readTree(response.getContentAsByteArray());
-        assertThat(body.path("success").asBoolean()).isFalse();
-        assertThat(body.path("message").asText()).isEqualTo(message);
-        assertThat(body.path("data").isNull()).isTrue();
+    @Autowired
+    private EciProperties eciProperties;
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    void blankConfiguredKeyReturns401AndDoesNotReachEndpoint() throws Exception {
+        assertThat(eciProperties.getApiKey())
+                .isNotEmpty()
+                .isEqualTo("   ");
+
+        mockMvc.perform(get("/api/v1/eci/meta").header("X-Api-Key", "legacy-http-key"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("服务器未配置 eci.api-key"));
     }
 }

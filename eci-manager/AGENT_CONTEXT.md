@@ -34,7 +34,7 @@
 - **已交付（当前钥执行器 C1–C5，2026-09-08～09-09）：**
   - ✅ 成对运行时 AK → `STATIC_AK`（`DefaultProfile.getProfile(region, ak, sk)`）
   - ✅ 每 resource 一把**当前钥**落盘 + GET/PUT `/runtime-credentials` + 热重建
-  - ✅ HTTP Api-Key 双钥轮换（`/credentials/http-api-key`）
+  - ✅ HTTP Api-Key 配置鉴权（`eci.api-key` / `ECI_API_KEY`）
   - ✅ `POST /runtime-credentials/test`（草稿或已保存；不改当前）
   - ✅ 文档：8081 只有当前钥；列表在主后端第二步；`.env` 是种子
 - **已交付（shm EmptyDir，2026-09-16）：**
@@ -43,7 +43,7 @@
   - ✅ 3dgs 标准档传 `8Gi`；bootstrap 不再 remount / 强制 `num_workers=0`
 - **已交付（本地操作台，2026-09-16）：**
   - ✅ `SecurityConfig` 放行 `/`、`/index.html`、`/console/**`、`/favicon.ico`
-  - ✅ 静态操作台（无 Node）：Api-Key 闸门、MOCK/CLOUD 徽章、任务提交/轮询/计时/日志尾部、实例与当前钥/HTTP 钥 Tab
+  - ✅ 静态操作台（无 Node）：Api-Key 闸门、MOCK/CLOUD 徽章、任务提交/轮询/计时/日志尾部、实例与当前云钥 Tab
   - ✅ `GET /api/v1/eci/meta`（无密钥）；`GET /api/v1/eci/tasks/{id}/logs`
   - ✅ `ApplicationReadyEvent` 打开 `http://127.0.0.1:{port}/`（WSL: `cmd.exe /c start`）；`./scripts/start.sh mock|cloud`
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
@@ -83,7 +83,7 @@ eci-manager/
 └── src/
     ├── main/java/com/xjicloud/eci/
     │   ├── config/          # EciProperties、OssProperties、EciMetaController、ConsoleBrowserLauncher
-    │   ├── credential/      # 当前钥 GET/PUT/test、HTTP Api-Key 双钥
+    │   ├── credential/      # 当前云钥 GET/PUT/test
     │   ├── oss/             # OssStorageService（含 applyRuntimeKeys）
     │   ├── task/storage/    # TaskStorageResolver、DTO
     │   └── instance/ … task/ … provider/ … lifecycle/
@@ -141,9 +141,8 @@ flowchart LR
 | AsyncLifecycleWorker | 创建/删除轮询；Succeeded 视为创建成功路径 markRunning；cancel 竞态 abort→删；回调任务状态 |
 | TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；Failed/TIMEOUT：**抓日志→落库→宽限→删**；SUCCEEDED 门闩 |
 | StartupCompensationRunner | 启动扫实例 CREATING/STOPPING/RUNNING + 非终态任务对齐 |
-| ApiKeyAuthFilter | `/api/v1/eci/**`；读 `HttpApiKeyStore`（当前钥或重叠期内上一把）；`/` 操作台与 `/actuator/health` 公开 |
+| ApiKeyAuthFilter | 按应用内路径拦截 `/api/v1/eci/**`（非根 context path 也须生效）；只比对进程配置 `eci.api-key`；`/` 操作台与 `/actuator/health` 公开 |
 | RuntimeCredentialService | 每 resource 当前云钥：种子、GET/PUT、热切；`test` 只读 |
-| HttpApiKeyStore | HTTP Api-Key 双钥；与云 AK 无关 |
 
 ### 实例状态机（本地权威）
 
@@ -181,12 +180,16 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 
 | 名称 | 用途 | 来源 |
 |------|------|------|
-| HTTP Api-Key（`eci.api-key` / `X-Api-Key`） | 保护本服务 REST | **自建**；可 `PUT /credentials/http-api-key` 轮换 |
+| HTTP Api-Key（`eci.api-key` / `ECI_API_KEY` / `X-Api-Key`） | 保护本服务 REST | 进程配置唯一权威；改配置后重启 |
 | 阿里云当前钥 | 调 ECI OpenAPI / 本服务 OSS presign | 每种 `resource` **一把当前 AK**（库表 `eci_runtime_config`） |
 
 **8081 只有当前钥**，没有多钥目录、没有按 id 选钥。统一 AK 列表在**主后端第二步**；第二步将调用同一套 `GET/PUT /runtime-credentials`、`POST .../test`。
 
-**`.env` 是种子，不是运行时权威：** `ECI_ACCESS_KEY_*` / `ECI_OSS_*` 只在对应 current 行**不存在**时写入。已 PUT 落盘的热切结果，启动时**不会**被 `.env` 打回。
+HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把值注入该配置。所有受保护请求都必须传配置中的 `X-Api-Key`，改钥必须修改部署的 env/yml 并重启。第二步调用 8081 时仍传同一配置值的 `X-Api-Key`。HTTP Api-Key 不写入 `eci_runtime_config`，也不从该表恢复。
+
+升级时，H2 中可能残留旧版本的 `eci.api-key`、`previous`、`previous-expires-at` 行，但新版本一律忽略，不能覆盖配置或继续授权。曾经通过旧 PUT 轮换过的部署，必须在升级前把当时仍有效的当前 HTTP Api-Key 回写到受保护的 env/yml，再停止旧版本并启动新版本；不要回写已撤销或仅处于旧重叠窗口的钥。旧行可留在 H2，不需要迁移读取或新写入。
+
+**云当前钥的 `.env` 是种子，不是运行时权威：** `ECI_ACCESS_KEY_*` / `ECI_OSS_*` 只在对应 current 行**不存在**时写入。已 PUT 落盘的热切结果，启动时**不会**被 `.env` 打回。
 
 **`ALIBABA_CLOUD_*` 仅脚本映射：** Java **不读**该变量。`scripts/load-env.sh` 在 `ECI_ACCESS_KEY_*` 为空且无 `ALIBABA_CLOUD_SECURITY_TOKEN` 时，才把它 export 成 `ECI_ACCESS_KEY_*`。成对非空的 `eci.access-key-id/secret`（通常来自该种子）走 **STATIC_AK**。当前钥为空时才回退 ECS RAM 角色 / SDK 默认链；非 ECS 且无种子时探 `100.100.100.200`（IMDS）超时属预期。
 
@@ -236,9 +239,7 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 |------|------|------|
 | GET | `/runtime-credentials` | 当前钥 hint + `mode`（`MOCK` / `STATIC_AK` / RAM 链名） |
 | PUT | `/runtime-credentials` | 成对 id/secret 覆盖该 `resource` 并热重建 |
-| POST | `/runtime-credentials/test` | 测草稿或已保存当前钥；**不**落盘、不热切 |
-| PUT | `/credentials/http-api-key` | 轮换 HTTP 钥；重叠默认 3600s |
-| POST | `/credentials/revoke-previous-api-key` | 立即切断上一把 |
+| POST | `/runtime-credentials/test` | 测草稿或已保存当前钥；不改当前云钥 |
 
 `resource`：`ECI_OPENAPI` \| `OSS`。Mock 下测 ECI → 400。OSS 缺 endpoint/bucket → 400。完整字段见 [docs/API文档.md](docs/API文档.md) §5。
 
@@ -339,7 +340,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 - **T3+** 生命周期测试补强（2026-07-30）  
 - **O1–O5.2** OSS 配置/解析/API/联调镜像/文档（2026-07-31）  
 - **L1** 失败日志可观测性（删前 Tail + 宽限，2026-09-02）  
-- **C1–C5** 当前钥执行器（STATIC_AK、落盘热切、HTTP 双钥、POST test、文档，2026-09-09）  
+- **C1–C5** 当前钥执行器（STATIC_AK、云当前钥落盘热切、POST test、文档，2026-09-09）；HTTP Api-Key 改为配置权威
 - **shm** Memory EmptyDir 放大 `/dev/shm`（`shmSize`，2026-09-16）  
 - **console** 本地静态操作台（`GET /`、`/meta`、`/tasks/{id}/logs`、就绪开浏览器，2026-09-16）  
 - **下一刀** 联合 3dgs（traceback / `PYTHONUNBUFFERED`）；可选真云失败取证冒烟；O5.3 云端验收清单收尾；**第二步**主后端 AK 目录  
@@ -464,8 +465,7 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | `docs/设计与使用说明.md` | 结构 / 配置 / §4.4 OSS |
 | `docs/API文档.md` | HTTP 契约 / storage / 当前钥 §5 / `containerLogTail` |
 | `docs/3dgs-ECI使用说明.md` | 3DGS 真云提交、验收、踩坑与失败取证 |
-| `src/.../credential/RuntimeCredentialController.java` | GET/PUT 当前钥、POST test |
-| `src/.../credential/HttpApiKeyController.java` | HTTP Api-Key 轮换 / 吊销 |
+| `src/.../credential/RuntimeCredentialController.java` | GET/PUT 当前云钥、POST test |
 | `src/.../task/EciTaskService.java` | 任务业务（含 `onInstanceFailed(..., logTail)`） |
 | `src/.../task/storage/TaskStorageResolver.java` | storage → env |
 | `src/.../oss/OssStorageService.java` | presign |
