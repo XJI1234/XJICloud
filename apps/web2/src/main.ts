@@ -8,7 +8,17 @@ import { installContainer } from './app/runtime'
 import './presentation/styles/shell.css'
 import './presentation/styles/viewer-canvas.css'
 
-const container = createWeb2Container()
+const container = createWeb2Container({
+  onUnauthorized() {
+    if (typeof window === 'undefined') {
+      return
+    }
+    if (window.location.pathname.startsWith('/login')) {
+      return
+    }
+    window.location.assign('/login')
+  },
+})
 installContainer(container)
 
 const app = createApp(App)

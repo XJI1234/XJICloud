@@ -1,5 +1,6 @@
 import { DomainError } from '@/shared/domain-error'
 import type { ModelFormat } from '../entities/model-asset.entity'
+import { MODEL_MAX_SIZE_BYTES } from './chunk-range.service'
 
 export function detectModelFormat(fileName: string): ModelFormat | null {
   const index = fileName.lastIndexOf('.')
@@ -17,6 +18,9 @@ export function assertModelFile(file: File) {
   const format = detectModelFormat(file.name)
   if (!format) {
     return new DomainError('MODEL_INVALID_FORMAT')
+  }
+  if (file.size < 1 || file.size > MODEL_MAX_SIZE_BYTES) {
+    return new DomainError('MODEL_TOO_LARGE')
   }
   return null
 }

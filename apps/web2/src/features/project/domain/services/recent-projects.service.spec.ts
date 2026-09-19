@@ -3,18 +3,18 @@ import { MAX_RECENT_PROJECTS } from '../entities/project.entity'
 import { recordRecentAccess, resolveRecentProjects } from './recent-projects.service'
 
 describe('recent projects', () => {
-  it('caps at 8 and moves the latest to front', () => {
+  it('caps at 5 and moves the latest to front', () => {
     const seeded = Array.from({ length: MAX_RECENT_PROJECTS }, (_, index) => ({
       id: `p${index}`,
       openedAt: index,
     }))
     const next = recordRecentAccess(seeded, 'p0', 99)
-    expect(next).toHaveLength(8)
+    expect(next).toHaveLength(5)
     expect(next[0]).toEqual({ id: 'p0', openedAt: 99 })
     const overflow = recordRecentAccess(next, 'p-new', 100)
-    expect(overflow).toHaveLength(8)
+    expect(overflow).toHaveLength(5)
     expect(overflow[0].id).toBe('p-new')
-    expect(overflow.map((entry) => entry.id)).not.toContain('p7')
+    expect(overflow.map((entry) => entry.id)).not.toContain('p4')
   })
 
   it('drops unknown ids when resolving', () => {

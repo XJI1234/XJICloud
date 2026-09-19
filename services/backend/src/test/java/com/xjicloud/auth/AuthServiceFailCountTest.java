@@ -93,7 +93,7 @@ class AuthServiceFailCountTest {
         when(passwordEncoder.matches("secret", "hash")).thenReturn(true);
         JwtService jwtService = mock(JwtService.class);
         when(jwtService.generateToken(user)).thenReturn("token");
-        when(jwtService.getExpirationMs()).thenReturn(3600L);
+        when(jwtService.getUserExpirationMs()).thenReturn(3600L);
 
         AuthService service = new AuthService(
                 userAccountRepository,

@@ -1,7 +1,7 @@
 # web2 前端架构（DDD）
 
 > 给开发者与 AI Agent 的 **当前用户前端知识库**。包级入门见 [apps/web2/README.md](../apps/web2/README.md)；改代码时的硬规则见 [apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。  
-> 全仓后端 / Worker / 部署仍以 [AGENT_CONTEXT.md](./AGENT_CONTEXT.md) 为准。  
+> 全仓后端 / Worker / 部署仍以 [AGENT_CONTEXT.md](./AGENT_CONTEXT.md) 为准。工程规则、验证与 Code Review 以 [TEAM_ENGINEERING.md](./TEAM_ENGINEERING.md) 为准。  
 > **最后更新：** 2026-08-31
 
 本文记录的是 **已经落地的** 结构，不是愿景。**`apps/web2` 是当前用户产品面**；`apps/web` 已弃用。同一套 `/api/v1` 后端。UI 为浅色壳 + 暗画布，不是旧版暗色 Twilight Amber。
@@ -142,7 +142,7 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 | 用例 | `loginUseCase`、`registerUseCase`、`resolveAuthNavigation` |
 | UI | `LoginView`、`useAuthSession` |
 
-会话在 localStorage。路由用 `isAuthenticated(session)` + `resolveAuthNavigation`，不要在每个页面手写 if。
+会话在 localStorage。`isAuthenticated` 以 JWT `exp` 为准（用户 token 7 天）。过期或 API 401 清会话并回登录页；登出不清最近工程。路由用 `isAuthenticated(session)` + `resolveAuthNavigation`，不要在每个页面手写 if。
 
 ### 6.2 Project（工程）
 
@@ -150,8 +150,8 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 |--|--|
 | UL | Project、最近打开 |
 | 实体 | `project.entity`（id/name/description/createdAt） |
-| 领域服务 | `recent-projects.service`（上限 `MAX_RECENT_PROJECTS`） |
-| Ports | `ProjectRepository`、`WorkspacePersistence`（当前工程 id、最近列表） |
+| 领域服务 | `recent-projects.service`（上限 `MAX_RECENT_PROJECTS` = 5） |
+| Ports | `ProjectRepository`、`WorkspacePersistence`（当前工程 id、按账号隔离的最近列表） |
 | UI | `HomeView`、`ProjectListView`、`useProjectWorkspace` |
 
 「当前工程」是 workspace 持久化，不是后端字段。查看器、上传、编辑器都读 `activeProjectId()`。
@@ -174,13 +174,13 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 
 | | |
 |--|--|
-| UL | ModelAsset、PLY/SPZ、下载 token、export |
-| 领域服务 | `model-format.service`（`detectModelFormat` / `assertModelFile`） |
-| Port | `ModelAssetRepository` |
-| 用例 | `listModelsUseCase`、`uploadModelUseCase` |
-| UI | `useModelAssets`（被工程列表、查看器、编辑器共用） |
+| UL | ModelAsset、PLY/SPZ、下载 token、export、分片上传会话 |
+| 领域服务 | `model-format.service`（格式与 2GB 上限）、`chunk-range.service`、`model-list.service`（按更新时间排序） |
+| Port | `ModelAssetRepository`（session / chunk / complete / delete） |
+| 用例 | `listModelsUseCase`、`uploadModelUseCase`（顺序分片续传）、`deleteModelUseCase` |
+| UI | `useModelAssets`、`ModelUploadPanel`（已上传列表、进行中进度、查看/删除） |
 
-没有工程 id 时 `MODEL_PROJECT_REQUIRED`。非法扩展名 `MODEL_INVALID_FORMAT`。
+没有工程 id 时 `MODEL_PROJECT_REQUIRED`。非法扩展名 `MODEL_INVALID_FORMAT`。超过 2GB `MODEL_TOO_LARGE`。
 
 ### 6.5 Viewer（查看）
 

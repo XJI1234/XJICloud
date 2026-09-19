@@ -8,6 +8,7 @@ import com.xjicloud.job.TrainingJobRepository;
 import com.xjicloud.model.LocalFileStoreService;
 import com.xjicloud.model.ModelAsset;
 import com.xjicloud.model.ModelAssetRepository;
+import com.xjicloud.model.ModelUploadSessionService;
 import com.xjicloud.model.ViewerConfigRepository;
 import com.xjicloud.project.dto.CreateProjectRequest;
 import com.xjicloud.project.dto.ProjectResponse;
@@ -29,6 +30,7 @@ public class ProjectService {
     private final TrainingJobRepository trainingJobRepository;
     private final DatasetAssetRepository datasetAssetRepository;
     private final LocalFileStoreService localFileStoreService;
+    private final ModelUploadSessionService modelUploadSessionService;
 
     public ProjectService(
             ProjectRepository projectRepository,
@@ -36,7 +38,8 @@ public class ProjectService {
             ViewerConfigRepository viewerConfigRepository,
             TrainingJobRepository trainingJobRepository,
             DatasetAssetRepository datasetAssetRepository,
-            LocalFileStoreService localFileStoreService
+            LocalFileStoreService localFileStoreService,
+            ModelUploadSessionService modelUploadSessionService
     ) {
         this.projectRepository = projectRepository;
         this.modelAssetRepository = modelAssetRepository;
@@ -44,6 +47,7 @@ public class ProjectService {
         this.trainingJobRepository = trainingJobRepository;
         this.datasetAssetRepository = datasetAssetRepository;
         this.localFileStoreService = localFileStoreService;
+        this.modelUploadSessionService = modelUploadSessionService;
     }
 
     public List<ProjectResponse> listProjects(UserAccount user) {
@@ -110,12 +114,14 @@ public class ProjectService {
     private void registerDeleteProjectDirectoryAfterCommit(UserAccount user, Project project) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             localFileStoreService.deleteProjectDirectory(user, project);
+            modelUploadSessionService.deleteSessionsForProject(user.getId(), project.getId());
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 localFileStoreService.deleteProjectDirectory(user, project);
+                modelUploadSessionService.deleteSessionsForProject(user.getId(), project.getId());
             }
         });
     }

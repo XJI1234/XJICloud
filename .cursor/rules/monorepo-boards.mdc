@@ -1,0 +1,17 @@
+---
+description: Monorepo 板块边界与各端约定，避免 AI 串台或抄错架构
+alwaysApply: true
+---
+
+# 板块
+
+| 落点 | 目录 | 注意 |
+|------|------|------|
+| 用户前端 | `apps/web2` | DDD：domain 禁 vue/fetch；presentation 禁 DTO/mapper；组合根仅 `create-container.ts`；浅色壳+暗画布 |
+| 旧前端 | `apps/web` | 已弃用，新功能不要动 |
+| 管理端 | `apps/admin` | 保持现有 store/api，不要擅自上 DDD；`base` `/admin/` |
+| 后端 | `services/backend` | 按现有 `com.xjicloud.*` 业务包扩展；三套 JWT；`ApiResponse` |
+| Worker | `services/gpu-worker` | 与 worker API 字段对齐；mock 训练勿擅自替换 |
+| 共享 | `packages/shared` | 改类型必须同步调用方 |
+
+前后端契约变更必须改两端。训练状态枚举与双存储策略（模型本地盘、数据集 OSS）以 `docs/AGENT_CONTEXT.md` 为准。

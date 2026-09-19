@@ -21,9 +21,11 @@ public class JwtService {
         this.secretKey = Keys.hmacShaKeyFor(jwtProperties.secret().getBytes(StandardCharsets.UTF_8));
     }
 
+    public static final long USER_EXPIRATION_MS = 7L * 24 * 60 * 60 * 1000;
+
     public String generateToken(UserAccount user) {
         Date now = new Date();
-        Date expiry = new Date(now.getTime() + jwtProperties.expirationMs());
+        Date expiry = new Date(now.getTime() + USER_EXPIRATION_MS);
         return Jwts.builder()
                 .subject(user.getId().toString())
                 .claim("type", "user")
@@ -90,6 +92,10 @@ public class JwtService {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    public long getUserExpirationMs() {
+        return USER_EXPIRATION_MS;
     }
 
     public long getExpirationMs() {

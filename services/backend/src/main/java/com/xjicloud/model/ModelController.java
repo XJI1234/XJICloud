@@ -2,9 +2,12 @@ package com.xjicloud.model;
 
 import com.xjicloud.auth.UserAccount;
 import com.xjicloud.common.ApiResponse;
+import com.xjicloud.model.dto.CreateUploadSessionRequest;
 import com.xjicloud.model.dto.DownloadTokenResponse;
 import com.xjicloud.model.dto.ModelResponse;
 import com.xjicloud.model.dto.SaveViewerConfigRequest;
+import com.xjicloud.model.dto.UploadChunkResponse;
+import com.xjicloud.model.dto.UploadSessionResponse;
 import com.xjicloud.model.dto.ViewerConfigResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -14,6 +17,7 @@ import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,6 +55,59 @@ public class ModelController {
             @RequestParam("file") MultipartFile file
     ) {
         return ApiResponse.ok(modelService.uploadModel(user, projectId, file));
+    }
+
+    @PostMapping("/projects/{projectId}/models/upload-sessions")
+    public ApiResponse<UploadSessionResponse> createUploadSession(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID projectId,
+            @Valid @RequestBody CreateUploadSessionRequest request
+    ) {
+        return ApiResponse.ok(modelService.createUploadSession(user, projectId, request.fileName(), request.sizeBytes()));
+    }
+
+    @GetMapping("/models/upload-sessions/{sessionId}")
+    public ApiResponse<UploadSessionResponse> getUploadSession(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID sessionId
+    ) {
+        return ApiResponse.ok(modelService.getUploadSession(user, sessionId));
+    }
+
+    @PutMapping("/models/upload-sessions/{sessionId}/chunks")
+    public ApiResponse<UploadChunkResponse> putUploadChunk(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID sessionId,
+            @RequestHeader("Content-Range") String contentRange,
+            HttpServletRequest request
+    ) throws IOException {
+        return ApiResponse.ok(modelService.putUploadChunk(user, sessionId, contentRange, request.getInputStream()));
+    }
+
+    @PostMapping("/models/upload-sessions/{sessionId}/complete")
+    public ApiResponse<ModelResponse> completeUploadSession(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID sessionId
+    ) {
+        return ApiResponse.ok(modelService.completeUploadSession(user, sessionId));
+    }
+
+    @DeleteMapping("/models/upload-sessions/{sessionId}")
+    public ApiResponse<Void> abortUploadSession(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID sessionId
+    ) {
+        modelService.abortUploadSession(user, sessionId);
+        return ApiResponse.ok(null);
+    }
+
+    @DeleteMapping("/models/{modelId}")
+    public ApiResponse<Void> deleteModel(
+            @AuthenticationPrincipal UserAccount user,
+            @PathVariable UUID modelId
+    ) {
+        modelService.deleteModel(user, modelId);
+        return ApiResponse.ok(null);
     }
 
     @PostMapping("/models/{modelId}/download-token")

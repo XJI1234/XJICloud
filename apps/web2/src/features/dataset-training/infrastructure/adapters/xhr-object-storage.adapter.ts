@@ -18,7 +18,7 @@ export function createXhrObjectStorage(): ObjectStoragePort {
             resolve()
             return
           }
-          reject(new DomainError('OSS_UPLOAD_FAILED', `OSS 上传失败 (${xhr.status})`))
+          reject(new DomainError('OSS_UPLOAD_FAILED'))
         }
         xhr.onerror = () => reject(new DomainError('OSS_UPLOAD_FAILED'))
         xhr.send(blob)

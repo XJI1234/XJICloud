@@ -2,7 +2,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/presentation/components/AppButton.vue'
+import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
 import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
+import { useTransferSpeed } from '@/presentation/composables/useTransferSpeed'
 import { formatBytes } from '@/presentation/format'
 import { formatDomainError } from '@/presentation/errors'
 import { totalArchiveBytes } from '@/features/dataset-training/domain/services/dataset-archive.service'
@@ -22,6 +24,7 @@ const datasetName = ref('')
 const archive = ref<DatasetArchive | null>(null)
 const pending = ref(false)
 const uploadProgress = ref(0)
+const { speedLabel, noteLoaded, resetSpeed } = useTransferSpeed()
 const statusMessage = ref('')
 const errorMessage = ref('')
 
@@ -59,14 +62,16 @@ async function uploadArchive() {
   }
   pending.value = true
   uploadProgress.value = 0
+  resetSpeed()
   errorMessage.value = ''
   statusMessage.value = t('dataset.requestingUrls')
   const [error, job] = await training.submit({
     projectId: props.projectId,
     name: datasetName.value.trim() || defaultDatasetName(),
     archive: archive.value,
-    onProgress: (progress: { percent: number }) => {
+    onProgress: (progress: { percent: number; loaded: number }) => {
       uploadProgress.value = progress.percent
+      noteLoaded(progress.loaded)
       statusMessage.value = t('dataset.uploadingOss')
     },
   })
@@ -74,6 +79,7 @@ async function uploadArchive() {
   if (error || !job) {
     errorMessage.value = formatDomainError(t, error)
     statusMessage.value = ''
+    resetSpeed()
     return
   }
   training.watchHub.upsert(job)
@@ -106,12 +112,7 @@ async function uploadArchive() {
     <div v-if="archive" class="dataset-archive-summary">
       <p>{{ t('dataset.selectedSummary', { count: archive.files.length, size: formatBytes(totalUploadBytes) }) }}</p>
     </div>
-    <div v-if="pending || uploadProgress > 0" class="cloud-progress">
-      <div class="cloud-progress-bar">
-        <div class="cloud-progress-bar__fill" :style="{ width: `${uploadProgress}%` }" />
-      </div>
-      <span>{{ uploadProgress }}%</span>
-    </div>
+    <UploadProgressBar v-if="pending || uploadProgress > 0" :percent="uploadProgress" :speed="speedLabel" />
     <p v-if="statusMessage" class="upload-status">{{ statusMessage }}</p>
     <p v-if="errorMessage" class="upload-error">{{ errorMessage }}</p>
   </section>
