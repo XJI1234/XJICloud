@@ -3,7 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppButton from '@/presentation/components/AppButton.vue'
-import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
+import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
+import { useWaitSession } from '@/presentation/composables/useWaitSession'
 import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
 import { formatBytes } from '@/presentation/format'
 import { formatDomainError } from '@/presentation/errors'
@@ -33,11 +34,13 @@ const { t } = useI18n()
 const router = useRouter()
 const modelsApi = useModelAssets()
 const { formatDateTime } = useFormatDateTime()
+const wait = useWaitSession()
+const { waitView } = wait
 
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const models = ref<ModelAsset[]>([])
 const inflight = ref<InFlightUpload[]>([])
-const downloadById = ref<Record<string, { percent: number; speed: string }>>({})
+const downloadById = ref<Record<string, true>>({})
 const loading = ref(false)
 const listError = ref('')
 const actionError = ref('')
@@ -74,6 +77,10 @@ function patchInflight(localId: string, patch: Partial<InFlightUpload>) {
   inflight.value = inflight.value.map((item) => (item.localId === localId ? { ...item, ...patch } : item))
 }
 
+function dismissWait() {
+  wait.hide()
+}
+
 async function handleUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -94,6 +101,7 @@ async function handleUpload(event: Event) {
     tracker: createTransferRateTracker(),
   }
   inflight.value = [row, ...inflight.value]
+  wait.showBusy(t('wait.uploading'), true)
 
   const [error, uploaded] = await modelsApi.upload({
     projectId: props.projectId,
@@ -102,18 +110,22 @@ async function handleUpload(event: Event) {
     onProgress: ({ loaded, total }) => {
       const percent = total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0
       const rate = row.tracker.push(loaded, Date.now())
+      const speed = rate != null ? formatTransferSpeed(rate) : row.speed
       patchInflight(localId, {
         percent,
-        speed: rate != null ? formatTransferSpeed(rate) : row.speed,
+        speed,
       })
+      wait.showProgress(t('wait.uploading'), percent, speed, true)
     },
   })
 
   if (row.abort.signal.aborted) {
     inflight.value = inflight.value.filter((item) => item.localId !== localId)
+    wait.hide()
     return
   }
   if (error || !uploaded) {
+    wait.hide()
     patchInflight(localId, {
       error: formatDomainError(t, error),
       speed: '',
@@ -122,10 +134,12 @@ async function handleUpload(event: Event) {
   }
   inflight.value = inflight.value.filter((item) => item.localId !== localId)
   models.value = [uploaded, ...models.value.filter((item) => item.id !== uploaded.id)]
+  wait.showDone(t('wait.done'), 100, row.speed)
 }
 
 function cancelUpload(row: InFlightUpload) {
   row.abort.abort()
+  wait.hide()
 }
 
 function dismissFailed(localId: string) {
@@ -144,27 +158,29 @@ async function downloadModel(model: ModelAsset) {
   const tracker = createTransferRateTracker()
   downloadById.value = {
     ...downloadById.value,
-    [model.id]: { percent: 0, speed: '' },
+    [model.id]: true,
   }
+  wait.showBusy(t('wait.downloading'), true)
   const [error, file] = await modelsApi.downloadToDisk(model, (loaded, total) => {
     const percent = total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0
     const rate = tracker.push(loaded, Date.now())
-    downloadById.value = {
-      ...downloadById.value,
-      [model.id]: {
-        percent,
-        speed: rate != null ? formatTransferSpeed(rate) : downloadById.value[model.id]?.speed ?? '',
-      },
-    }
+    wait.showProgress(
+      t('wait.downloading'),
+      percent,
+      rate != null ? formatTransferSpeed(rate) : waitView.value.speed,
+      true,
+    )
   })
   const next = { ...downloadById.value }
   delete next[model.id]
   downloadById.value = next
   if (error || !file) {
     actionError.value = formatDomainError(t, error)
+    wait.hide()
     return
   }
   saveBlobAsFile(file.blob, file.fileName)
+  wait.showDone(t('wait.done'), 100, waitView.value.speed)
 }
 
 async function deleteModel(model: ModelAsset) {
@@ -231,7 +247,6 @@ onMounted(() => {
               <AppButton v-else compact @click="dismissFailed(row.localId)">{{ t('common.dismiss') }}</AppButton>
             </div>
           </div>
-          <UploadProgressBar v-if="!row.error" :percent="row.percent" :speed="row.speed" />
           <p v-if="row.error" class="upload-error">{{ row.error }}</p>
         </article>
         <article v-for="model in sortedModels" :key="model.id" class="training-job-item">
@@ -251,15 +266,20 @@ onMounted(() => {
               <AppButton compact variant="destructive" @click="deleteModel(model)">{{ t('upload.deleteModel') }}</AppButton>
             </div>
           </div>
-          <UploadProgressBar
-            v-if="downloadById[model.id]"
-            :percent="downloadById[model.id].percent"
-            :speed="downloadById[model.id].speed"
-          />
         </article>
       </div>
     </div>
     <p v-if="actionError" class="upload-error">{{ actionError }}</p>
     <input ref="uploadInputRef" class="visually-hidden" type="file" accept=".ply,.spz" @change="handleUpload" />
+    <WaitOverlay
+      :visible="waitView.visible"
+      :phase="waitView.phase"
+      :title="waitView.title"
+      :percent="waitView.percent"
+      :speed="waitView.speed"
+      :complete="waitView.complete"
+      :await-confirm="waitView.awaitConfirm"
+      @dismiss="dismissWait"
+    />
   </section>
 </template>

@@ -16,6 +16,14 @@ export default {
     notSet: 'Display name not set',
     comingSoon: '{feature} is coming soon',
   },
+  wait: {
+    exporting: 'Exporting',
+    uploading: 'Uploading',
+    downloading: 'Downloading',
+    loading: 'Loading',
+    restoring: 'Restoring',
+    done: 'Done',
+  },
   brand: {
     title: 'Xuanjing Modeling Cloud',
     subtitle: 'Modeling Solution Cloud Platform',

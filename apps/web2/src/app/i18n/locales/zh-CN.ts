@@ -16,6 +16,14 @@ export default {
     notSet: '未设置显示名',
     comingSoon: '{feature} 功能即将推出',
   },
+  wait: {
+    exporting: '正在导出',
+    uploading: '正在上传',
+    downloading: '正在下载',
+    loading: '正在加载',
+    restoring: '正在恢复',
+    done: '已完成',
+  },
   brand: {
     title: '玄境建模云平台',
     subtitle: '建模解决方案云平台',

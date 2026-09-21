@@ -71,6 +71,9 @@ export async function saveEditorExportUseCase(
   if (exportError || !exported) {
     return err(exportError ?? new DomainError('EDITOR_EXPORT_FAILED'))
   }
+  // #region agent log
+  fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'pre-fix',hypothesisId:'C',location:'editor.usecase.ts:saveEditorExportUseCase',message:'iframe export result',data:{requestedFileName:fileName,exportedFileName:exported.fileName,blobSize:exported.blob.size,format:input.format,modelId:input.modelId},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   return deps.models.uploadExport(input.modelId, exported.blob, exported.fileName, (loaded, total) => {
     input.onProgress?.({ phase: 'upload', loaded, total })
   })

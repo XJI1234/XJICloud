@@ -194,6 +194,186 @@ a {
   backdrop-filter: var(--blur);
 }
 
+.wait-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(28, 31, 36, 0.28);
+  backdrop-filter: var(--blur);
+}
+
+.wait-panel {
+  width: min(360px, calc(100vw - 32px));
+  text-align: center;
+  border-radius: var(--radius-sheet);
+  background: var(--elevated);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.wait-panel__title {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.wait-panel__body {
+  display: grid;
+  justify-items: stretch;
+  gap: 12px;
+  padding: 20px 22px 8px;
+}
+
+.wait-mark,
+.wait-panel__title {
+  justify-self: center;
+}
+
+.wait-panel__body .cloud-progress-block {
+  width: 100%;
+  min-width: 0;
+}
+
+.wait-panel__body .cloud-progress {
+  width: 100%;
+}
+
+.wait-panel__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+}
+
+.wait-mark {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 0;
+}
+
+.wait-mark i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at 50% 42%,
+    color-mix(in srgb, var(--accent) 95%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 42%, transparent) 48%,
+    transparent 72%
+  );
+  will-change: transform, opacity;
+  animation-duration: 5.6s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-iteration-count: infinite;
+}
+
+.wait-mark i:nth-child(1) { --x: -17px; --y: -17px; animation-name: wait-splat-corner; }
+.wait-mark i:nth-child(2) { --r: 0deg; animation-name: wait-splat-arm; }
+.wait-mark i:nth-child(3) { --x: 17px; --y: -17px; animation-name: wait-splat-corner; }
+.wait-mark i:nth-child(4) { --r: 270deg; animation-name: wait-splat-arm; }
+.wait-mark i:nth-child(5) { animation-name: wait-splat-core; }
+.wait-mark i:nth-child(6) { --r: 90deg; animation-name: wait-splat-arm; }
+.wait-mark i:nth-child(7) { --x: -17px; --y: 17px; animation-name: wait-splat-corner; }
+.wait-mark i:nth-child(8) { --r: 180deg; animation-name: wait-splat-arm; }
+.wait-mark i:nth-child(9) { --x: 17px; --y: 17px; animation-name: wait-splat-corner; }
+
+@keyframes wait-splat-arm {
+  0%, 16%, 32% {
+    transform: rotate(var(--r)) translateY(-17px) scale(0.78);
+    opacity: 0.72;
+  }
+  8%, 24% {
+    transform: rotate(var(--r)) translateY(-21px) scale(1.08);
+    opacity: 0.96;
+  }
+  50%, 66%, 82% {
+    transform: rotate(var(--r)) translateY(-17px) scale(0.7, 1.05);
+    opacity: 0.78;
+  }
+  58%, 74% {
+    transform: rotate(var(--r)) translateY(-23px) scale(0.62, 1.14);
+    opacity: 0.96;
+  }
+  100% {
+    transform: rotate(var(--r)) translateY(-17px) scale(0.78);
+    opacity: 0.72;
+  }
+}
+
+@keyframes wait-splat-corner {
+  0%, 16%, 32% {
+    transform: translate(var(--x), var(--y)) scale(0.78);
+    opacity: 0.7;
+  }
+  8%, 24% {
+    transform: translate(calc(var(--x) * 1.16), calc(var(--y) * 1.16)) scale(1.08);
+    opacity: 0.94;
+  }
+  50%, 82% {
+    transform: translate(calc(var(--x) * 0.28), calc(var(--y) * 0.28)) scale(0.16);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(var(--x), var(--y)) scale(0.78);
+    opacity: 0.7;
+  }
+}
+
+@keyframes wait-splat-core {
+  0%, 16%, 32% {
+    transform: scale(0.78);
+    opacity: 0.72;
+  }
+  8%, 24% {
+    transform: scale(1.16);
+    opacity: 0.95;
+  }
+  50%, 66%, 82% {
+    transform: scale(0.58);
+    opacity: 0.88;
+  }
+  58%, 74% {
+    transform: scale(0.82);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.78);
+    opacity: 0.72;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wait-mark i {
+    animation: none;
+    opacity: 0.82;
+  }
+  .wait-mark i:nth-child(1) { transform: translate(-17px, -17px); }
+  .wait-mark i:nth-child(2) { transform: rotate(0deg) translateY(-17px); }
+  .wait-mark i:nth-child(3) { transform: translate(17px, -17px); }
+  .wait-mark i:nth-child(4) { transform: rotate(270deg) translateY(-17px); }
+  .wait-mark i:nth-child(5) { transform: none; }
+  .wait-mark i:nth-child(6) { transform: rotate(90deg) translateY(-17px); }
+  .wait-mark i:nth-child(7) { transform: translate(-17px, 17px); }
+  .wait-mark i:nth-child(8) { transform: rotate(180deg) translateY(-17px); }
+  .wait-mark i:nth-child(9) { transform: translate(17px, 17px); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .wait-backdrop {
+    backdrop-filter: none;
+    background: rgba(245, 246, 248, 0.92);
+  }
+}
+
 .app-sheet-backdrop--popover {
   background: transparent;
   backdrop-filter: none;
@@ -819,6 +999,11 @@ a {
   margin-top: 12px;
 }
 
+.cloud-progress > span {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
 .cloud-progress-block > .cloud-progress {
   margin-top: 0;
 }
@@ -832,7 +1017,8 @@ a {
 }
 
 .cloud-progress-bar {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 6px;
   border-radius: 999px;
   background: var(--line);
@@ -842,6 +1028,14 @@ a {
 .cloud-progress-bar__fill {
   height: 100%;
   background: var(--accent);
+  border-radius: inherit;
+  transition: width 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-progress-bar__fill {
+    transition: none;
+  }
 }
 
 .dataset-upload-header,

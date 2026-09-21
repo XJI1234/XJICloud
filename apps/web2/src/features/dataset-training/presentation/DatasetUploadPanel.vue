@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/presentation/components/AppButton.vue'
-import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
+import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
+import { useWaitSession } from '@/presentation/composables/useWaitSession'
 import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
 import { useTransferSpeed } from '@/presentation/composables/useTransferSpeed'
 import { formatBytes } from '@/presentation/format'
@@ -25,6 +26,8 @@ const archive = ref<DatasetArchive | null>(null)
 const pending = ref(false)
 const uploadProgress = ref(0)
 const { speedLabel, noteLoaded, resetSpeed } = useTransferSpeed()
+const wait = useWaitSession()
+const { waitView } = wait
 const statusMessage = ref('')
 const errorMessage = ref('')
 
@@ -65,6 +68,7 @@ async function uploadArchive() {
   resetSpeed()
   errorMessage.value = ''
   statusMessage.value = t('dataset.requestingUrls')
+  wait.showBusy(t('wait.uploading'), true)
   const [error, job] = await training.submit({
     projectId: props.projectId,
     name: datasetName.value.trim() || defaultDatasetName(),
@@ -73,6 +77,7 @@ async function uploadArchive() {
       uploadProgress.value = progress.percent
       noteLoaded(progress.loaded)
       statusMessage.value = t('dataset.uploadingOss')
+      wait.showProgress(t('wait.uploading'), progress.percent, speedLabel.value, true)
     },
   })
   pending.value = false
@@ -80,6 +85,7 @@ async function uploadArchive() {
     errorMessage.value = formatDomainError(t, error)
     statusMessage.value = ''
     resetSpeed()
+    wait.hide()
     return
   }
   training.watchHub.upsert(job)
@@ -87,6 +93,7 @@ async function uploadArchive() {
   uploadProgress.value = 100
   statusMessage.value = t('dataset.jobSubmitted')
   archive.value = null
+  wait.showDone(t('wait.done'), 100, speedLabel.value)
 }
 </script>
 
@@ -112,8 +119,17 @@ async function uploadArchive() {
     <div v-if="archive" class="dataset-archive-summary">
       <p>{{ t('dataset.selectedSummary', { count: archive.files.length, size: formatBytes(totalUploadBytes) }) }}</p>
     </div>
-    <UploadProgressBar v-if="pending || uploadProgress > 0" :percent="uploadProgress" :speed="speedLabel" />
     <p v-if="statusMessage" class="upload-status">{{ statusMessage }}</p>
     <p v-if="errorMessage" class="upload-error">{{ errorMessage }}</p>
+    <WaitOverlay
+      :visible="waitView.visible"
+      :phase="waitView.phase"
+      :title="waitView.title"
+      :percent="waitView.percent"
+      :speed="waitView.speed"
+      :complete="waitView.complete"
+      :await-confirm="waitView.awaitConfirm"
+      @dismiss="wait.hide()"
+    />
   </section>
 </template>

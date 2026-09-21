@@ -254,7 +254,7 @@ LoginView
 
 - Composable 只暴露：命令函数 + 给模板的只读状态。不要把 repository 漏出给模板。
 - 跨 BC 页面（查看器同时要工程、模型、配置）分别 `useProjectWorkspace` / `useModelAssets` / `useViewerStorage`。
-- 壳组件：`AppButton`（primary | ghost | destructive）、`AppSheet`、`AppToast`、`ToolIcon`。
+- 壳组件：`AppButton`（primary | ghost | destructive）、`AppSheet`、`WaitOverlay`（导出/传输等待层，z-index 70，高于 Sheet 60）、`AppToast`、`ToolIcon`。等待快照在 `presentation/wait-session.ts`，不含业务规则。
 - 样式：`shell.css` 产品壳；`viewer-canvas.css` 画布 + 查看器浮动检查器。
 - 动效：`presentation/motion.ts`（`bounce: 0` 默认，手势动量才用轻微 bounce）。尊重 `prefers-reduced-motion` / `prefers-reduced-transparency`。
 

@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -320,6 +321,7 @@ public class ModelService {
         return new ViewerConfigResponse(entity.getJsonPayload(), entity.getUpdatedAt());
     }
 
+    @Transactional
     public ModelResponse exportModel(UserAccount user, UUID modelId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("导出文件不能为空");
@@ -335,9 +337,20 @@ public class ModelService {
         ExportTarget exportTarget = resolveExportTarget(exportName);
         UUID snapshotId = UUID.randomUUID();
         Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
+        // #region agent log
+        agentDebugLog("A", "ModelService.writeExport:start", "export start",
+                "{\"exportName\":\"" + exportName + "\",\"storedFileName\":\"" + exportTarget.storedFileName()
+                        + "\",\"assetFormat\":\"" + asset.getFormat() + "\",\"assetFileName\":\"" + asset.getFileName()
+                        + "\",\"version\":" + asset.getVersion() + ",\"liveExists\":" + Files.exists(livePath)
+                        + ",\"fileSize\":" + file.getSize() + "}");
+        // #endregion
 
         try {
             Path archivePath = replaceHistory(user, project, asset, snapshotId, livePath);
+            // #region agent log
+            agentDebugLog("B", "ModelService.writeExport:afterHistory", "history replaced",
+                    "{\"archiveExists\":" + Files.exists(archivePath) + "}");
+            // #endregion
 
             try (InputStream input = file.getInputStream()) {
                 Path storedPath = localFileStoreService.replaceModelFile(
@@ -354,10 +367,24 @@ public class ModelService {
                 asset.setVersion(asset.getVersion() + 1);
                 asset.setUpdatedAt(Instant.now());
                 modelAssetRepository.save(asset);
+                // #region agent log
+                agentDebugLog("A", "ModelService.writeExport:ok", "export saved",
+                        "{\"newVersion\":" + asset.getVersion() + ",\"format\":\"" + asset.getFormat() + "\"}");
+                // #endregion
                 return toResponse(asset);
             }
         } catch (IOException ex) {
+            // #region agent log
+            agentDebugLog("A", "ModelService.writeExport:io", "export IOException",
+                    "{\"ex\":\"" + ex.getClass().getSimpleName() + "\",\"msg\":\"" + String.valueOf(ex.getMessage()).replace("\"", "'") + "\"}");
+            // #endregion
             throw new BusinessException("导出保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (RuntimeException ex) {
+            // #region agent log
+            agentDebugLog("B", "ModelService.writeExport:runtime", "export RuntimeException",
+                    "{\"ex\":\"" + ex.getClass().getName() + "\",\"msg\":\"" + String.valueOf(ex.getMessage()).replace("\"", "'") + "\"}");
+            // #endregion
+            throw ex;
         }
     }
 
@@ -395,8 +422,6 @@ public class ModelService {
     }
 
     private Path replaceHistory(UserAccount user, Project project, ModelAsset asset, UUID snapshotId, Path livePath) {
-        localFileStoreService.clearExportArchives(user, project, asset.getId());
-        modelVersionRepository.deleteByModelId(asset.getId());
         Path archivePath = localFileStoreService.archiveCurrentModel(
                 user,
                 project,
@@ -404,10 +429,13 @@ public class ModelService {
                 snapshotId,
                 livePath
         );
+        modelVersionRepository.deleteByModelId(asset.getId());
         persistSnapshot(asset, snapshotId, archivePath);
+        localFileStoreService.clearExportArchives(user, project, asset.getId(), archivePath);
         return archivePath;
     }
 
+    @Transactional
     public ModelResponse restoreModelVersion(UserAccount user, UUID modelId, RestoreModelVersionRequest request) {
         ModelAsset asset = requireOwnedModel(user, modelId);
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
@@ -453,7 +481,12 @@ public class ModelService {
     }
 
     private void persistSnapshot(ModelAsset asset, UUID snapshotId, Path archivePath) {
-        if (modelVersionRepository.existsByModelIdAndVersion(asset.getId(), asset.getVersion())) {
+        boolean exists = modelVersionRepository.existsByModelIdAndVersion(asset.getId(), asset.getVersion());
+        // #region agent log
+        agentDebugLog("B", "ModelService.persistSnapshot", "snapshot persist",
+                "{\"exists\":" + exists + ",\"version\":" + asset.getVersion() + "}");
+        // #endregion
+        if (exists) {
             return;
         }
         ModelVersionEntity row = new ModelVersionEntity();
@@ -602,4 +635,18 @@ public class ModelService {
                 asset.getUpdatedAt()
         );
     }
+
+    // #region agent log
+    private static void agentDebugLog(String hypothesisId, String location, String message, String dataJson) {
+        try {
+            String line = "{\"sessionId\":\"14ec0c\",\"runId\":\"pre-fix\",\"hypothesisId\":\"" + hypothesisId
+                    + "\",\"location\":\"" + location + "\",\"message\":\"" + message + "\",\"data\":" + dataJson
+                    + ",\"timestamp\":" + System.currentTimeMillis() + "}\n";
+            Files.writeString(Path.of("d:/WeChatProjects/XJICloud/debug-14ec0c.log"), line,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Exception ignored) {
+            // debug ingest only
+        }
+    }
+    // #endregion
 }

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface ModelVersionRepository extends JpaRepository<ModelVersionEntity, UUID> {
 
@@ -15,5 +16,6 @@ public interface ModelVersionRepository extends JpaRepository<ModelVersionEntity
 
     Optional<ModelVersionEntity> findByIdAndModelId(UUID id, UUID modelId);
 
+    @Transactional
     void deleteByModelId(UUID modelId);
 }

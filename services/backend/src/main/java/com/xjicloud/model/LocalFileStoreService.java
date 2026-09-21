@@ -162,12 +162,20 @@ public class LocalFileStoreService {
     }
 
     public void clearExportArchives(UserAccount user, Project project, UUID modelId) {
+        clearExportArchives(user, project, modelId, null);
+    }
+
+    public void clearExportArchives(UserAccount user, Project project, UUID modelId, Path keep) {
         Path exportsDir = exportsDirectory(user, project, modelId);
         if (!Files.isDirectory(exportsDir)) {
             return;
         }
+        Path keepNormalized = keep != null ? keep.normalize() : null;
         try (var stream = Files.list(exportsDir)) {
             stream.filter(Files::isRegularFile).forEach(path -> {
+                if (keepNormalized != null && path.normalize().equals(keepNormalized)) {
+                    return;
+                }
                 try {
                     Files.deleteIfExists(path);
                 } catch (IOException e) {
