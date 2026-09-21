@@ -160,11 +160,6 @@ export function createHttpClient(options: {
           const payload = (xhr.responseText
             ? JSON.parse(xhr.responseText)
             : { success: false, message: null, data: null }) as ApiResponse<T>
-          // #region agent log
-          if (path.includes('/export')) {
-            fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'pre-fix',hypothesisId:'A',location:'http-client.ts:uploadBytes:onload',message:'export xhr finished',data:{path,status:xhr.status,success:payload.success,message:payload.message ?? null,bodyPrefix:(xhr.responseText || '').slice(0,400)},timestamp:Date.now()})}).catch(()=>{});
-          }
-          // #endregion
           if (xhr.status < 200 || xhr.status >= 300 || !payload.success) {
             reject(new ApiError(payload.message ?? xhr.statusText, xhr.status))
             return

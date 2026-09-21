@@ -455,7 +455,8 @@ a {
 
 @media (prefers-reduced-motion: reduce) {
   .app-btn:active:not(:disabled),
-  .locale-toggle:active {
+  .locale-toggle:active,
+  .header-modal-option:active {
     transform: none;
   }
   .app-sheet-enter-active,
@@ -685,9 +686,23 @@ a {
   overflow: hidden;
 }
 
+.cloud-user-menu {
+  display: grid;
+  gap: 14px;
+}
+
 .cloud-user-menu-info {
   display: grid;
   gap: 4px;
+}
+
+.cloud-user-menu-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.cloud-user-menu-close {
+  white-space: nowrap;
 }
 
 .header-modal-options {
@@ -696,18 +711,42 @@ a {
 }
 
 .header-modal-option {
-  min-height: 40px;
+  min-height: 42px;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-ctrl);
-  background: transparent;
+  background: var(--elevated);
   text-align: left;
   cursor: pointer;
+  transition: transform 100ms ease-out, background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.header-modal-option:hover {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+.header-modal-option:active {
+  transform: scale(var(--press-scale));
+}
+
+.header-modal-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .header-modal-option.is-active {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.header-modal-option--danger {
+  color: var(--danger);
+}
+
+.header-modal-option--danger:hover {
+  border-color: rgba(180, 35, 24, 0.35);
+  background: var(--danger-soft);
 }
 
 .login-fields {

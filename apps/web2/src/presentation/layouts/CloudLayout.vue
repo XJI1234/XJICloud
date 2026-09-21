@@ -186,14 +186,22 @@ const isImmersive = computed(() => route.name === 'home' || !activeProjectId.val
       :title="t('header.mine')"
       @close="userModalVisible = false"
     >
-      <div class="cloud-user-menu-info">
-        <strong>{{ session?.displayName || t('common.notSet') }}</strong>
-        <span>@{{ session?.username || 'unknown' }}</span>
+      <div class="cloud-user-menu">
+        <div class="cloud-user-menu-info">
+          <strong>{{ session?.displayName || t('common.notSet') }}</strong>
+          <span>@{{ session?.username || 'unknown' }}</span>
+        </div>
+        <div class="cloud-user-menu-actions" role="group" :aria-label="t('header.mine')">
+          <button class="header-modal-option" type="button" @click="openSettings">
+            {{ t('header.settings') }}
+          </button>
+          <button class="header-modal-option header-modal-option--danger" type="button" @click="logout">
+            {{ t('header.logout') }}
+          </button>
+        </div>
       </div>
       <template #footer>
-        <AppButton @click="openSettings">{{ t('header.settings') }}</AppButton>
-        <AppButton @click="userModalVisible = false">{{ t('common.close') }}</AppButton>
-        <AppButton variant="primary" @click="logout">{{ t('header.logout') }}</AppButton>
+        <AppButton class="cloud-user-menu-close" @click="userModalVisible = false">{{ t('common.close') }}</AppButton>
       </template>
     </AppSheet>
 

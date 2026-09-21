@@ -247,9 +247,6 @@ export function createHttpModelAssetRepository(
     },
     async uploadExport(modelId, file, fileName, onProgress): Promise<Result<ModelAsset>> {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'pre-fix',hypothesisId:'C',location:'http-model-asset.repository.ts:uploadExport',message:'POST export start',data:{modelId,fileName,blobSize:file.size},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const formData = new FormData()
         formData.append('file', file, fileName)
         const dto = await http.uploadBytes<ModelSummaryDto>(
@@ -261,9 +258,6 @@ export function createHttpModelAssetRepository(
         await dropModelCache(cache, modelId)
         return ok(mapModelFromDto(dto))
       } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'pre-fix',hypothesisId:'D',location:'http-model-asset.repository.ts:uploadExport:catch',message:'POST export failed',data:{modelId,fileName,errorName:error instanceof Error ? error.name : typeof error,errorMessage:error instanceof Error ? error.message : String(error)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return err(mapHttpError(error))
       }
     },

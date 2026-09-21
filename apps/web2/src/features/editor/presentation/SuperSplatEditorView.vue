@@ -385,9 +385,6 @@ async function saveToCloud() {
     })
     if (error || !saved) {
       errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
-      // #region agent log
-      fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'pre-fix',hypothesisId:'D',location:'SuperSplatEditorView.vue:saveToCloud',message:'overwrite save failed',data:{errorCode:error?.code ?? null,errorMessage:errorMessage.value,format:exportFormat.value},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       statusMessage.value = ''
       wait.hide()
       saving.value = false
