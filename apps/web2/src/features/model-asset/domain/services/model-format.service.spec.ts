@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { detectModelFormat, assertModelFile } from './model-format.service'
+import { detectModelFormat, assertModelFile, withModelExtension, assertExportFileName } from './model-format.service'
 import { deleteModelUseCase, uploadModelUseCase } from '../../application/use-cases/model-asset.usecase'
 import { err, ok } from '@/shared/result'
 import { DomainError } from '@/shared/domain-error'
@@ -12,6 +12,9 @@ describe('model format', () => {
     expect(detectModelFormat('b.SPZ')).toBe('SPZ')
     expect(detectModelFormat('c.jpg')).toBeNull()
     expect(assertModelFile(new File(['x'], 'c.txt'))?.code).toBe('MODEL_INVALID_FORMAT')
+    expect(withModelExtension('scan', 'spz')).toBe('scan.spz')
+    expect(withModelExtension('scan.ply', 'spz')).toBe('scan.spz')
+    expect(assertExportFileName('', 'ply')?.code).toBe('MODEL_INVALID_FORMAT')
   })
 
   it('rejects files over 2GB', () => {

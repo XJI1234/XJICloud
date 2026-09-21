@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 /** Prebuilt SuperSplat static assets (committed; no source build). */
@@ -39,4 +40,12 @@ for (const target of targets) {
   }
   copyRecursive(source, target)
   console.log(`Copied SuperSplat assets → ${target}`)
+}
+
+// Apply XJICloud postMessage patches (import-local + export-ply) to vendor source and each copy.
+const patchScript = path.join(root, 'apps', 'web2', 'scripts', 'patch-supersplat-import.mjs')
+const patchArgs = [path.join(source, 'index.js'), ...targets.map((target) => path.join(target, 'index.js'))]
+const patchResult = spawnSync(process.execPath, [patchScript, ...patchArgs], { stdio: 'inherit' })
+if (patchResult.status !== 0) {
+  process.exit(patchResult.status ?? 1)
 }

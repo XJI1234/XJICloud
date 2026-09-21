@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ok } from '@/shared/result'
 import type { ModelAssetRepository } from '@/features/model-asset/domain/repositories/model-asset.repository'
-import { openEditorUseCase, prepareLocalEditorLaunch, saveEditorExportUseCase, importLocalEditorFileUseCase } from './editor.usecase'
+import { openEditorUseCase, prepareLocalEditorLaunch, saveEditorAsNewModelUseCase, saveEditorExportUseCase, importLocalEditorFileUseCase } from './editor.usecase'
 import type { EditorBridgePort } from '../../domain/repositories/editor-bridge.port'
-import { buildSuperSplatSrc, isDirtyResponse, isTrustedIframeMessage } from '../../infrastructure/supersplat-protocol'
+import { buildSuperSplatSrc, isDirtyResponse, isExportProgress, isTrustedIframeMessage } from '../../infrastructure/supersplat-protocol'
 
 describe('editor use cases', () => {
   it('opens via download token', async () => {
@@ -44,16 +44,148 @@ describe('editor use cases', () => {
     } as unknown as ModelAssetRepository
     const bridge: EditorBridgePort = {
       buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
       isDirty: async () => ok(false),
       importLocal: async () => ok(undefined),
       exportPly: async () => ok({ blob: new Blob(['ply']), fileName: 'out.ply' }),
     }
     const [error] = await saveEditorExportUseCase(
       { models, bridge },
-      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' } },
+      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply' },
     )
     expect(error).toBeNull()
     expect(uploaded[0]?.name).toBe('out.ply')
+  })
+
+  it('reports export then upload progress when saving to an existing model', async () => {
+    const phases: Array<string> = []
+    const models = {
+      uploadExport: async (_id: string, _blob: Blob, _fileName: string, onProgress?: (loaded: number, total: number) => void) => {
+        onProgress?.(50, 100)
+        return ok({
+          id: 'm1',
+          projectId: 'p',
+          fileName: 'out.ply',
+          format: 'PLY' as const,
+          sizeBytes: 1,
+          version: 2,
+          createdAt: '',
+          updatedAt: '',
+        })
+      },
+    } as unknown as ModelAssetRepository
+    const bridge: EditorBridgePort = {
+      buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
+      isDirty: async () => ok(false),
+      importLocal: async () => ok(undefined),
+      exportPly: async (_frame, options) => {
+        options?.onProgress?.(10)
+        return ok({ blob: new Blob(['ply']), fileName: 'out.ply' })
+      },
+    }
+    const [error] = await saveEditorExportUseCase(
+      { models, bridge },
+      {
+        modelId: 'm1',
+        frame: { contentWindow: {} as Window, src: '/supersplat/' },
+        format: 'ply',
+        onProgress: (progress) => phases.push(`${progress.phase}:${progress.loaded}`),
+      },
+    )
+    expect(error).toBeNull()
+    expect(phases).toEqual(['export:10', 'upload:50'])
+  })
+
+  it('trusts export progress messages', () => {
+    expect(
+      isExportProgress({ type: 'supersplat:export-ply-progress', loaded: 12 }),
+    ).toBe(true)
+  })
+
+  it('saves a local edit as a new cloud model via chunked upload', async () => {
+    const models = {
+      createUploadSession: async () =>
+        ok({ sessionId: 's1', chunkSizeBytes: 8, receivedBytes: 0, sizeBytes: 3 }),
+      getUploadSession: async () =>
+        ok({ sessionId: 's1', chunkSizeBytes: 8, receivedBytes: 3, sizeBytes: 3 }),
+      putChunk: async () => ok({ receivedBytes: 3 }),
+      completeUpload: async () =>
+        ok({
+          id: 'm2',
+          projectId: 'p',
+          fileName: 'local.ply',
+          format: 'PLY' as const,
+          sizeBytes: 3,
+          version: 1,
+          createdAt: '',
+          updatedAt: '',
+        }),
+      abortUpload: async () => ok(undefined),
+    } as unknown as ModelAssetRepository
+    const bridge: EditorBridgePort = {
+      buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
+      isDirty: async () => ok(false),
+      importLocal: async () => ok(undefined),
+      exportPly: async () => ok({ blob: new Blob(['ply']), fileName: 'local.ply' }),
+    }
+    const [error, created] = await saveEditorAsNewModelUseCase(
+      { models, bridge },
+      { projectId: 'p', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply', fileName: 'local.ply' },
+    )
+    expect(error).toBeNull()
+    expect(created?.id).toBe('m2')
+  })
+
+  it('exports spz when the save format is compressed', async () => {
+    let compressed: boolean | undefined
+    const models = {
+      uploadExport: async () =>
+        ok({
+          id: 'm1',
+          projectId: 'p',
+          fileName: 'out.spz',
+          format: 'SPZ' as const,
+          sizeBytes: 1,
+          version: 2,
+          createdAt: '',
+          updatedAt: '',
+        }),
+    } as unknown as ModelAssetRepository
+    const bridge: EditorBridgePort = {
+      buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
+      isDirty: async () => ok(false),
+      importLocal: async () => ok(undefined),
+      exportPly: async (_frame, options) => {
+        compressed = options?.compressed
+        return ok({ blob: new Blob(['spz']), fileName: options?.fileName ?? 'out.spz' })
+      },
+    }
+    const [error] = await saveEditorExportUseCase(
+      { models, bridge },
+      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'spz', fileName: 'scan' },
+    )
+    expect(error).toBeNull()
+    expect(compressed).toBe(true)
+  })
+
+  it('requires a name when saving as a new model', async () => {
+    const [error] = await saveEditorAsNewModelUseCase(
+      {
+        models: {} as ModelAssetRepository,
+        bridge: {
+          buildSrc: () => '',
+          waitReady: async () => ok(undefined),
+          isDirty: async () => ok(false),
+          importLocal: async () => ok(undefined),
+          exportPly: async () => ok({ blob: new Blob(['ply']), fileName: 'out.ply' }),
+        },
+      },
+      { projectId: 'p', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply', fileName: '   ' },
+    )
+    expect(error?.code).toBe('MODEL_INVALID_FORMAT')
   })
 })
 
@@ -76,6 +208,7 @@ describe('supersplat protocol', () => {
     const imported: File[] = []
     const bridge: EditorBridgePort = {
       buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
       isDirty: async () => ok(false),
       importLocal: async (_frame, file) => {
         imported.push(file)
@@ -111,6 +244,27 @@ describe('supersplat protocol', () => {
         frame,
         'http://localhost',
       ),
+    ).toBe(true)
+  })
+
+  it('trusts messages against a live iframe contentWindow getter', () => {
+    const first = {} as Window
+    const second = {} as Window
+    let current = first
+    const frame = {
+      get contentWindow() {
+        return current
+      },
+    }
+    expect(
+      isTrustedIframeMessage({ source: first, origin: 'http://114.55.113.49', data: {} } as MessageEvent, frame, 'http://114.55.113.49'),
+    ).toBe(true)
+    current = second
+    expect(
+      isTrustedIframeMessage({ source: first, origin: 'http://114.55.113.49', data: {} } as MessageEvent, frame, 'http://114.55.113.49'),
+    ).toBe(false)
+    expect(
+      isTrustedIframeMessage({ source: second, origin: 'http://114.55.113.49', data: {} } as MessageEvent, frame, 'http://114.55.113.49'),
     ).toBe(true)
   })
 })

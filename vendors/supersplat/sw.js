@@ -1,4 +1,4 @@
-var version = "2.32.2";
+var version = "2.32.2-xji-export5";
 
 const cacheName = `superSplat-v${version}`;
 const cacheUrls = [

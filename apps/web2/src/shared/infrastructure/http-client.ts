@@ -15,7 +15,7 @@ export type HttpClient = {
   downloadBytes(path: string, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer>
   uploadBytes<T>(
     path: string,
-    body: Blob,
+    body: Blob | FormData,
     extraHeaders?: Record<string, string>,
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
@@ -48,9 +48,6 @@ export function createHttpClient(options: {
     const response = await fetchImpl(`${baseUrl}${path}`, { ...init, headers })
 
     if (shouldLogoutOnStatus(response.status, token)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'A',location:'http-client.ts:request',message:'session logout',data:{status:response.status,path},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       options.unauthorized.notifyUnauthorized()
     }
 
@@ -82,7 +79,7 @@ export function createHttpClient(options: {
       headers.Authorization = `Bearer ${token}`
     }
 
-    const response = await fetchImpl(`${baseUrl}${path}`, { headers })
+    const response = await fetchImpl(`${baseUrl}${path}`, { headers, cache: 'no-store' })
     if (shouldLogoutOnStatus(response.status, token)) {
       options.unauthorized.notifyUnauthorized()
     }
@@ -124,14 +121,14 @@ export function createHttpClient(options: {
 
   function uploadBytes<T>(
     path: string,
-    body: Blob,
+    body: Blob | FormData,
     extraHeaders: Record<string, string> = {},
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
   ): Promise<T> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
-      xhr.open('PUT', `${baseUrl}${path}`)
+      xhr.open(body instanceof FormData ? 'POST' : 'PUT', `${baseUrl}${path}`)
       const token = options.tokenProvider.getToken()
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)

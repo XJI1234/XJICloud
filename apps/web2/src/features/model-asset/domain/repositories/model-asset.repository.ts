@@ -1,5 +1,11 @@
 import type { Result } from '@/shared/result'
-import type { DownloadToken, ModelAsset } from '../entities/model-asset.entity'
+import type {
+  CachedModelFile,
+  DownloadToken,
+  ModelAsset,
+  ModelCacheRevision,
+  ModelVersion,
+} from '../entities/model-asset.entity'
 
 export type ModelUploadSession = {
   sessionId: string
@@ -25,6 +31,25 @@ export interface ModelAssetRepository {
   abortUpload(sessionId: string): Promise<Result<void>>
   delete(modelId: string): Promise<Result<void>>
   createDownloadToken(modelId: string): Promise<Result<DownloadToken>>
-  downloadBytes(modelId: string, onProgress?: (loaded: number, total: number) => void): Promise<Result<ArrayBuffer>>
-  uploadExport(modelId: string, file: Blob, fileName: string): Promise<Result<ModelAsset>>
+  downloadBytes(
+    modelId: string,
+    onProgress?: (loaded: number, total: number) => void,
+    options?: { cacheBust?: string | number; revision?: ModelCacheRevision },
+  ): Promise<Result<ArrayBuffer>>
+  downloadVersionBytes(
+    modelId: string,
+    versionId: string,
+    onProgress?: (loaded: number, total: number) => void,
+    options?: { revision?: ModelCacheRevision },
+  ): Promise<Result<ArrayBuffer>>
+  listCached(): Promise<Result<CachedModelFile[]>>
+  removeCached(cacheKeys: string[]): Promise<Result<void>>
+  uploadExport(
+    modelId: string,
+    file: Blob,
+    fileName: string,
+    onProgress?: ChunkProgress,
+  ): Promise<Result<ModelAsset>>
+  listVersions(modelId: string): Promise<Result<ModelVersion[]>>
+  restoreVersion(modelId: string, versionId: string): Promise<Result<ModelAsset>>
 }

@@ -1,8 +1,14 @@
 import { DomainError } from '@/shared/domain-error'
 import { err, ok, type Result } from '@/shared/result'
-import type { DownloadToken } from '@/features/model-asset/domain/entities/model-asset.entity'
+import type { DownloadToken, ModelAsset } from '@/features/model-asset/domain/entities/model-asset.entity'
 import type { ModelAssetRepository } from '@/features/model-asset/domain/repositories/model-asset.repository'
-import { assertModelFile } from '@/features/model-asset/domain/services/model-format.service'
+import { uploadModelUseCase } from '@/features/model-asset/application/use-cases/model-asset.usecase'
+import {
+  assertExportFileName,
+  assertModelFile,
+  type ExportModelFormat,
+  withModelExtension,
+} from '@/features/model-asset/domain/services/model-format.service'
 import type { EditorBridgePort, EditorFrame } from '../../domain/repositories/editor-bridge.port'
 import type { EditorLaunchParams } from '../../domain/entities/editor-session.entity'
 import { createBlankEditorLaunch } from '../../domain/services/editor-launch.service'
@@ -33,18 +39,82 @@ export async function confirmLeaveIfDirtyUseCase(
   return deps.bridge.isDirty(frame)
 }
 
+function resolveExportName(fileName: string | undefined, format: ExportModelFormat) {
+  const source = fileName?.trim() || `model.${format}`
+  const name = withModelExtension(source, format)
+  const formatError = assertExportFileName(name, format)
+  if (formatError) {
+    return err<string>(formatError)
+  }
+  return ok(name)
+}
+
 export async function saveEditorExportUseCase(
   deps: { models: ModelAssetRepository; bridge: EditorBridgePort },
-  input: { modelId: string; frame: EditorFrame; compressed?: boolean; fileName?: string },
-) {
+  input: {
+    modelId: string
+    frame: EditorFrame
+    format: ExportModelFormat
+    fileName?: string
+    onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
+  },
+): Promise<Result<ModelAsset>> {
+  const [nameError, fileName] = resolveExportName(input.fileName, input.format)
+  if (nameError || !fileName) {
+    return err(nameError ?? new DomainError('MODEL_INVALID_FORMAT'))
+  }
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
-    compressed: input.compressed,
-    fileName: input.fileName,
+    compressed: input.format === 'spz',
+    fileName,
+    onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
   })
   if (exportError || !exported) {
     return err(exportError ?? new DomainError('EDITOR_EXPORT_FAILED'))
   }
-  return deps.models.uploadExport(input.modelId, exported.blob, exported.fileName)
+  return deps.models.uploadExport(input.modelId, exported.blob, exported.fileName, (loaded, total) => {
+    input.onProgress?.({ phase: 'upload', loaded, total })
+  })
+}
+
+export async function saveEditorAsNewModelUseCase(
+  deps: { models: ModelAssetRepository; bridge: EditorBridgePort },
+  input: {
+    projectId: string | null
+    frame: EditorFrame
+    format: ExportModelFormat
+    fileName: string
+    onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
+    signal?: AbortSignal
+  },
+): Promise<Result<ModelAsset>> {
+  if (!input.projectId) {
+    return err(new DomainError('MODEL_PROJECT_REQUIRED'))
+  }
+  if (!input.fileName.trim()) {
+    return err(new DomainError('MODEL_INVALID_FORMAT'))
+  }
+  const [nameError, fileName] = resolveExportName(input.fileName, input.format)
+  if (nameError || !fileName) {
+    return err(nameError ?? new DomainError('MODEL_INVALID_FORMAT'))
+  }
+  const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
+    compressed: input.format === 'spz',
+    fileName,
+    onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
+  })
+  if (exportError || !exported) {
+    return err(exportError ?? new DomainError('EDITOR_EXPORT_FAILED'))
+  }
+  const file = new File([exported.blob], exported.fileName, { type: 'application/octet-stream' })
+  return uploadModelUseCase(
+    { models: deps.models },
+    {
+      projectId: input.projectId,
+      file,
+      onProgress: (progress) => input.onProgress?.({ phase: 'upload', loaded: progress.loaded, total: progress.total }),
+      signal: input.signal,
+    },
+  )
 }
 
 export function editorSrc(deps: { bridge: EditorBridgePort }, params: EditorLaunchParams) {

@@ -24,3 +24,19 @@ export function assertModelFile(file: File) {
   }
   return null
 }
+
+export type ExportModelFormat = 'ply' | 'spz'
+
+export function withModelExtension(fileName: string, format: ExportModelFormat): string {
+  const trimmed = fileName.trim()
+  const stem = trimmed.replace(/\.(ply|spz)$/i, '')
+  return `${stem}.${format}`
+}
+
+export function assertExportFileName(fileName: string, format: ExportModelFormat) {
+  const trimmed = fileName.trim()
+  if (!trimmed) {
+    return new DomainError('MODEL_INVALID_FORMAT')
+  }
+  return detectModelFormat(withModelExtension(trimmed, format)) ? null : new DomainError('MODEL_INVALID_FORMAT')
+}
