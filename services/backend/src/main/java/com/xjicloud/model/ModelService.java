@@ -337,14 +337,7 @@ public class ModelService {
         Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
 
         try {
-            // #region agent log
-            debugExportLog("A", "ModelService.writeExport:beforeArchive", "live vs incoming size", asset, user, project, asset.getId(), file.getSize());
-            // #endregion
-            Path archivePath = localFileStoreService.archiveCurrentModel(user, project, asset.getId(), snapshotId, livePath);
-            persistSnapshot(asset, snapshotId, archivePath);
-            // #region agent log
-            debugExportLog("B", "ModelService.writeExport:afterArchive", "archived previous live", asset, user, project, asset.getId(), file.getSize());
-            // #endregion
+            Path archivePath = replaceHistory(user, project, asset, snapshotId, livePath);
 
             try (InputStream input = file.getInputStream()) {
                 Path storedPath = localFileStoreService.replaceModelFile(
@@ -386,7 +379,9 @@ public class ModelService {
                 true,
                 Math.max(1, asset.getVersion())
         ));
-        for (ModelVersionEntity row : modelVersionRepository.findByModelIdOrderByVersionDesc(asset.getId())) {
+        List<ModelVersionEntity> history = modelVersionRepository.findByModelIdOrderByVersionDesc(asset.getId());
+        if (!history.isEmpty()) {
+            ModelVersionEntity row = history.get(0);
             versions.add(new ModelVersionResponse(
                     row.getId().toString(),
                     row.getFileName(),
@@ -396,10 +391,21 @@ public class ModelService {
                     row.getVersion()
             ));
         }
-        // #region agent log
-        debugExportLog("D", "ModelService.listModelVersions", "jpa version rows", asset, user, project, asset.getId(), -1);
-        // #endregion
         return versions;
+    }
+
+    private Path replaceHistory(UserAccount user, Project project, ModelAsset asset, UUID snapshotId, Path livePath) {
+        localFileStoreService.clearExportArchives(user, project, asset.getId());
+        modelVersionRepository.deleteByModelId(asset.getId());
+        Path archivePath = localFileStoreService.archiveCurrentModel(
+                user,
+                project,
+                asset.getId(),
+                snapshotId,
+                livePath
+        );
+        persistSnapshot(asset, snapshotId, archivePath);
+        return archivePath;
     }
 
     public ModelResponse restoreModelVersion(UserAccount user, UUID modelId, RestoreModelVersionRequest request) {
@@ -413,16 +419,29 @@ public class ModelService {
                 .orElseThrow(() -> new BusinessException("版本不存在", HttpStatus.NOT_FOUND));
         Path snapshotPath = localFileStoreService.resolveStoredPath(snapshot.getStoragePath());
         Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
+        Path snapshotHold = livePath.getParent().resolve("restore.tmp");
+        try {
+            Files.copy(snapshotPath, snapshotHold, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            throw new BusinessException("恢复失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
         UUID backupId = UUID.randomUUID();
-        // #region agent log
-        debugExportLog("C", "ModelService.writeRestore:beforeBackup", "restore archives live first", asset, user, project, asset.getId(), localFileStoreService.fileSize(livePath));
-        // #endregion
-        Path backupPath = localFileStoreService.archiveCurrentModel(user, project, asset.getId(), backupId, livePath);
-        persistSnapshot(asset, backupId, backupPath);
+        replaceHistory(user, project, asset, backupId, livePath);
 
         String exportName = sanitizeFileName(snapshot.getFileName());
         ExportTarget exportTarget = resolveExportTarget(exportName);
-        Path storedPath = localFileStoreService.copyToLive(user, project, asset.getId(), exportTarget.storedFileName(), snapshotPath);
+        Path storedPath = localFileStoreService.copyToLive(
+                user,
+                project,
+                asset.getId(),
+                exportTarget.storedFileName(),
+                snapshotHold
+        );
+        try {
+            Files.deleteIfExists(snapshotHold);
+        } catch (IOException ignored) {
+            // live already replaced
+        }
         asset.setFileName(exportTarget.fileName());
         asset.setFormat(exportTarget.format());
         asset.setSizeBytes(localFileStoreService.fileSize(storedPath));
@@ -546,70 +565,6 @@ public class ModelService {
 
     private record ExportTarget(String fileName, String storedFileName, ModelFormat format) {
     }
-
-    // #region agent log
-    private void debugExportLog(
-            String hypothesisId,
-            String location,
-            String message,
-            ModelAsset asset,
-            UserAccount user,
-            Project project,
-            UUID modelId,
-            long incomingLen
-    ) {
-        try {
-            Path livePath = localFileStoreService.modelFilePath(user, project, modelId, "original.ply");
-            if (!Files.exists(livePath)) {
-                livePath = localFileStoreService.modelFilePath(user, project, modelId, "original.spz");
-            }
-            long liveSize = Files.exists(livePath) ? Files.size(livePath) : -1L;
-            String livePrefix = peekPrefix(livePath);
-            var archives = localFileStoreService.listExports(user, project, modelId);
-            long newestArchiveSize = archives.isEmpty() ? -1L : archives.get(0).sizeBytes();
-            String newestName = archives.isEmpty() ? "" : archives.get(0).archiveName().replace("\"", "");
-            String archivePrefix = "";
-            if (!archives.isEmpty()) {
-                archivePrefix = peekPrefix(localFileStoreService.resolveExportPath(user, project, modelId, newestName));
-            }
-            String data = "{\"assetVersion\":" + asset.getVersion()
-                    + ",\"liveSize\":" + liveSize
-                    + ",\"livePrefix\":\"" + livePrefix.replace("\"", "")
-                    + "\",\"incomingLen\":" + incomingLen
-                    + ",\"archiveCount\":" + archives.size()
-                    + ",\"newestArchiveSize\":" + newestArchiveSize
-                    + ",\"archivePrefix\":\"" + archivePrefix.replace("\"", "")
-                    + "\",\"newestArchiveName\":\"" + newestName
-                    + "\"}";
-            String line = "{\"sessionId\":\"14ec0c\",\"runId\":\"post-fix\",\"hypothesisId\":\"" + hypothesisId
-                    + "\",\"location\":\"" + location + "\",\"message\":\"" + message
-                    + "\",\"data\":" + data + ",\"timestamp\":" + System.currentTimeMillis() + "}\n";
-            Files.writeString(
-                    Path.of("d:/WeChatProjects/XJICloud/debug-14ec0c.log"),
-                    line,
-                    java.nio.file.StandardOpenOption.CREATE,
-                    java.nio.file.StandardOpenOption.APPEND
-            );
-        } catch (Exception ignored) {
-        }
-    }
-
-    private static String peekPrefix(Path path) {
-        if (path == null || !Files.exists(path)) {
-            return "";
-        }
-        try (InputStream in = Files.newInputStream(path)) {
-            byte[] buf = new byte[16];
-            int n = in.read(buf);
-            if (n <= 0) {
-                return "";
-            }
-            return new String(buf, 0, n, java.nio.charset.StandardCharsets.ISO_8859_1).replace("\"", "").replace("\n", "");
-        } catch (Exception ex) {
-            return "";
-        }
-    }
-    // #endregion
 
     private ModelFormat detectFormat(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);

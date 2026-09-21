@@ -29,8 +29,21 @@ const importOnlyBroken =
 const withExport =
   'Pk=t=>{window.addEventListener("message",async e=>{const n=e.source;if(!n||!e.data||"object"!=typeof e.data)return;if(e.data.type===Ak){n.postMessage({type:Ak,result:t.invoke("scene.dirty")},e.origin);return}if("supersplat:import-local"===e.data.type&&e.data.fileName&&e.data.buffer){try{await t.invoke("import",[{filename:e.data.fileName,contents:new File([e.data.buffer],e.data.fileName)}]);n.postMessage({type:"supersplat:import-local-done"},e.origin)}catch(s){n.postMessage({type:"supersplat:import-local-error",message:String(s&&s.message||s)},e.origin)}}if("supersplat:export-ply"===e.data.type){try{const s=e.data.fileName||"export.ply",i=!!e.data.compressed,a=i?"compressedPly":"ply",r={filename:s,splatIdx:"all",serializeSettings:{maxSHBands:t.invoke("view.bands")},compressedPly:i},o=[],l={seek:async()=>{},write:async e=>{o.push(e)},truncate:async()=>{},close:async()=>{},abort:async()=>{}};await t.invoke("scene.write",a,r,l);const c=await(new Blob(o)).arrayBuffer();n.postMessage({type:"supersplat:export-ply-result",fileName:s,buffer:c},e.origin,[c])}catch(s){n.postMessage({type:"supersplat:export-ply-error",message:String(s&&s.message||s)},e.origin)}}})}'
 
-const withExportProgress =
+const withExportProgressOld =
   'Pk=t=>{window.addEventListener("message",async e=>{const n=e.source;if(!n||!e.data||"object"!=typeof e.data)return;if(e.data.type===Ak){n.postMessage({type:Ak,result:t.invoke("scene.dirty")},e.origin);return}if("supersplat:import-local"===e.data.type&&e.data.fileName&&e.data.buffer){try{await t.invoke("import",[{filename:e.data.fileName,contents:new File([e.data.buffer],e.data.fileName)}]);n.postMessage({type:"supersplat:import-local-done"},e.origin)}catch(s){n.postMessage({type:"supersplat:import-local-error",message:String(s&&s.message||s)},e.origin)}}if("supersplat:export-ply"===e.data.type){try{const s=e.data.fileName||"export.ply",i=!!e.data.compressed,a=i?"compressedPly":"ply",r={filename:s,splatIdx:"all",serializeSettings:{maxSHBands:t.invoke("view.bands")},compressedPly:i},o=[],p=0,l={seek:async()=>{},write:async u=>{o.push(u);p+=u.byteLength||u.size||0;n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin)},truncate:async()=>{},close:async()=>{},abort:async()=>{}};n.postMessage({type:"supersplat:export-ply-progress",loaded:0},e.origin);const h=setInterval(()=>n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin),5e3);try{await t.invoke("scene.write",a,r,l)}finally{clearInterval(h)}const c=await(new Blob(o)).arrayBuffer();n.postMessage({type:"supersplat:export-ply-result",fileName:s,buffer:c},e.origin,[c])}catch(s){n.postMessage({type:"supersplat:export-ply-error",message:String(s&&s.message||s)},e.origin)}}})}'
+
+const withExportProgress =
+  'Pk=t=>{window.addEventListener("message",async e=>{const n=e.source;if(!n||!e.data||"object"!=typeof e.data)return;if(e.data.type===Ak){n.postMessage({type:Ak,result:t.invoke("scene.dirty")},e.origin);return}if("supersplat:import-local"===e.data.type&&e.data.fileName&&e.data.buffer){try{await t.invoke("import",[{filename:e.data.fileName,contents:new File([e.data.buffer],e.data.fileName)}]);n.postMessage({type:"supersplat:import-local-done"},e.origin)}catch(s){n.postMessage({type:"supersplat:import-local-error",message:String(s&&s.message||s)},e.origin)}}if("supersplat:export-ply"===e.data.type){try{const s=e.data.fileName||"export.ply",i=!!e.data.compressed,a=i?"compressedPly":"ply",r={filename:s,splatIdx:"all",serializeSettings:{maxSHBands:t.invoke("view.bands")},compressedPly:i},o=[],p=0,l={seek:async()=>{},write:async u=>{o.push(u);p+=u&&(u.byteLength||u.size||(typeof u==="string"?u.length:0))||0;n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin)},truncate:async()=>{},close:async()=>{},abort:async()=>{}};n.postMessage({type:"supersplat:export-ply-progress",loaded:0},e.origin);const h=setInterval(()=>n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin),5e3);try{await t.invoke("scene.write",a,r,l)}finally{clearInterval(h)}const c=await(new Blob(o)).arrayBuffer();n.postMessage({type:"supersplat:export-ply-result",fileName:s,buffer:c},e.origin,[c])}catch(s){n.postMessage({type:"supersplat:export-ply-error",message:String(s&&s.message||s)},e.origin)}}})}'
+
+/** Ack+yield before scene.write; .spz uses fileType spz (skips ply spinner); maxSHBands default 3. */
+const withExportProgressAckConst =
+  'Pk=t=>{window.addEventListener("message",async e=>{const n=e.source;if(!n||!e.data||"object"!=typeof e.data)return;if(e.data.type===Ak){n.postMessage({type:Ak,result:t.invoke("scene.dirty")},e.origin);return}if("supersplat:import-local"===e.data.type&&e.data.fileName&&e.data.buffer){try{await t.invoke("import",[{filename:e.data.fileName,contents:new File([e.data.buffer],e.data.fileName)}]);n.postMessage({type:"supersplat:import-local-done"},e.origin)}catch(s){n.postMessage({type:"supersplat:import-local-error",message:String(s&&s.message||s)},e.origin)}return}if("supersplat:export-ply"===e.data.type){n.postMessage({type:"supersplat:export-ply-progress",loaded:0},e.origin);try{await new Promise(v=>setTimeout(v,0));const s=e.data.fileName||"export.ply",f=String(s).toLowerCase(),i=!!e.data.compressed||f.endsWith(".compressed.ply"),a=f.endsWith(".spz")?"spz":i?"compressedPly":"ply",r={filename:s,splatIdx:"all",serializeSettings:{maxSHBands:3},compressedPly:i,spzVersion:4},o=[],p=0,l={seek:async()=>{},write:async u=>{o.push(u);p+=u&&(u.byteLength||u.size||(typeof u==="string"?u.length:0))||0;n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin)},truncate:async()=>{},close:async()=>{},abort:async()=>{}};console.info("[xji-export]","iframe export-ply",a,s);const h=setInterval(()=>n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin),5e3);try{await t.invoke("scene.write",a,r,l)}finally{clearInterval(h)}const c=await(new Blob(o)).arrayBuffer();n.postMessage({type:"supersplat:export-ply-result",fileName:s,buffer:c},e.origin,[c])}catch(s){n.postMessage({type:"supersplat:export-ply-error",message:String(s&&s.message||s)},e.origin)}}})}'
+
+const withExportProgressAckLogged =
+  'Pk=t=>{window.addEventListener("message",async e=>{const n=e.source;if(!n||!e.data||"object"!=typeof e.data)return;if(e.data.type===Ak){n.postMessage({type:Ak,result:t.invoke("scene.dirty")},e.origin);return}if("supersplat:import-local"===e.data.type&&e.data.fileName&&e.data.buffer){try{await t.invoke("import",[{filename:e.data.fileName,contents:new File([e.data.buffer],e.data.fileName)}]);n.postMessage({type:"supersplat:import-local-done"},e.origin)}catch(s){n.postMessage({type:"supersplat:import-local-error",message:String(s&&s.message||s)},e.origin)}return}if("supersplat:export-ply"===e.data.type){n.postMessage({type:"supersplat:export-ply-progress",loaded:0},e.origin);try{await new Promise(v=>setTimeout(v,0));const s=e.data.fileName||"export.ply",f=String(s).toLowerCase(),i=!!e.data.compressed||f.endsWith(".compressed.ply"),a=f.endsWith(".spz")?"spz":i?"compressedPly":"ply",r={filename:s,splatIdx:"all",serializeSettings:{maxSHBands:3},compressedPly:i,spzVersion:4},o=[];let p=0;const l={seek:async()=>{},write:async u=>{o.push(u);p+=u&&(u.byteLength||u.size||(typeof u==="string"?u.length:0))||0;n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin)},truncate:async()=>{},close:async()=>{},abort:async()=>{}};console.info("[xji-export]","iframe export-ply",a,s);const h=setInterval(()=>n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin),5e3);try{await t.invoke("scene.write",a,r,l)}finally{clearInterval(h)}const c=await(new Blob(o)).arrayBuffer();n.postMessage({type:"supersplat:export-ply-result",fileName:s,buffer:c},e.origin,[c])}catch(s){n.postMessage({type:"supersplat:export-ply-error",message:String(s&&s.message||s)},e.origin)}}})}'
+
+const withExportProgressAck =
+  'Pk=t=>{window.addEventListener("message",async e=>{const n=e.source;if(!n||!e.data||"object"!=typeof e.data)return;if(e.data.type===Ak){n.postMessage({type:Ak,result:t.invoke("scene.dirty")},e.origin);return}if("supersplat:import-local"===e.data.type&&e.data.fileName&&e.data.buffer){try{await t.invoke("import",[{filename:e.data.fileName,contents:new File([e.data.buffer],e.data.fileName)}]);n.postMessage({type:"supersplat:import-local-done"},e.origin)}catch(s){n.postMessage({type:"supersplat:import-local-error",message:String(s&&s.message||s)},e.origin)}return}if("supersplat:export-ply"===e.data.type){n.postMessage({type:"supersplat:export-ply-progress",loaded:0},e.origin);try{await new Promise(v=>setTimeout(v,0));const s=e.data.fileName||"export.ply",f=String(s).toLowerCase(),i=!!e.data.compressed||f.endsWith(".compressed.ply"),a=f.endsWith(".spz")?"spz":i?"compressedPly":"ply",r={filename:s,splatIdx:"all",serializeSettings:{maxSHBands:3},compressedPly:i,spzVersion:4},o=[];let p=0;const l={seek:async()=>{},write:async u=>{o.push(u);p+=u&&(u.byteLength||u.size||(typeof u==="string"?u.length:0))||0;n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin)},truncate:async()=>{},close:async()=>{},abort:async()=>{}};const h=setInterval(()=>n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin),5e3);try{await t.invoke("scene.write",a,r,l)}finally{clearInterval(h)}const c=await(new Blob(o)).arrayBuffer();n.postMessage({type:"supersplat:export-ply-result",fileName:s,buffer:c},e.origin,[c])}catch(s){n.postMessage({type:"supersplat:export-ply-error",message:String(s&&s.message||s)},e.origin)}}})}'
 
 for (const file of files) {
   if (!fs.existsSync(file)) {
@@ -38,32 +51,57 @@ for (const file of files) {
     continue
   }
   let s = fs.readFileSync(file, 'utf8')
+  if (s.includes(withExportProgressAck)) {
+    console.log('already has export-ply let p', file)
+    continue
+  }
+  const next = withExportProgressAck
+  if (s.includes(withExportProgressAckLogged)) {
+    s = s.replace(withExportProgressAckLogged, next)
+    fs.writeFileSync(file, s)
+    console.log('patched strip iframe debug log', file)
+    continue
+  }
+  if (s.includes(withExportProgressAckConst)) {
+    s = s.replace(withExportProgressAckConst, next)
+    fs.writeFileSync(file, s)
+    console.log('patched const p → let p', file)
+    continue
+  }
   if (s.includes(withExportProgress)) {
-    console.log('already has export-ply-progress', file)
+    s = s.replace(withExportProgress, next)
+    fs.writeFileSync(file, s)
+    console.log('patched export-ply-progress → ack+spz', file)
+    continue
+  }
+  if (s.includes(withExportProgressOld)) {
+    s = s.replace(withExportProgressOld, next)
+    fs.writeFileSync(file, s)
+    console.log('patched export-ply-progress byte count → ack+spz', file)
     continue
   }
   if (s.includes(withExport)) {
-    s = s.replace(withExport, withExportProgress)
+    s = s.replace(withExport, next)
     fs.writeFileSync(file, s)
-    console.log('patched export-ply → export-ply-progress', file)
+    console.log('patched export-ply → ack+spz', file)
     continue
   }
   if (s.includes(importOnlyBroken)) {
-    s = s.replace(importOnlyBroken, withExportProgress)
+    s = s.replace(importOnlyBroken, next)
     fs.writeFileSync(file, s)
-    console.log('patched broken-import → export-ply-progress', file)
+    console.log('patched broken-import → ack+spz', file)
     continue
   }
   if (s.includes(importOnly)) {
-    s = s.replace(importOnly, withExportProgress)
+    s = s.replace(importOnly, next)
     fs.writeFileSync(file, s)
-    console.log('patched import-local → export-ply-progress', file)
+    console.log('patched import-local → ack+spz', file)
     continue
   }
   if (s.includes(dirtyOnly)) {
-    s = s.replace(dirtyOnly, withExportProgress)
+    s = s.replace(dirtyOnly, next)
     fs.writeFileSync(file, s)
-    console.log('patched dirty-only → export-ply-progress', file)
+    console.log('patched dirty-only → ack+spz', file)
     continue
   }
   console.error('could not patch', file)

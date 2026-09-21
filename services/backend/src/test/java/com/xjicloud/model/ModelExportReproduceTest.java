@@ -14,7 +14,6 @@ import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -99,8 +98,6 @@ class ModelExportReproduceTest {
         List<LocalFileStoreService.ExportArchive> archives = files.listExports(user, project, modelId);
         byte[] archived = files.readExport(user, project, modelId, archives.get(0).archiveName());
 
-        debugLog("A", "after writeExport", liveAfter, archived, archives.size());
-
         assertEquals("NEW-V2", new String(liveAfter, StandardCharsets.UTF_8));
         assertEquals("LIVE-V1", new String(archived, StandardCharsets.UTF_8));
         assertEquals(2, asset.getVersion());
@@ -126,10 +123,44 @@ class ModelExportReproduceTest {
         modelService.writeRestore(user, project, asset, historyId);
 
         byte[] liveAfter = Files.readAllBytes(files.modelFilePath(user, project, modelId, "original.ply"));
-        debugLog("C", "after writeRestore", liveAfter, "LIVE-V1".getBytes(StandardCharsets.UTF_8), files.listExports(user, project, modelId).size());
         assertEquals("LIVE-V1", new String(liveAfter, StandardCharsets.UTF_8));
         assertEquals(3, asset.getVersion());
-        assertEquals(2, versionStore.size());
+        assertEquals(1, versionStore.size());
+        assertEquals(1, files.listExports(user, project, modelId).size());
+        byte[] archived = files.readExport(
+                user,
+                project,
+                modelId,
+                files.listExports(user, project, modelId).get(0).archiveName()
+        );
+        assertEquals("NEW-V2", new String(archived, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void secondExportDiscardsOlderHistory() throws Exception {
+        modelService.writeExport(
+                user,
+                project,
+                asset,
+                new MockMultipartFile("file", "scan.ply", "application/octet-stream", "NEW-V2".getBytes(StandardCharsets.UTF_8))
+        );
+        String firstArchive = files.listExports(user, project, modelId).get(0).archiveName();
+        modelService.writeExport(
+                user,
+                project,
+                asset,
+                new MockMultipartFile("file", "scan.ply", "application/octet-stream", "NEW-V3".getBytes(StandardCharsets.UTF_8))
+        );
+
+        List<LocalFileStoreService.ExportArchive> archives = files.listExports(user, project, modelId);
+        assertEquals(1, archives.size());
+        assertEquals(1, versionStore.size());
+        assertFalse(Files.exists(files.exportsDirectory(user, project, modelId).resolve(firstArchive)));
+        assertEquals("NEW-V3", new String(Files.readAllBytes(files.modelFilePath(user, project, modelId, "original.ply")), StandardCharsets.UTF_8));
+        assertEquals(
+                "NEW-V2",
+                new String(files.readExport(user, project, modelId, archives.get(0).archiveName()), StandardCharsets.UTF_8)
+        );
     }
 
     @Test
@@ -201,24 +232,5 @@ class ModelExportReproduceTest {
                     };
                 }
         );
-    }
-
-    private void debugLog(String hypothesisId, String message, byte[] liveAfter, byte[] archived, int archiveCount) throws Exception {
-        // #region agent log
-        String liveText = new String(liveAfter, StandardCharsets.UTF_8);
-        String archiveText = new String(archived, StandardCharsets.UTF_8);
-        String data = "{\"liveText\":\"" + liveText + "\",\"archiveText\":\"" + archiveText
-                + "\",\"archiveCount\":" + archiveCount + ",\"sameAsIncoming\":"
-                + liveText.equals(archiveText) + "}";
-        String line = "{\"sessionId\":\"14ec0c\",\"runId\":\"post-fix\",\"hypothesisId\":\"" + hypothesisId
-                + "\",\"location\":\"ModelExportReproduceTest\",\"message\":\"" + message
-                + "\",\"data\":" + data + ",\"timestamp\":" + System.currentTimeMillis() + "}\n";
-        Files.writeString(
-                Path.of("d:/WeChatProjects/XJICloud/debug-14ec0c.log"),
-                line,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.APPEND
-        );
-        // #endregion
     }
 }

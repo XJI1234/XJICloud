@@ -510,7 +510,6 @@ onMounted(() => {
             <span class="model-choice-name">{{ candidate.fileName }}</span>
             <span class="model-choice-meta">
               {{ candidate.format || t('viewer.unknownFormat') }}
-              <template v-if="candidate.version"> · v{{ candidate.version }}</template>
               <template v-if="candidate.sizeBytes"> · {{ formatModelSize(candidate.sizeBytes) }}</template>
             </span>
             <span v-if="candidate.updatedAt" class="model-choice-updated">

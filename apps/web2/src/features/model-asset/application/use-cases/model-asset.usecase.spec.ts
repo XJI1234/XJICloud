@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ok } from '@/shared/result'
 import type { ModelAssetRepository } from '../../domain/repositories/model-asset.repository'
 import {
+  downloadModelToDiskUseCase,
   downloadModelVersionBytesUseCase,
   listModelVersionsUseCase,
   restoreModelVersionUseCase,
@@ -45,5 +46,27 @@ describe('model version use cases', () => {
     const [error, buffer] = await downloadModelVersionBytesUseCase({ models }, 'm1', 'v-uuid')
     expect(error).toBeNull()
     expect(buffer?.byteLength).toBe(4)
+  })
+
+  it('returns a named blob for local download', async () => {
+    const models = {
+      downloadBytes: async () => ok(new ArrayBuffer(2)),
+    } as unknown as ModelAssetRepository
+    const [error, file] = await downloadModelToDiskUseCase(
+      { models },
+      {
+        id: 'm1',
+        projectId: 'p',
+        fileName: 'scan.ply',
+        format: 'PLY',
+        sizeBytes: 2,
+        version: 1,
+        createdAt: 't',
+        updatedAt: 't',
+      },
+    )
+    expect(error).toBeNull()
+    expect(file?.fileName).toBe('scan.ply')
+    expect(file?.blob.size).toBe(2)
   })
 })

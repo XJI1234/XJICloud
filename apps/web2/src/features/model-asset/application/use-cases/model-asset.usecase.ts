@@ -1,6 +1,6 @@
 import { DomainError } from '@/shared/domain-error'
 import { err, ok, type Result } from '@/shared/result'
-import type { ModelAsset, ModelVersion } from '../../domain/entities/model-asset.entity'
+import type { CachedModelFile, ModelAsset, ModelVersion } from '../../domain/entities/model-asset.entity'
 import type { ModelAssetRepository } from '../../domain/repositories/model-asset.repository'
 import { nextChunkRange } from '../../domain/services/chunk-range.service'
 import { assertModelFile } from '../../domain/services/model-format.service'
@@ -175,9 +175,48 @@ export async function downloadModelVersionBytesUseCase(
   modelId: string,
   versionId: string,
   onProgress?: (loaded: number, total: number) => void,
+  revision?: { updatedAt: string; sizeBytes: number; fileName: string },
 ): Promise<Result<ArrayBuffer>> {
   if (!modelId || !versionId || versionId === 'current') {
     return err(new DomainError('UNKNOWN'))
   }
-  return deps.models.downloadVersionBytes(modelId, versionId, onProgress)
+  return deps.models.downloadVersionBytes(modelId, versionId, onProgress, revision ? { revision } : undefined)
+}
+
+export async function downloadModelToDiskUseCase(
+  deps: { models: ModelAssetRepository },
+  model: ModelAsset,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<Result<{ blob: Blob; fileName: string }>> {
+  if (!model.id) {
+    return err(new DomainError('UNKNOWN'))
+  }
+  const [error, buffer] = await deps.models.downloadBytes(model.id, onProgress, {
+    cacheBust: `${model.version}-${model.updatedAt || Date.now()}`,
+    revision: {
+      updatedAt: model.updatedAt,
+      sizeBytes: model.sizeBytes,
+      fileName: model.fileName,
+    },
+  })
+  if (error || !buffer) {
+    return err(error ?? new DomainError('UNKNOWN'))
+  }
+  return ok({ blob: new Blob([buffer]), fileName: model.fileName })
+}
+
+export async function listCachedModelsUseCase(
+  deps: { models: ModelAssetRepository },
+): Promise<Result<CachedModelFile[]>> {
+  return deps.models.listCached()
+}
+
+export async function removeCachedModelsUseCase(
+  deps: { models: ModelAssetRepository },
+  cacheKeys: string[],
+): Promise<Result<void>> {
+  if (cacheKeys.length === 0) {
+    return ok(undefined)
+  }
+  return deps.models.removeCached(cacheKeys)
 }

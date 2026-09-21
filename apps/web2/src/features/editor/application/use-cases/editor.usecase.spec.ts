@@ -51,7 +51,7 @@ describe('editor use cases', () => {
     }
     const [error] = await saveEditorExportUseCase(
       { models, bridge },
-      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' } },
+      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply' },
     )
     expect(error).toBeNull()
     expect(uploaded[0]?.name).toBe('out.ply')
@@ -89,6 +89,7 @@ describe('editor use cases', () => {
       {
         modelId: 'm1',
         frame: { contentWindow: {} as Window, src: '/supersplat/' },
+        format: 'ply',
         onProgress: (progress) => phases.push(`${progress.phase}:${progress.loaded}`),
       },
     )
@@ -131,10 +132,60 @@ describe('editor use cases', () => {
     }
     const [error, created] = await saveEditorAsNewModelUseCase(
       { models, bridge },
-      { projectId: 'p', frame: { contentWindow: {} as Window, src: '/supersplat/' } },
+      { projectId: 'p', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply', fileName: 'local.ply' },
     )
     expect(error).toBeNull()
     expect(created?.id).toBe('m2')
+  })
+
+  it('exports spz when the save format is compressed', async () => {
+    let compressed: boolean | undefined
+    const models = {
+      uploadExport: async () =>
+        ok({
+          id: 'm1',
+          projectId: 'p',
+          fileName: 'out.spz',
+          format: 'SPZ' as const,
+          sizeBytes: 1,
+          version: 2,
+          createdAt: '',
+          updatedAt: '',
+        }),
+    } as unknown as ModelAssetRepository
+    const bridge: EditorBridgePort = {
+      buildSrc: () => '/supersplat/index.html',
+      waitReady: async () => ok(undefined),
+      isDirty: async () => ok(false),
+      importLocal: async () => ok(undefined),
+      exportPly: async (_frame, options) => {
+        compressed = options?.compressed
+        return ok({ blob: new Blob(['spz']), fileName: options?.fileName ?? 'out.spz' })
+      },
+    }
+    const [error] = await saveEditorExportUseCase(
+      { models, bridge },
+      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'spz', fileName: 'scan' },
+    )
+    expect(error).toBeNull()
+    expect(compressed).toBe(true)
+  })
+
+  it('requires a name when saving as a new model', async () => {
+    const [error] = await saveEditorAsNewModelUseCase(
+      {
+        models: {} as ModelAssetRepository,
+        bridge: {
+          buildSrc: () => '',
+          waitReady: async () => ok(undefined),
+          isDirty: async () => ok(false),
+          importLocal: async () => ok(undefined),
+          exportPly: async () => ok({ blob: new Blob(['ply']), fileName: 'out.ply' }),
+        },
+      },
+      { projectId: 'p', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply', fileName: '   ' },
+    )
+    expect(error?.code).toBe('MODEL_INVALID_FORMAT')
   })
 })
 
@@ -193,6 +244,27 @@ describe('supersplat protocol', () => {
         frame,
         'http://localhost',
       ),
+    ).toBe(true)
+  })
+
+  it('trusts messages against a live iframe contentWindow getter', () => {
+    const first = {} as Window
+    const second = {} as Window
+    let current = first
+    const frame = {
+      get contentWindow() {
+        return current
+      },
+    }
+    expect(
+      isTrustedIframeMessage({ source: first, origin: 'http://114.55.113.49', data: {} } as MessageEvent, frame, 'http://114.55.113.49'),
+    ).toBe(true)
+    current = second
+    expect(
+      isTrustedIframeMessage({ source: first, origin: 'http://114.55.113.49', data: {} } as MessageEvent, frame, 'http://114.55.113.49'),
+    ).toBe(false)
+    expect(
+      isTrustedIframeMessage({ source: second, origin: 'http://114.55.113.49', data: {} } as MessageEvent, frame, 'http://114.55.113.49'),
     ).toBe(true)
   })
 })

@@ -10,10 +10,13 @@
         <meta name="description" content="SuperSplat is an advanced browser-based editor for manipulating and optimizing 3D Gaussian Splats. It is open source and engine agnostic." />
         <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
 
-        <!-- Service worker -->
+        <!-- Service worker: skip in embedded cloud editor so export patches are not cache-first. -->
         <script>
             const sw = navigator.serviceWorker;
-            if (sw) {
+            const embedded = new URLSearchParams(location.search).get('embedded') === '1';
+            if (sw && embedded) {
+                sw.getRegistrations().then((regs) => regs.forEach((reg) => reg.unregister()));
+            } else if (sw) {
                 sw.register('./sw.js')
                     .then(reg => console.log('service worker registered', reg))
                     .catch(err => console.log('failed to register service worker', err));
@@ -22,6 +25,6 @@
     </head>
 
     <body>
-        <script type="module" src="./index.js"></script>
+        <script type="module" src="./index.js?v=xji-export5"></script>
     </body>
 </html>

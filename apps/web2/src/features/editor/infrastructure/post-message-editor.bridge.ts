@@ -23,10 +23,28 @@ import {
 
 function resolveTargetOrigin(frame: EditorFrame, pageOrigin: string) {
   try {
-    return new URL(frame.src, pageOrigin).origin
+    const src = frame.src
+    if (!src || src === 'about:blank') {
+      return pageOrigin
+    }
+    const origin = new URL(src, pageOrigin).origin
+    return origin === 'null' ? pageOrigin : origin
   } catch {
     return pageOrigin
   }
+}
+
+function postToFrame(frame: EditorFrame, data: unknown, targetOrigin: string, transfer?: Transferable[]) {
+  const win = frame.contentWindow
+  if (!win) {
+    return false
+  }
+  if (transfer?.length) {
+    win.postMessage(data, targetOrigin, transfer)
+  } else {
+    win.postMessage(data, targetOrigin)
+  }
+  return true
 }
 
 export function createPostMessageEditorBridge(options?: {
@@ -44,11 +62,9 @@ export function createPostMessageEditorBridge(options?: {
     },
 
     async waitReady(frame) {
-      const win = frame.contentWindow
-      if (!win) {
+      if (!frame.contentWindow) {
         return err(new DomainError('EDITOR_NOT_READY'))
       }
-      const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
 
       for (let attempt = 0; attempt < READY_MAX_ATTEMPTS; attempt++) {
         const ready = await new Promise<boolean>((resolve) => {
@@ -72,7 +88,10 @@ export function createPostMessageEditorBridge(options?: {
 
           addListener('message', onMessage)
           try {
-            win.postMessage({ type: IS_SCENE_DIRTY }, targetOrigin)
+            if (!postToFrame(frame, { type: IS_SCENE_DIRTY }, resolveTargetOrigin(frame, pageOrigin))) {
+              cleanup()
+              resolve(false)
+            }
           } catch {
             cleanup()
             resolve(false)
@@ -86,11 +105,9 @@ export function createPostMessageEditorBridge(options?: {
     },
 
     isDirty(frame) {
-      const win = frame.contentWindow
-      if (!win) {
+      if (!frame.contentWindow) {
         return Promise.resolve(ok(false))
       }
-      const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
 
       return new Promise((resolve) => {
         const timer = setTimeout(() => {
@@ -112,16 +129,14 @@ export function createPostMessageEditorBridge(options?: {
         }
 
         addListener('message', onMessage)
-        win.postMessage({ type: IS_SCENE_DIRTY }, targetOrigin)
+        postToFrame(frame, { type: IS_SCENE_DIRTY }, resolveTargetOrigin(frame, pageOrigin))
       })
     },
 
     importLocal(frame, file) {
-      const win = frame.contentWindow
-      if (!win) {
+      if (!frame.contentWindow) {
         return Promise.resolve(err(new DomainError('EDITOR_NOT_READY')))
       }
-      const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
 
       return file.arrayBuffer().then((buffer) => {
         return new Promise((resolve) => {
@@ -151,41 +166,48 @@ export function createPostMessageEditorBridge(options?: {
           }
 
           addListener('message', onMessage)
-          win.postMessage({ type: IMPORT_LOCAL, fileName: file.name, buffer }, targetOrigin, [buffer])
+          postToFrame(frame, { type: IMPORT_LOCAL, fileName: file.name, buffer }, resolveTargetOrigin(frame, pageOrigin), [
+            buffer,
+          ])
         })
       })
     },
 
-    exportPly(frame, exportOptions) {
-      const win = frame.contentWindow
-      if (!win) {
-        return Promise.resolve(err(new DomainError('EDITOR_NOT_READY')))
+    async exportPly(frame, exportOptions) {
+      if (!frame.contentWindow) {
+        return err(new DomainError('EDITOR_NOT_READY'))
+      }
+      const [readyError] = await this.waitReady(frame)
+      if (readyError) {
+        return err(readyError)
       }
       const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
-      const startedAt = Date.now()
 
       return new Promise((resolve) => {
-        let lastProgressAt = startedAt
         let progressEvents = 0
         let idleTimer: ReturnType<typeof setTimeout> | undefined
         const maxTimer = setTimeout(() => {
-          finish('max')
+          finish()
         }, EXPORT_MAX_TIMEOUT_MS)
 
         function armIdle() {
+          if (progressEvents > 0) {
+            if (idleTimer !== undefined) {
+              clearTimeout(idleTimer)
+              idleTimer = undefined
+            }
+            return
+          }
           if (idleTimer !== undefined) {
             clearTimeout(idleTimer)
           }
           idleTimer = setTimeout(() => {
-            finish('idle')
+            finish()
           }, EXPORT_TIMEOUT_MS)
         }
 
-        function finish(reason: 'idle' | 'max') {
+        function finish() {
           cleanup()
-          // #region agent log
-          fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:reason==='idle'?'B':'A',location:'post-message-editor.bridge.ts:exportPly',message:'export timed out',data:{reason,elapsedMs:Date.now()-startedAt,progressEvents,sinceProgressMs:Date.now()-lastProgressAt,origin:targetOrigin},timestamp:Date.now()})}).catch(()=>{})
-          // #endregion
           resolve(err(new DomainError('EDITOR_TIMEOUT')))
         }
 
@@ -199,13 +221,9 @@ export function createPostMessageEditorBridge(options?: {
 
         function onMessage(event: MessageEvent) {
           if (!isTrustedIframeMessage(event, frame, pageOrigin)) {
-            // #region agent log
-            fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:'C',location:'post-message-editor.bridge.ts:exportPly',message:'dropped untrusted export message',data:{origin:event.origin,expected:pageOrigin,type:(event.data as {type?:string})?.type},timestamp:Date.now()})}).catch(()=>{})
-            // #endregion
             return
           }
           if (isExportProgress(event.data)) {
-            lastProgressAt = Date.now()
             progressEvents += 1
             armIdle()
             exportOptions?.onProgress?.(event.data.loaded)
@@ -213,9 +231,6 @@ export function createPostMessageEditorBridge(options?: {
           }
           if (isExportResult(event.data)) {
             cleanup()
-            // #region agent log
-            fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:'A',location:'post-message-editor.bridge.ts:exportPly',message:'export result',data:{elapsedMs:Date.now()-startedAt,progressEvents,bytes:event.data.buffer?.byteLength??0},timestamp:Date.now()})}).catch(()=>{})
-            // #endregion
             resolve(
               ok({
                 blob: new Blob([event.data.buffer], { type: 'application/octet-stream' }),
@@ -231,11 +246,10 @@ export function createPostMessageEditorBridge(options?: {
         }
 
         addListener('message', onMessage)
-        // #region agent log
-        fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14ec0c'},body:JSON.stringify({sessionId:'14ec0c',runId:'export-timeout',hypothesisId:'A',location:'post-message-editor.bridge.ts:exportPly',message:'export started',data:{origin:targetOrigin,fileName:exportOptions?.fileName??null},timestamp:Date.now()})}).catch(()=>{})
-        // #endregion
+        exportOptions?.onProgress?.(0)
         armIdle()
-        win.postMessage(
+        postToFrame(
+          frame,
           {
             type: EXPORT_PLY,
             compressed: exportOptions?.compressed ?? false,

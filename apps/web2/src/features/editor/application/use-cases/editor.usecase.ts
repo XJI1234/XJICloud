@@ -3,7 +3,12 @@ import { err, ok, type Result } from '@/shared/result'
 import type { DownloadToken, ModelAsset } from '@/features/model-asset/domain/entities/model-asset.entity'
 import type { ModelAssetRepository } from '@/features/model-asset/domain/repositories/model-asset.repository'
 import { uploadModelUseCase } from '@/features/model-asset/application/use-cases/model-asset.usecase'
-import { assertModelFile } from '@/features/model-asset/domain/services/model-format.service'
+import {
+  assertExportFileName,
+  assertModelFile,
+  type ExportModelFormat,
+  withModelExtension,
+} from '@/features/model-asset/domain/services/model-format.service'
 import type { EditorBridgePort, EditorFrame } from '../../domain/repositories/editor-bridge.port'
 import type { EditorLaunchParams } from '../../domain/entities/editor-session.entity'
 import { createBlankEditorLaunch } from '../../domain/services/editor-launch.service'
@@ -34,19 +39,33 @@ export async function confirmLeaveIfDirtyUseCase(
   return deps.bridge.isDirty(frame)
 }
 
+function resolveExportName(fileName: string | undefined, format: ExportModelFormat) {
+  const source = fileName?.trim() || `model.${format}`
+  const name = withModelExtension(source, format)
+  const formatError = assertExportFileName(name, format)
+  if (formatError) {
+    return err<string>(formatError)
+  }
+  return ok(name)
+}
+
 export async function saveEditorExportUseCase(
   deps: { models: ModelAssetRepository; bridge: EditorBridgePort },
   input: {
     modelId: string
     frame: EditorFrame
-    compressed?: boolean
+    format: ExportModelFormat
     fileName?: string
     onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
   },
 ): Promise<Result<ModelAsset>> {
+  const [nameError, fileName] = resolveExportName(input.fileName, input.format)
+  if (nameError || !fileName) {
+    return err(nameError ?? new DomainError('MODEL_INVALID_FORMAT'))
+  }
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
-    compressed: input.compressed,
-    fileName: input.fileName,
+    compressed: input.format === 'spz',
+    fileName,
     onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
   })
   if (exportError || !exported) {
@@ -62,8 +81,8 @@ export async function saveEditorAsNewModelUseCase(
   input: {
     projectId: string | null
     frame: EditorFrame
-    compressed?: boolean
-    fileName?: string
+    format: ExportModelFormat
+    fileName: string
     onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
     signal?: AbortSignal
   },
@@ -71,9 +90,16 @@ export async function saveEditorAsNewModelUseCase(
   if (!input.projectId) {
     return err(new DomainError('MODEL_PROJECT_REQUIRED'))
   }
+  if (!input.fileName.trim()) {
+    return err(new DomainError('MODEL_INVALID_FORMAT'))
+  }
+  const [nameError, fileName] = resolveExportName(input.fileName, input.format)
+  if (nameError || !fileName) {
+    return err(nameError ?? new DomainError('MODEL_INVALID_FORMAT'))
+  }
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
-    compressed: input.compressed,
-    fileName: input.fileName,
+    compressed: input.format === 'spz',
+    fileName,
     onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
   })
   if (exportError || !exported) {

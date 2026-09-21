@@ -199,10 +199,10 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 | POST | `/models/{id}/download-token` | SuperSplat 短期下载 token |
 | GET | `/models/{id}/download` | 下载（Bearer 或 `?access_token=`，支持 Range） |
 | GET/PUT | `/models/{id}/viewer-config` | 查看器 JSON v2 |
-| POST | `/models/{id}/export` | SuperSplat 导出覆盖当前模型：先把 live 文件拷到 `exports/{versionId}.ply\|spz` 并写入 `model_versions`，再流式覆盖 live，`ModelAsset.version + 1`。不要把整文件读进堆。 |
-| GET | `/models/{id}/versions` | 当前版本 + `model_versions` 历史（id 为 UUID；`current` 表示 live） |
-| GET | `/models/{id}/versions/{versionId}/file` | 下载某一历史快照（需用户 JWT；versionId 必须属于该模型） |
-| POST | `/models/{id}/versions/restore` | body `{ versionId }`：先归档当前 live，再把快照拷回 live 并 bump version |
+| POST | `/models/{id}/export` | SuperSplat 覆盖当前模型：清空该模型旧 `exports/` 与 `model_versions`，把 live 拷到唯一历史 `exports/{versionId}.ply\|spz`，再流式覆盖 live，`ModelAsset.version + 1`。每模型只保留 **现有 + 1 条历史**。不要把整文件读进堆。另存为新模型走分片上传，不走本接口。 |
+| GET | `/models/{id}/versions` | 现有（id=`current`）+ 至多 1 条历史（id 为 UUID）。整数 `version` 仅内部修订号，产品文案不用 v1/v2。 |
+| GET | `/models/{id}/versions/{versionId}/file` | 下载该模型唯一历史快照（需用户 JWT；versionId 必须属于该模型） |
+| POST | `/models/{id}/versions/restore` | body `{ versionId }`：把快照暂存后剪枝历史，将当前 live 归档为唯一历史，再把快照拷回 live 并 bump version |
 | POST | `/projects/{id}/datasets` | 创建数据集任务 + presigned URLs |
 | POST | `/projects/{id}/datasets/{jobId}/complete` | 确认上传完成并入队 |
 | GET | `/projects/{id}/jobs` | 项目训练任务列表 |
@@ -261,7 +261,8 @@ CREATE TABLE model_versions (
 - 在旧版 `apps/web` 的产品能力之上，用前端 DDD 重构：`features/{bc}/{domain,application,infrastructure,presentation}` + `app/create-container.ts` 组合根
 - BC：identity、project、dataset-training、model-asset、viewer、editor
 - **UI 主题：** 浅色产品壳（`--surface #f5f6f8`，强调色 `--accent #3d6b8a`，`system-ui`）+ 暗色 3D 画布。不是旧版 Twilight Amber 暗色壳。
-- `/app/layer` 为原生 Spark 查看；`/app/supersplat` 允许无云端模型进入并打开本地文件
+- `/app/layer` 为原生 Spark 查看；`/app/supersplat` 允许无云端模型进入并打开本地文件；`/app/settings` 管理 OPFS 模型缓存
+- `GET /models/{id}/download` 的字节由 web2 `model-asset` 仓储经 OPFS 按 modelId + 修订（`updatedAt`+`sizeBytes`）缓存，查看器与高级编辑共用；覆盖导出/恢复会使该模型缓存失效
 - 测试：`pnpm test:web2`；构建：`pnpm build` / `pnpm build:web2`；开发：`pnpm dev`（指向 web2）
 
 ## 7.1 已弃用：旧用户前端（`apps/web/`）

@@ -161,6 +161,24 @@ public class LocalFileStoreService {
         }
     }
 
+    public void clearExportArchives(UserAccount user, Project project, UUID modelId) {
+        Path exportsDir = exportsDirectory(user, project, modelId);
+        if (!Files.isDirectory(exportsDir)) {
+            return;
+        }
+        try (var stream = Files.list(exportsDir)) {
+            stream.filter(Files::isRegularFile).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    log.warn("Failed to delete export {}: {}", path, e.getMessage());
+                }
+            });
+        } catch (IOException e) {
+            log.warn("Failed to list exports {}: {}", exportsDir, e.getMessage());
+        }
+    }
+
     public Path replaceModelFile(UserAccount user, Project project, UUID modelId, String storedFileName, InputStream input) {
         try {
             Path directory = modelDirectory(user, project, modelId);

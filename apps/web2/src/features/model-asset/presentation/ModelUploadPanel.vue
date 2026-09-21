@@ -8,6 +8,7 @@ import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
 import { formatBytes } from '@/presentation/format'
 import { formatDomainError } from '@/presentation/errors'
 import { createTransferRateTracker, formatTransferSpeed } from '@/shared/transfer-rate'
+import { saveBlobAsFile } from '@/presentation/save-blob'
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import type { ModelAsset } from '@/features/model-asset/domain/entities/model-asset.entity'
 import { sortModelsByUpdatedAtDesc } from '@/features/model-asset/domain/services/model-list.service'
@@ -36,6 +37,7 @@ const { formatDateTime } = useFormatDateTime()
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const models = ref<ModelAsset[]>([])
 const inflight = ref<InFlightUpload[]>([])
+const downloadById = ref<Record<string, { percent: number; speed: string }>>({})
 const loading = ref(false)
 const listError = ref('')
 const actionError = ref('')
@@ -134,6 +136,37 @@ function openModel(model: ModelAsset) {
   void router.push({ path: '/app/layer', query: { modelId: model.id } })
 }
 
+async function downloadModel(model: ModelAsset) {
+  if (downloadById.value[model.id]) {
+    return
+  }
+  actionError.value = ''
+  const tracker = createTransferRateTracker()
+  downloadById.value = {
+    ...downloadById.value,
+    [model.id]: { percent: 0, speed: '' },
+  }
+  const [error, file] = await modelsApi.downloadToDisk(model, (loaded, total) => {
+    const percent = total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0
+    const rate = tracker.push(loaded, Date.now())
+    downloadById.value = {
+      ...downloadById.value,
+      [model.id]: {
+        percent,
+        speed: rate != null ? formatTransferSpeed(rate) : downloadById.value[model.id]?.speed ?? '',
+      },
+    }
+  })
+  const next = { ...downloadById.value }
+  delete next[model.id]
+  downloadById.value = next
+  if (error || !file) {
+    actionError.value = formatDomainError(t, error)
+    return
+  }
+  saveBlobAsFile(file.blob, file.fileName)
+}
+
 async function deleteModel(model: ModelAsset) {
   if (!window.confirm(t('upload.deleteModelConfirm'))) {
     return
@@ -212,9 +245,17 @@ onMounted(() => {
             <div class="training-job-item__header-actions">
               <span class="cloud-badge cloud-badge--success">{{ t('upload.modelReady') }}</span>
               <AppButton compact variant="primary" @click="openModel(model)">{{ t('upload.viewModel') }}</AppButton>
+              <AppButton compact :disabled="Boolean(downloadById[model.id])" @click="downloadModel(model)">
+                {{ t('upload.downloadModel') }}
+              </AppButton>
               <AppButton compact variant="destructive" @click="deleteModel(model)">{{ t('upload.deleteModel') }}</AppButton>
             </div>
           </div>
+          <UploadProgressBar
+            v-if="downloadById[model.id]"
+            :percent="downloadById[model.id].percent"
+            :speed="downloadById[model.id].speed"
+          />
         </article>
       </div>
     </div>

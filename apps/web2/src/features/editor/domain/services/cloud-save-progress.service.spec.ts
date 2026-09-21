@@ -4,6 +4,7 @@ import { mapCloudSaveBar } from './cloud-save-progress.service'
 describe('mapCloudSaveBar', () => {
   it('keeps export in the first 40 percent while bytes are unknown or growing', () => {
     expect(mapCloudSaveBar('export', 0, 0)).toBe(5)
+    expect(mapCloudSaveBar('export', 0, 0, 10_000)).toBeGreaterThan(5)
     expect(mapCloudSaveBar('export', 1, 0)).toBeGreaterThanOrEqual(8)
     expect(mapCloudSaveBar('export', 64 * 1024 * 1024, 0)).toBeLessThanOrEqual(40)
   })

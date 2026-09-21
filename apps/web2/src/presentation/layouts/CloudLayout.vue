@@ -60,6 +60,11 @@ function goHome() {
   }
 }
 
+function openSettings() {
+  userModalVisible.value = false
+  void router.push('/app/settings')
+}
+
 async function logout() {
   userModalVisible.value = false
   auth.logout()
@@ -186,6 +191,7 @@ const isImmersive = computed(() => route.name === 'home' || !activeProjectId.val
         <span>@{{ session?.username || 'unknown' }}</span>
       </div>
       <template #footer>
+        <AppButton @click="openSettings">{{ t('header.settings') }}</AppButton>
         <AppButton @click="userModalVisible = false">{{ t('common.close') }}</AppButton>
         <AppButton variant="primary" @click="logout">{{ t('header.logout') }}</AppButton>
       </template>

@@ -14,10 +14,14 @@ import { useProjectWorkspace } from '@/features/project/presentation/composables
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import { useEditorSession } from '@/features/editor/presentation/composables/useEditorSession'
 import type { ModelAsset, ModelVersion } from '@/features/model-asset/domain/entities/model-asset.entity'
+import { detectModelFormat, type ExportModelFormat } from '@/features/model-asset/domain/services/model-format.service'
+import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
+import { saveBlobAsFile } from '@/presentation/save-blob'
 
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
+const { formatDateTime } = useFormatDateTime()
 const workspace = useProjectWorkspace()
 const modelsApi = useModelAssets()
 const editor = useEditorSession()
@@ -29,6 +33,11 @@ const selectedModelId = ref<string | null>(null)
 const localFileName = ref<string | null>(null)
 const pickerVisible = ref(false)
 const versionsVisible = ref(false)
+const exportVisible = ref(false)
+const exportFormat = ref<ExportModelFormat>('ply')
+const exportMode = ref<'overwrite' | 'saveAs'>('saveAs')
+const exportFileName = ref('')
+const downloadingHistory = ref(false)
 const versions = ref<ModelVersion[]>([])
 const loadingEditor = ref(false)
 const saving = ref(false)
@@ -46,7 +55,7 @@ const canSaveToCloud = computed(() => Boolean(activeProjectId.value) && !loading
 const canManageVersions = computed(() => Boolean(selectedModelId.value) && !saving.value && !restoring.value)
 const sessionLabel = computed(() => {
   if (selectedCloudModel.value) {
-    return `${selectedCloudModel.value.fileName} · v${selectedCloudModel.value.version}`
+    return selectedCloudModel.value.fileName
   }
   if (localFileName.value) {
     return localFileName.value
@@ -54,7 +63,26 @@ const sessionLabel = computed(() => {
   return t('supersplat.blankSession')
 })
 
+function defaultExportFormat(): ExportModelFormat {
+  const name = selectedCloudModel.value?.fileName ?? localFileName.value ?? ''
+  return detectModelFormat(name) === 'SPZ' ? 'spz' : 'ply'
+}
+
+function openExportSheet() {
+  if (!canSaveToCloud.value) {
+    return
+  }
+  exportFormat.value = defaultExportFormat()
+  exportMode.value = selectedModelId.value ? 'overwrite' : 'saveAs'
+  exportFileName.value = selectedCloudModel.value?.fileName ?? localFileName.value ?? ''
+  errorMessage.value = ''
+  exportVisible.value = true
+}
+
 async function navigateEditor(src: string) {
+  if (saving.value) {
+    return
+  }
   const iframe = iframeRef.value
   if (!iframe) {
     return
@@ -71,7 +99,14 @@ function editorFrame() {
   if (!iframe) {
     return null
   }
-  return { contentWindow: iframe.contentWindow, src: iframe.src }
+  return {
+    get contentWindow() {
+      return iframe.contentWindow
+    },
+    get src() {
+      return iframe.src
+    },
+  }
 }
 
 async function loadBlankEditor() {
@@ -112,7 +147,7 @@ async function loadCloudEditor(model: ModelAsset) {
         },
       }
     },
-    { cacheBust: `${model.version}-${model.updatedAt || Date.now()}` },
+    { cacheBust: `${model.version}-${model.updatedAt || Date.now()}`, revision: { updatedAt: model.updatedAt, sizeBytes: model.sizeBytes, fileName: model.fileName } },
   )
     if (downloadError || !buffer) {
       errorMessage.value = formatDomainError(t, downloadError)
@@ -287,32 +322,58 @@ async function saveToCloud() {
     errorMessage.value = formatDomainError(t, new DomainError('MODEL_PROJECT_REQUIRED'))
     return
   }
+  if (exportMode.value === 'overwrite' && !selectedModelId.value) {
+    errorMessage.value = formatDomainError(t, new DomainError('UNKNOWN'))
+    return
+  }
+  if (exportMode.value === 'saveAs' && !exportFileName.value.trim()) {
+    errorMessage.value = formatDomainError(t, new DomainError('MODEL_INVALID_FORMAT'))
+    return
+  }
 
+  exportVisible.value = false
   saving.value = true
   errorMessage.value = ''
   statusMessage.value = t('supersplat.savingToCloud')
   uploadProgress.value = { percent: 5, speed: '' }
   const tracker = createTransferRateTracker()
-  let progressPhase: 'export' | 'upload' | null = null
+  let progressPhase: 'export' | 'upload' | null = 'export'
+  let lastExportLoaded = 0
+  const exportStartedAt = Date.now()
+  const tickExport = window.setInterval(() => {
+    if (progressPhase === 'upload') {
+      return
+    }
+    const elapsedMs = Date.now() - exportStartedAt
+    uploadProgress.value = {
+      percent: mapCloudSaveBar('export', lastExportLoaded, 0, elapsedMs),
+      speed: uploadProgress.value?.speed ?? '',
+    }
+  }, 2000)
 
   const onProgress = (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => {
     if (progressPhase !== progress.phase) {
       tracker.reset()
       progressPhase = progress.phase
     }
+    if (progress.phase === 'export') {
+      lastExportLoaded = progress.loaded
+    }
     const rate = tracker.push(progress.loaded, Date.now())
+    const elapsedMs = Date.now() - exportStartedAt
     uploadProgress.value = {
-      percent: mapCloudSaveBar(progress.phase, progress.loaded, progress.total),
+      percent: mapCloudSaveBar(progress.phase, progress.loaded, progress.total, elapsedMs),
       speed: rate != null ? formatTransferSpeed(rate) : uploadProgress.value?.speed ?? '',
     }
   }
 
   try {
-    if (selectedModelId.value) {
+    if (exportMode.value === 'overwrite' && selectedModelId.value) {
       const [error, saved] = await editor.saveExport({
         modelId: selectedModelId.value,
         frame,
-        fileName: selectedCloudModel.value?.fileName ?? localFileName.value ?? undefined,
+        format: exportFormat.value,
+        fileName: selectedCloudModel.value?.fileName ?? exportFileName.value,
         onProgress,
       })
       if (error || !saved) {
@@ -321,7 +382,7 @@ async function saveToCloud() {
         return
       }
       uploadProgress.value = { percent: 100, speed: uploadProgress.value?.speed ?? '' }
-      statusMessage.value = t('supersplat.savedToCloud', { version: saved.version })
+      statusMessage.value = t('supersplat.savedToCloud')
       await refreshModels()
       return
     }
@@ -329,7 +390,8 @@ async function saveToCloud() {
     const [error, created] = await editor.saveAsNew({
       projectId: activeProjectId.value,
       frame,
-      fileName: localFileName.value ?? undefined,
+      format: exportFormat.value,
+      fileName: exportFileName.value,
       onProgress,
     })
     if (error || !created) {
@@ -345,6 +407,7 @@ async function saveToCloud() {
     await refreshModels()
     await router.replace({ path: route.path, query: { ...route.query, modelId: created.id } })
   } finally {
+    window.clearInterval(tickExport)
     saving.value = false
     uploadProgress.value = null
   }
@@ -393,7 +456,11 @@ async function previewVersion(version: ModelVersion) {
   restoring.value = true
   errorMessage.value = ''
   statusMessage.value = t('supersplat.previewingVersion')
-  const [downloadError, buffer] = await modelsApi.downloadVersionBytes(selectedModelId.value, version.id)
+  const [downloadError, buffer] = await modelsApi.downloadVersionBytes(selectedModelId.value, version.id, undefined, {
+    updatedAt: version.createdAt,
+    sizeBytes: version.sizeBytes,
+    fileName: version.fileName,
+  })
   if (downloadError || !buffer) {
     restoring.value = false
     errorMessage.value = formatDomainError(t, downloadError)
@@ -428,7 +495,7 @@ async function restoreVersion(version: ModelVersion) {
     return
   }
   versionsVisible.value = false
-  statusMessage.value = t('supersplat.restoredVersion', { version: restored.version })
+  statusMessage.value = t('supersplat.restoredVersion')
   await refreshModels()
   const model =
     models.value.find((item) => item.id === restored.id) ??
@@ -439,12 +506,31 @@ async function restoreVersion(version: ModelVersion) {
   restoring.value = false
 }
 
+async function downloadHistoryVersion(version: ModelVersion) {
+  if (!selectedModelId.value || version.current) {
+    return
+  }
+  downloadingHistory.value = true
+  errorMessage.value = ''
+  const [downloadError, buffer] = await modelsApi.downloadVersionBytes(selectedModelId.value, version.id, undefined, {
+    updatedAt: version.createdAt,
+    sizeBytes: version.sizeBytes,
+    fileName: version.fileName,
+  })
+  downloadingHistory.value = false
+  if (downloadError || !buffer) {
+    errorMessage.value = formatDomainError(t, downloadError)
+    return
+  }
+  saveBlobAsFile(new Blob([buffer]), version.fileName || 'history.ply')
+}
+
 watch(activeProjectId, async () => {
   await refreshModels()
 })
 
 watch(locale, async () => {
-  if (!iframeRef.value) {
+  if (!iframeRef.value || saving.value || restoring.value) {
     return
   }
   if (selectedCloudModel.value) {
@@ -460,15 +546,16 @@ watch(locale, async () => {
 
 onMounted(async () => {
   await nextTick()
-  await loadBlankEditor()
   await ensureProjects()
   await refreshModels()
   if (selectedModelId.value) {
     const model = models.value.find((item) => item.id === selectedModelId.value)
     if (model) {
       await loadCloudEditor(model)
+      return
     }
   }
+  await loadBlankEditor()
 })
 
 onBeforeUnmount(() => {
@@ -520,9 +607,9 @@ onBeforeRouteLeave(async (_to, _from, next) => {
           <PhClockCounterClockwise :size="16" weight="regular" />
           {{ t('supersplat.versions') }}
         </AppButton>
-        <AppButton compact variant="primary" :disabled="!canSaveToCloud" @click="saveToCloud">
+        <AppButton compact variant="primary" :disabled="!canSaveToCloud" @click="openExportSheet">
           <PhCloudArrowUp :size="16" weight="regular" />
-          {{ selectedModelId ? t('supersplat.saveToCloud') : t('supersplat.saveAsNew') }}
+          {{ t('supersplat.saveToCloud') }}
         </AppButton>
       </div>
     </header>
@@ -555,7 +642,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
             @click="selectCloudModel(model)"
           >
             <span class="model-choice-name">{{ model.fileName }}</span>
-            <span class="model-choice-meta">{{ model.format }} · v{{ model.version }}</span>
+            <span class="model-choice-meta">{{ model.format }} · {{ formatDateTime(model.updatedAt || model.createdAt) }}</span>
             <span v-if="downloadById[model.id]" class="model-choice-badge">{{ t('supersplat.downloading') }}</span>
             <UploadProgressBar
               v-if="downloadById[model.id]"
@@ -581,16 +668,17 @@ onBeforeRouteLeave(async (_to, _from, next) => {
       <div v-if="versions.length > 0" class="model-choice-list">
         <div v-for="version in versions" :key="version.id" class="model-choice-row">
           <div class="model-choice-card" :class="{ 'is-current': version.current }">
-            <span class="model-choice-name">{{ version.fileName }} v{{ version.version }}</span>
+            <span class="model-choice-name">{{ version.fileName }}</span>
             <span class="model-choice-meta">
-              {{ version.current ? t('supersplat.currentVersion') : version.createdAt }}
+              {{ version.current ? t('supersplat.currentLive') : t('supersplat.historySnapshot') }}
+              · {{ formatDateTime(version.createdAt) }}
               · {{ Math.max(1, Math.round(version.sizeBytes / 1024)) }} KB
             </span>
           </div>
           <AppButton
             v-if="!version.current"
             compact
-            :disabled="restoring"
+            :disabled="restoring || downloadingHistory"
             @click="previewVersion(version)"
           >
             {{ t('supersplat.previewVersion') }}
@@ -598,8 +686,16 @@ onBeforeRouteLeave(async (_to, _from, next) => {
           <AppButton
             v-if="!version.current"
             compact
+            :disabled="restoring || downloadingHistory"
+            @click="downloadHistoryVersion(version)"
+          >
+            {{ t('upload.downloadModel') }}
+          </AppButton>
+          <AppButton
+            v-if="!version.current"
+            compact
             variant="primary"
-            :disabled="restoring"
+            :disabled="restoring || downloadingHistory"
             @click="restoreVersion(version)"
           >
             {{ t('supersplat.restoreVersion') }}
@@ -608,6 +704,41 @@ onBeforeRouteLeave(async (_to, _from, next) => {
       </div>
       <template #footer>
         <AppButton @click="versionsVisible = false">{{ t('common.cancel') }}</AppButton>
+      </template>
+    </AppSheet>
+
+    <AppSheet :visible="exportVisible" :title="t('supersplat.exportSheetTitle')" @close="exportVisible = false">
+      <div class="export-sheet-fields">
+        <p class="supersplat-picker-hint">{{ t('supersplat.exportFormat') }}</p>
+        <div class="export-sheet-options">
+          <label class="export-sheet-option">
+            <input v-model="exportFormat" type="radio" value="ply" />
+            {{ t('supersplat.formatPly') }}
+          </label>
+          <label class="export-sheet-option">
+            <input v-model="exportFormat" type="radio" value="spz" />
+            {{ t('supersplat.formatSpz') }}
+          </label>
+        </div>
+        <p class="supersplat-picker-hint">{{ t('supersplat.exportMode') }}</p>
+        <div class="export-sheet-options">
+          <label class="export-sheet-option" :class="{ 'is-disabled': !selectedModelId }">
+            <input v-model="exportMode" type="radio" value="overwrite" :disabled="!selectedModelId" />
+            {{ t('supersplat.overwriteExisting') }}
+          </label>
+          <label class="export-sheet-option">
+            <input v-model="exportMode" type="radio" value="saveAs" />
+            {{ t('supersplat.saveAsNewModel') }}
+          </label>
+        </div>
+        <label v-if="exportMode === 'saveAs'" class="export-sheet-name">
+          <span>{{ t('supersplat.exportName') }}</span>
+          <input v-model="exportFileName" class="cloud-input" type="text" :placeholder="t('supersplat.exportNamePlaceholder')" />
+        </label>
+      </div>
+      <template #footer>
+        <AppButton @click="exportVisible = false">{{ t('common.cancel') }}</AppButton>
+        <AppButton variant="primary" :disabled="saving" @click="saveToCloud">{{ t('supersplat.confirmExport') }}</AppButton>
       </template>
     </AppSheet>
   </div>

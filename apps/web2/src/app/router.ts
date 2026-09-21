@@ -38,6 +38,7 @@ const router = createRouter({
           meta: { immersive: true },
         },
         { path: 'help', name: 'help', component: () => import('@/presentation/views/HelpView.vue') },
+        { path: 'settings', name: 'settings', component: () => import('@/features/model-asset/presentation/SettingsView.vue') },
       ],
     },
   ],

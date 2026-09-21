@@ -933,6 +933,41 @@ a {
   font-size: 12px;
 }
 
+.export-sheet-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.export-sheet-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.export-sheet-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.export-sheet-option.is-disabled {
+  opacity: 0.5;
+}
+
+.export-sheet-name {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.settings-cache-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .supersplat-page {
   position: relative;
   display: flex;

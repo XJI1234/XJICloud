@@ -174,11 +174,11 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 
 | | |
 |--|--|
-| UL | ModelAsset、PLY/SPZ、下载 token、export、分片上传会话 |
-| 领域服务 | `model-format.service`（格式与 2GB 上限）、`chunk-range.service`、`model-list.service`（按更新时间排序） |
-| Port | `ModelAssetRepository`（session / chunk / complete / delete） |
-| 用例 | `listModelsUseCase`、`uploadModelUseCase`（顺序分片续传）、`deleteModelUseCase` |
-| UI | `useModelAssets`、`ModelUploadPanel`（已上传列表、进行中进度、查看/删除） |
+| UL | ModelAsset、PLY/SPZ、下载 token、export、分片上传会话、本机 OPFS 缓存 |
+| 领域服务 | `model-format.service`（格式与 2GB 上限）、`chunk-range.service`、`model-list.service`、`model-cache.service`（修订命中） |
+| Port | `ModelAssetRepository`、`CloudModelCachePort` |
+| 用例 | `listModelsUseCase`、`uploadModelUseCase`（顺序分片续传）、`deleteModelUseCase`、`downloadModelToDiskUseCase`、`listCachedModelsUseCase` |
+| UI | `useModelAssets`、`ModelUploadPanel`（查看/下载/删除）、`SettingsView`（`/app/settings` 删缓存） |
 
 没有工程 id 时 `MODEL_PROJECT_REQUIRED`。非法扩展名 `MODEL_INVALID_FORMAT`。超过 2GB `MODEL_TOO_LARGE`。
 
@@ -208,7 +208,7 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 | 领域服务 | `createBlankEditorLaunch`、`createRemoteEditorLaunch`、`hasRemoteScene` |
 | Port | `EditorBridgePort`（`buildSrc`、`isDirty`、`exportPly`） |
 | 协议 | `supersplat-protocol.ts`（postMessage 常量、`buildSuperSplatSrc`） |
-| 用例 | `openEditorUseCase`（下载 token）、`prepareLocalEditorLaunch`、`blankEditorLaunch`、`saveEditorExportUseCase` |
+| 用例 | `openEditorUseCase`（下载 token）、`prepareLocalEditorLaunch`、`blankEditorLaunch`、`saveEditorExportUseCase`（PLY/SPZ + 覆盖）、`saveEditorAsNewModelUseCase`（必填名称 + 分片上传） |
 | UI | `SuperSplatEditorView`、`useEditorSession` |
 
 无云端模型、无当前工程都可以进入 `/app/supersplat`。空白 iframe：`/supersplat/index.html?embedded=1` 且 **没有** `load=`。本地打开：校验格式后 `blob:` URL 作为 `load`。云端保存仅当 iframe 带回的 `modelId` 与当前云端会话一致。
