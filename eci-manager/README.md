@@ -8,9 +8,14 @@
 > **3DGS 真云出图：** [docs/3dgs-ECI使用说明.md](docs/3dgs-ECI使用说明.md)  
 > **Agent 上下文：** [AGENT.md](AGENT.md)  
 > **实现计划：** [docs/superpowers/plans/2026-07-27-eci-task-orchestration.md](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)  
+> **P0 生命周期设计/计划：** [设计](../docs/superpowers/specs/2026-09-21-eci-manager-p0-lifecycle-reliability-design.md) / [计划](../docs/superpowers/plans/2026-09-21-eci-manager-p0-lifecycle-reliability.md)
 > **产品需求：** [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
 
 > **费用警告：** `eci.mock=false`（cloud profile）会创建真实云资源并产生账单。任务路径在终态后会自动删；仍请到控制台确认无残留。手动实例测完务必 `DELETE`。
+
+**生命周期可靠性：** 创建/删除由数据库动作表持久化并可跨重启恢复。任务取消先返回 `CANCELLING`，只有关联实例确认 `TERMINATED` 或 `NotFound` 后才返回 `CANCELLED`。P0 CREATE 固定使用本地实例 UUID 作为 ClientToken，并写入 `xjicloud-local-instance-id` Tag；DELETE 失败按 2 秒起、300 秒封顶的退避无限重试。真云测试须先获明确授权并确认清理，自动化测试仅使用 Mock。
+
+**旧版 CREATE 例外：** 升级前由 `AsyncLifecycleWorker` 发出的 CREATE 没有稳定 ClientToken 或本地 UUID Tag。对这类无 `cloudInstanceId` 且没有 CREATE 动作的历史行，启动补偿会创建 `Legacy CREATE outcome unknown` 隔离标记，保持 CREATE/DELETE 为 `WAITING`，绝不自动重放 CREATE，也不自动查询云侧；首次处理会记录一次只含 `actionId`/`instanceId` 的 ERROR，并提示人工核对。请先用数据库查询列出隔离行，再在同地域 ECI 控制台或经批准的只读 OpenAPI 查询中按实例规格和创建时间核对资源。确认云实例后，由 DBA 在单事务中写入确认的 `cloud_instance_id`、将 CREATE 动作改为 `WAIT_RUNNING`/`READY` 并清除隔离错误，随后由动作协调器执行 Describe/Delete；无法确认时保持隔离，禁止提交新的 CREATE。查询示例见 `docs/设计与使用说明.md` 的“旧版 CREATE 隔离与人工核对”。
 
 ## 环境要求（Linux）
 
@@ -31,6 +36,8 @@ source ../.tools/env.sh    # 在 eci-manager/ 下
 ## 配置（`.env`，推荐）
 
 真云联调时，HTTP Api-Key、VPC、**当前云钥种子**建议统一写在 **`eci-manager/.env`**。HTTP Api-Key 由配置直接决定；只有云当前钥种子在对应库行缺失时才写入。
+
+云 AccessKey 目录的新增、删除、按资源选用及热切换流程见[云访问密钥管理说明](./docs/云访问密钥管理说明.md)。
 
 ```bash
 cd eci-manager
@@ -75,7 +82,7 @@ source ../.tools/env.sh
 # 无桌面：ECI_CONSOLE_OPEN_BROWSER=false
 ```
 
-也可用 `mvn spring-boot:run`（默认 Mock）。`server.port=8081`，创建约 `mock-auto-complete-sec`（默认 3）秒后 Mock 云状态变为 `Succeeded`，watcher 自动删实例并将任务置 `SUCCEEDED`。
+也可用 `mvn spring-boot:run`（默认 Mock）。`server.port=8081`，创建约 `mock-auto-complete-sec`（默认 3）秒后 Mock 云状态变为 `Succeeded`，持久化 DELETE 动作确认实例 `TERMINATED` 后任务才置 `SUCCEEDED`。
 
 顶栏徽章为 `MOCK` 或 `CLOUD`（后者带计费警告）。切换须重启：`./scripts/start.sh mock` 或 `./scripts/start.sh cloud`。真云提交前操作台会二次确认。
 
@@ -117,7 +124,7 @@ INSTANCE_ID=$(echo "$TASK" | sed -n 's/.*"instanceId":"\([^"]*\)".*/\1/p' | head
 curl -s "http://127.0.0.1:8081/api/v1/eci/tasks/$TASK_ID" -H "X-Api-Key: $ECI_API_KEY"
 curl -s "http://127.0.0.1:8081/api/v1/eci/instances/$INSTANCE_ID" -H "X-Api-Key: $ECI_API_KEY"
 
-# 等待若干秒后任务应变 SUCCEEDED，实例 TERMINATED（Mock 自动终态）
+# 等待若干秒后任务应变 SUCCEEDED，实例 TERMINATED（Mock 自动终态和持久化清理）
 sleep 8
 curl -s "http://127.0.0.1:8081/api/v1/eci/tasks/$TASK_ID" -H "X-Api-Key: $ECI_API_KEY"
 ```
@@ -210,10 +217,10 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
 - [x] 正确 Api-Key 可提交任务（镜像、command、args、规格、GPU、重启、超时）  
 - [x] 可查询任务与实例，本地 ID 可关联  
 - [x] `restartPolicy=Never` 时终态后自动删除实例  
-- [x] 超过 `maxRuntimeSec` → 强制删 + 任务 `FAILED`/`TIMEOUT`  
+- [x] 超过 `maxRuntimeSec` → 任务先 `FAILED`（`failureReason=TIMEOUT`）+ 持久化清理
 - [x] `/instances` 手动能力仍可用  
 - [x] 错误/缺失 Api-Key → 401 且不建云资源  
-- [x] `mock=true` 全流程不调云可演练（`mvn test` + 文档 curl）
+- [x] `mock=true` 全流程不调云可演练（`mvn test` + 文档 curl）；含崩溃恢复、DELETE 重试、取消收敛检查
 - [x] 本地操作台 `GET /` 无需 Api-Key；`/meta` 与 `/tasks/{id}/logs` 需 Key
 
 与 PRD §1.4 对照；逐步命令见 [docs/测试说明.md](docs/测试说明.md) §11。

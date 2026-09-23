@@ -30,6 +30,11 @@ xjicloud:
     root: ./data/xjicloud
   cors:
     allowed-origins: http://127.0.0.1:5174,http://localhost:5174
+  eci-manager:
+    base-url: ${XJICLOUD_ECI_MANAGER_BASE_URL:http://127.0.0.1:8081}
+    api-key: ${XJICLOUD_ECI_MANAGER_API_KEY:}
+    connect-timeout: ${XJICLOUD_ECI_MANAGER_CONNECT_TIMEOUT:3s}
+    read-timeout: ${XJICLOUD_ECI_MANAGER_READ_TIMEOUT:20s}
 
 management:
   endpoints:

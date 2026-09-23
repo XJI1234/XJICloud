@@ -28,8 +28,10 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 阿里云 ECI OpenAPI 实现：CreateContainerGroup / DescribeContainerGroups / DeleteContainerGroup。
@@ -47,6 +49,11 @@ public class AliyunEciProvider implements EciProvider {
             "无法解析阿里云凭证：生产请为 ECS 绑定 RAM 角色（可配 eci.ecs-ram-role-name）；"
                     + "本机请用 ECI_ACCESS_KEY_ID/SECRET 作为种子，或 PUT /api/v1/eci/runtime-credentials 写入当前钥。"
                     + "非 ECS 上出现连接 100.100.100.200 超时属预期。";
+
+    private static final Set<String> REJECTED_CREATE_ERROR_CODES = Set.of(
+            "InvalidParameter", "InvalidParameterValue", "Forbidden", "Forbidden.RAM",
+            "Unauthorized", "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch",
+            "QuotaExceeded", "OperationDenied.QuotaExceeded");
 
     private final EciProperties properties;
     private volatile IAcsClient client;
@@ -92,6 +99,14 @@ public class AliyunEciProvider implements EciProvider {
         log.info("ECI Aliyun client ready credentialMode={} region={}", credentialMode, regionId);
     }
 
+    AliyunEciProvider(EciProperties properties, IAcsClient client) {
+        if (properties.isMock()) {
+            throw new IllegalStateException("AliyunEciProvider must not be constructed when eci.mock=true");
+        }
+        this.properties = properties;
+        this.client = client;
+    }
+
     @Override
     public void reloadAccessKey(String accessKeyId, String accessKeySecret) {
         this.client = staticClient(accessKeyId, accessKeySecret);
@@ -111,11 +126,19 @@ public class AliyunEciProvider implements EciProvider {
     }
 
     @Override
-    public String create(CreateSpec spec) {
+    public String create(CreateSpec spec, String clientToken) {
+        if (!StringUtils.hasText(clientToken)) {
+            throw new IllegalArgumentException("clientToken must not be blank");
+        }
         CreateContainerGroupRequest request = new CreateContainerGroupRequest();
         request.setRegionId(properties.getRegionId());
         request.setSecurityGroupId(properties.getSecurityGroupId());
         request.setVSwitchId(properties.getVswitchId());
+        request.setClientToken(clientToken);
+        CreateContainerGroupRequest.Tag tag = new CreateContainerGroupRequest.Tag();
+        tag.setKey("xjicloud-local-instance-id");
+        tag.setValue(clientToken);
+        request.setTags(List.of(tag));
         if (StringUtils.hasText(spec.instanceType())) {
             request.setInstanceType(spec.instanceType().trim());
         }
@@ -126,7 +149,7 @@ public class AliyunEciProvider implements EciProvider {
             request.setImageSnapshotId(spec.imageSnapshotId().trim());
         }
         // 容器组名与容器名共用同一规范化名称，避免两次随机后缀不一致
-        String resourceName = sanitizeName(spec.name());
+        String resourceName = sanitizeName(spec.name(), clientToken);
         request.setContainerGroupName(resourceName);
 
         CreateContainerGroupRequest.Container container = new CreateContainerGroupRequest.Container();
@@ -174,7 +197,7 @@ public class AliyunEciProvider implements EciProvider {
             return response.getContainerGroupId();
         } catch (ClientException e) {
             log.error("ECI create failed errCode={} requestId={}", e.getErrCode(), e.getRequestId());
-            throw new IllegalStateException("阿里云 ECI 创建失败: " + e.getErrCode() + " " + e.getErrMsg(), e);
+            throw cloudException("create", e, classifyCreate(e));
         }
     }
 
@@ -201,7 +224,7 @@ public class AliyunEciProvider implements EciProvider {
             }
             log.error("ECI describe failed cloudInstanceId={} errCode={} requestId={}",
                     cloudInstanceId, e.getErrCode(), e.getRequestId());
-            throw new IllegalStateException("阿里云 ECI 查询失败: " + e.getErrCode() + " " + e.getErrMsg(), e);
+            throw cloudException("describe", e, CloudOperationKind.RETRYABLE);
         }
     }
 
@@ -256,8 +279,19 @@ public class AliyunEciProvider implements EciProvider {
             }
             log.error("ECI delete failed cloudInstanceId={} errCode={} requestId={}",
                     cloudInstanceId, e.getErrCode(), e.getRequestId());
-            throw new IllegalStateException("阿里云 ECI 删除失败: " + e.getErrCode() + " " + e.getErrMsg(), e);
+            throw cloudException("delete", e, CloudOperationKind.RETRYABLE);
         }
+    }
+
+    private static CloudOperationException cloudException(
+            String operation, ClientException exception, CloudOperationKind kind) {
+        return new CloudOperationException(operation, exception.getErrCode(), kind);
+    }
+
+    private static CloudOperationKind classifyCreate(ClientException exception) {
+        return REJECTED_CREATE_ERROR_CODES.contains(exception.getErrCode())
+                ? CloudOperationKind.REJECTED
+                : CloudOperationKind.UNKNOWN_OUTCOME;
     }
 
     /**
@@ -390,11 +424,20 @@ public class AliyunEciProvider implements EciProvider {
         }
     }
 
-    /**
-     * 将显示名规范为 ECI 可接受的名称（小写、数字、连字符），并附加短随机后缀保证唯一。
-     * 同一 create 调用内应对返回值只使用一次，勿重复调用以免后缀不同。
-     */
+    /** 将显示名规范为 ECI 可接受的名称，并附加短随机后缀。 */
     static String sanitizeName(String name) {
+        return sanitizeName(name, UUID.randomUUID().toString());
+    }
+
+    /** 将显示名规范化后附加由本地实例 token 派生的稳定后缀。 */
+    static String sanitizeName(String name, String clientToken) {
+        String base = sanitizeNameBase(name);
+        String suffix = UUID.nameUUIDFromBytes(clientToken.getBytes(StandardCharsets.UTF_8))
+                .toString().substring(0, 8);
+        return base + "-" + suffix;
+    }
+
+    private static String sanitizeNameBase(String name) {
         String base = StringUtils.hasText(name) ? name : "eci-demo";
         String sanitized = base.toLowerCase().replaceAll("[^a-z0-9-]", "-");
         sanitized = sanitized.replaceAll("-{2,}", "-");
@@ -411,6 +454,6 @@ public class AliyunEciProvider implements EciProvider {
         if (!sanitized.matches("^[a-z].*")) {
             sanitized = "e" + sanitized;
         }
-        return sanitized + "-" + UUID.randomUUID().toString().substring(0, 8);
+        return sanitized;
     }
 }

@@ -47,7 +47,7 @@ class EciProviderRestartPolicyTest {
                 null,
                 null);
 
-        String cloudId = provider.create(spec);
+        String cloudId = provider.create(spec, "restart-policy-command");
 
         assertThat(cloudId).startsWith("mock-eci-");
         assertThat(provider.getCreateSpec(cloudId)).isSameAs(spec);
@@ -74,7 +74,7 @@ class EciProviderRestartPolicyTest {
                 "imc-test-snapshot-id",
                 null);
 
-        String cloudId = provider.create(spec);
+        String cloudId = provider.create(spec, "restart-policy-snapshot");
 
         assertThat(provider.getCreateSpec(cloudId).imageSnapshotId()).isEqualTo("imc-test-snapshot-id");
     }
@@ -96,7 +96,7 @@ class EciProviderRestartPolicyTest {
                 null,
                 "8Gi");
 
-        String cloudId = provider.create(spec);
+        String cloudId = provider.create(spec, "restart-policy-shm");
 
         assertThat(provider.getCreateSpec(cloudId).shmSize()).isEqualTo("8Gi");
     }
@@ -104,7 +104,7 @@ class EciProviderRestartPolicyTest {
     @Test
     void mockSimulateStatusTransitionsToSucceededAndFailed() {
         MockEciProvider provider = new MockEciProvider();
-        String cloudId = provider.create(simpleSpec("term", "Never"));
+        String cloudId = provider.create(simpleSpec("term", "Never"), "restart-policy-term");
 
         provider.simulateStatus(cloudId, "Succeeded");
         CloudInstanceView succeeded = provider.describe(cloudId);
@@ -121,7 +121,7 @@ class EciProviderRestartPolicyTest {
     void mockAutoCompleteTransitionsAfterDelay() {
         AtomicLong now = new AtomicLong(1_000_000L);
         MockEciProvider provider = new MockEciProvider(1, "Succeeded", now::get);
-        String cloudId = provider.create(simpleSpec("auto", "Never"));
+        String cloudId = provider.create(simpleSpec("auto", "Never"), "restart-policy-auto");
 
         assertThat(provider.describe(cloudId).isRunning()).isTrue();
         now.addAndGet(1_100);
@@ -132,7 +132,7 @@ class EciProviderRestartPolicyTest {
     void mockSimulateStatusOverridesAutoComplete() {
         AtomicLong now = new AtomicLong(1_000_000L);
         MockEciProvider provider = new MockEciProvider(1, "Succeeded", now::get);
-        String cloudId = provider.create(simpleSpec("override", "Never"));
+        String cloudId = provider.create(simpleSpec("override", "Never"), "restart-policy-override");
 
         provider.simulateStatus(cloudId, "Failed");
         now.addAndGet(1_100);
@@ -144,7 +144,7 @@ class EciProviderRestartPolicyTest {
     void mockAutoCompleteDisabledWhenSecZero() {
         AtomicLong now = new AtomicLong(1_000_000L);
         MockEciProvider provider = new MockEciProvider(0, "Succeeded", now::get);
-        String cloudId = provider.create(simpleSpec("no-auto", "Never"));
+        String cloudId = provider.create(simpleSpec("no-auto", "Never"), "restart-policy-no-auto");
 
         now.addAndGet(60_000);
         assertThat(provider.describe(cloudId).isRunning()).isTrue();
@@ -154,7 +154,7 @@ class EciProviderRestartPolicyTest {
     void mockAutoCompleteCanTargetFailed() {
         AtomicLong now = new AtomicLong(1_000_000L);
         MockEciProvider provider = new MockEciProvider(1, "Failed", now::get);
-        String cloudId = provider.create(simpleSpec("auto-fail", "Never"));
+        String cloudId = provider.create(simpleSpec("auto-fail", "Never"), "restart-policy-auto-fail");
 
         now.addAndGet(1_100);
         assertThat(provider.describe(cloudId).isFailed()).isTrue();
@@ -164,7 +164,7 @@ class EciProviderRestartPolicyTest {
     void mockDeletePreventsAutoCompleteOverwrite() {
         AtomicLong now = new AtomicLong(1_000_000L);
         MockEciProvider provider = new MockEciProvider(1, "Succeeded", now::get);
-        String cloudId = provider.create(simpleSpec("deleted", "Never"));
+        String cloudId = provider.create(simpleSpec("deleted", "Never"), "restart-policy-deleted");
 
         provider.delete(cloudId);
         now.addAndGet(1_100);

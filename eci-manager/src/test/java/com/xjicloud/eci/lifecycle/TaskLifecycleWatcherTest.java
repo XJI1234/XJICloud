@@ -105,7 +105,7 @@ class TaskLifecycleWatcherTest {
         mockMvc.perform(post("/api/v1/eci/tasks/" + taskId + "/cancel")
                         .header("X-Api-Key", "test-api-key"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+                .andExpect(jsonPath("$.data.status").value("CANCELLING"));
 
         // 取消后云侧仍可能上报 Succeeded；不得覆盖 CANCELLED，也不得 500
         mockProvider().simulateStatus(cloudId, "Succeeded");
@@ -113,8 +113,7 @@ class TaskLifecycleWatcherTest {
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             TaskResponse task = getTask(taskId);
             assertThat(task.status()).isEqualTo(TaskStatus.CANCELLED);
-            assertThat(instanceStatus(task.instanceId()))
-                    .isIn(InstanceStatus.STOPPING, InstanceStatus.TERMINATED);
+            assertThat(instanceStatus(task.instanceId())).isEqualTo(InstanceStatus.TERMINATED);
         });
     }
 

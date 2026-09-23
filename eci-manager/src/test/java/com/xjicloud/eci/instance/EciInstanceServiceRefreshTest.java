@@ -3,7 +3,7 @@ package com.xjicloud.eci.instance;
 import com.xjicloud.eci.common.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.config.EciProperties;
-import com.xjicloud.eci.lifecycle.AsyncLifecycleWorker;
+import com.xjicloud.eci.lifecycle.action.LifecycleActionService;
 import com.xjicloud.eci.provider.CloudInstanceView;
 import com.xjicloud.eci.provider.EciProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,7 +38,7 @@ class EciInstanceServiceRefreshTest {
     @Mock
     private EciProvider eciProvider;
     @Mock
-    private AsyncLifecycleWorker lifecycleWorker;
+    private LifecycleActionService lifecycleActionService;
     @Mock
     private PlatformTransactionManager transactionManager;
 
@@ -48,11 +50,12 @@ class EciInstanceServiceRefreshTest {
                 repository,
                 new EciProperties(),
                 eciProvider,
-                lifecycleWorker,
                 new ObjectMapper(),
                 transactionManager,
                 null,
-                null);
+                null,
+                lifecycleActionService,
+                Clock.fixed(Instant.parse("2026-09-21T12:00:00Z"), ZoneOffset.UTC));
     }
 
     @Test

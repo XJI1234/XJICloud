@@ -70,6 +70,16 @@ public class ProviderConfig {
             requirePositive(properties.getCreateTimeoutSec(), "eci.create-timeout-sec");
             requirePositive(properties.getDeleteTimeoutSec(), "eci.delete-timeout-sec");
             requirePositive(properties.getDefaultMaxRuntimeSec(), "eci.default-max-runtime-sec");
+            EciProperties.LifecycleAction lifecycleAction = properties.getLifecycleAction();
+            requirePositive(lifecycleAction.getDispatchIntervalMs(),
+                    "eci.lifecycle-action.dispatch-interval-ms");
+            requirePositive(lifecycleAction.getBatchSize(), "eci.lifecycle-action.batch-size");
+            requirePositive(lifecycleAction.getLeaseSec(), "eci.lifecycle-action.lease-sec");
+            requirePositive(lifecycleAction.getRetryInitialSec(),
+                    "eci.lifecycle-action.retry-initial-sec");
+            requirePositive(lifecycleAction.getRetryMaxSec(), "eci.lifecycle-action.retry-max-sec");
+            requirePositive(lifecycleAction.getCleanupAlertAttempts(),
+                    "eci.lifecycle-action.cleanup-alert-attempts");
         };
     }
 

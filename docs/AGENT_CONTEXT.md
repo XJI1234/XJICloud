@@ -225,6 +225,10 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 | GET | `/admin/dashboard` |
 | GET/PUT | `/admin/oss` |
 | POST | `/admin/oss/test` |
+| GET/POST | `/admin/cloud-access-keys`（GET 必传 `resource=ECI_OPENAPI|OSS`；POST 用 `resources` 绑定一个或多个资源） |
+| GET/PUT/DELETE | `/admin/cloud-access-keys/{id}` |
+| POST | `/admin/cloud-access-keys/{id}/select`（body 指定单个 `resource`）、`/admin/cloud-access-keys/{id}/test` |
+| POST | `/admin/cloud-access-keys/test` |
 | GET | `/admin/workers` |
 | POST | `/admin/workers/{id}/offline` |
 | GET | `/admin/jobs` |

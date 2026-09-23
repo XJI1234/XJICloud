@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,6 +32,8 @@ public class MockEciProvider implements EciProvider {
     private final ConcurrentHashMap<String, Long> completeAtEpochMs = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> manualOverride = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CreateSpec> createSpecs = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> cloudIdByClientToken = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> unknownOutcomeAfterCreate = new ConcurrentHashMap<>();
     private final AtomicReference<CreateSpec> lastCreateSpec = new AtomicReference<>();
     /** 测试用：记录 fetch/delete 调用顺序（值为 {@code fetch}/{@code delete}）。 */
     private final List<String> lifecycleCallOrder = Collections.synchronizedList(new ArrayList<>());
@@ -67,8 +68,20 @@ public class MockEciProvider implements EciProvider {
     }
 
     @Override
-    public String create(CreateSpec spec) {
-        String id = "mock-eci-" + UUID.randomUUID();
+    public String create(CreateSpec spec, String clientToken) {
+        if (clientToken == null || clientToken.isBlank()) {
+            throw new IllegalArgumentException("clientToken must not be blank");
+        }
+        String id = cloudIdByClientToken.computeIfAbsent(clientToken, token -> createCloudInstance(spec));
+        if (unknownOutcomeAfterCreate.remove(clientToken) != null) {
+            throw new CloudOperationException("create", "Mock.UnknownOutcome",
+                    CloudOperationKind.UNKNOWN_OUTCOME);
+        }
+        return id;
+    }
+
+    private String createCloudInstance(CreateSpec spec) {
+        String id = "mock-eci-" + java.util.UUID.randomUUID();
         statuses.put(id, "Running");
         createSpecs.put(id, spec);
         lastCreateSpec.set(spec);
@@ -79,6 +92,20 @@ public class MockEciProvider implements EciProvider {
             completeAtEpochMs.remove(id);
         }
         return id;
+    }
+
+    /** 测试钩子：创建云记录后令该次调用以未知结果失败。 */
+    public void failNextCreateAfterAccepted(String clientToken) {
+        if (clientToken != null && !clientToken.isBlank()) {
+            unknownOutcomeAfterCreate.put(clientToken, Boolean.TRUE);
+        }
+    }
+
+    /** 测试用：按稳定 ClientToken 创建的唯一云记录数。 */
+    public int getCloudInstanceCount() {
+        return (int) cloudIdByClientToken.values().stream().distinct()
+                .filter(id -> !"Deleted".equalsIgnoreCase(statuses.get(id)))
+                .count();
     }
 
     @Override

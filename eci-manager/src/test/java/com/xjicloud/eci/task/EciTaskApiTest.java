@@ -2,6 +2,8 @@ package com.xjicloud.eci.task;
 
 import com.xjicloud.eci.task.dto.TaskResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -9,6 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.Instant;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -172,12 +176,42 @@ class EciTaskApiTest {
         mockMvc.perform(post("/api/v1/eci/tasks/" + taskId + "/cancel")
                         .header("X-Api-Key", "test-api-key"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+                .andExpect(jsonPath("$.data.status").value("CANCELLING"))
+                .andExpect(jsonPath("$.data.endedAt").value(nullValue()));
 
         mockMvc.perform(post("/api/v1/eci/tasks/" + taskId + "/cancel")
                         .header("X-Api-Key", "test-api-key"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+                .andExpect(jsonPath("$.data.status").value("CANCELLING"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = TaskStatus.class, names = {"SUCCEEDED", "FAILED"})
+    void cancelRejectsTaskThatReachedTerminalStateFirst(TaskStatus terminalStatus) throws Exception {
+        UUID taskId = UUID.randomUUID();
+        taskRepository.saveAndFlush(terminalTask(taskId, terminalStatus));
+
+        mockMvc.perform(post("/api/v1/eci/tasks/" + taskId + "/cancel")
+                        .header("X-Api-Key", "test-api-key"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    private EciTaskEntity terminalTask(UUID taskId, TaskStatus status) {
+        EciTaskEntity task = new EciTaskEntity();
+        task.setId(taskId);
+        task.setName("terminal-task");
+        task.setStatus(status);
+        task.setImage("nginx:alpine");
+        task.setCpu(1.0);
+        task.setMemory(2.0);
+        task.setRestartPolicy("Never");
+        task.setMaxRuntimeSec(60);
+        task.setEnvJson("{}");
+        task.setEndedAt(Instant.now());
+        task.setCreatedAt(Instant.now());
+        task.setUpdatedAt(Instant.now());
+        return task;
     }
 
     @Test

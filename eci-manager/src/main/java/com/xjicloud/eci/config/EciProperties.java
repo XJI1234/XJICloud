@@ -69,6 +69,8 @@ public class EciProperties {
     private String defaultShmSize = "";
     /** 本地操作台：就绪后是否打开浏览器。测试应关闭。 */
     private Console console = new Console();
+    /** 持久化生命周期动作调度与重试配置。 */
+    private LifecycleAction lifecycleAction = new LifecycleAction();
 
     public boolean isMock() {
         return mock;
@@ -260,6 +262,72 @@ public class EciProperties {
 
     public void setConsole(Console console) {
         this.console = console == null ? new Console() : console;
+    }
+
+    public LifecycleAction getLifecycleAction() {
+        return lifecycleAction;
+    }
+
+    public void setLifecycleAction(LifecycleAction lifecycleAction) {
+        this.lifecycleAction = lifecycleAction == null ? new LifecycleAction() : lifecycleAction;
+    }
+
+    /** {@code eci.lifecycle-action.*} 调度与退避选项。 */
+    public static class LifecycleAction {
+        private long dispatchIntervalMs = 1000;
+        private int batchSize = 20;
+        private int leaseSec = 60;
+        private int retryInitialSec = 2;
+        private int retryMaxSec = 300;
+        private int cleanupAlertAttempts = 5;
+
+        public long getDispatchIntervalMs() {
+            return dispatchIntervalMs;
+        }
+
+        public void setDispatchIntervalMs(long dispatchIntervalMs) {
+            this.dispatchIntervalMs = dispatchIntervalMs;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        public int getLeaseSec() {
+            return leaseSec;
+        }
+
+        public void setLeaseSec(int leaseSec) {
+            this.leaseSec = leaseSec;
+        }
+
+        public int getRetryInitialSec() {
+            return retryInitialSec;
+        }
+
+        public void setRetryInitialSec(int retryInitialSec) {
+            this.retryInitialSec = retryInitialSec;
+        }
+
+        public int getRetryMaxSec() {
+            return retryMaxSec;
+        }
+
+        public void setRetryMaxSec(int retryMaxSec) {
+            this.retryMaxSec = retryMaxSec;
+        }
+
+        public int getCleanupAlertAttempts() {
+            return cleanupAlertAttempts;
+        }
+
+        public void setCleanupAlertAttempts(int cleanupAlertAttempts) {
+            this.cleanupAlertAttempts = cleanupAlertAttempts;
+        }
     }
 
     /** {@code eci.console.*} 操作台开关。 */

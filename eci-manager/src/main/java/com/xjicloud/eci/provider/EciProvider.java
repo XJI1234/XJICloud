@@ -12,7 +12,7 @@ public interface EciProvider {
      *
      * @return 云侧实例 ID（ContainerGroupId）
      */
-    String create(CreateSpec spec);
+    String create(CreateSpec spec, String clientToken);
 
     /** 查询云侧状态；不存在时可返回 status=NotFound。 */
     CloudInstanceView describe(String cloudInstanceId);

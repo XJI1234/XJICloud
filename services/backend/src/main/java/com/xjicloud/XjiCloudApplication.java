@@ -1,6 +1,7 @@
 package com.xjicloud;
 
 import com.xjicloud.config.AdminProperties;
+import com.xjicloud.config.EciManagerProperties;
 import com.xjicloud.config.CorsProperties;
 import com.xjicloud.config.JwtProperties;
 import com.xjicloud.config.OssProperties;
@@ -21,7 +22,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         OssProperties.class,
         RedisQueueProperties.class,
         WorkerProperties.class,
-        AdminProperties.class
+        AdminProperties.class,
+        EciManagerProperties.class
 })
 public class XjiCloudApplication {
 

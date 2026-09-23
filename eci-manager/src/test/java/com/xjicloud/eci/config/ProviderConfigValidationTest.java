@@ -11,6 +11,8 @@ import com.xjicloud.eci.provider.AliyunEciProvider;
 import com.xjicloud.eci.provider.EciProvider;
 import com.xjicloud.eci.provider.MockEciProvider;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
 
@@ -52,6 +54,43 @@ class ProviderConfigValidationTest {
     void acceptsPositiveIntervals() {
         ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(validProperties());
         assertThatCode(() -> runner.run(null)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void lifecycleActionDefaultsArePositiveAndCannotBeCleared() {
+        EciProperties properties = new EciProperties();
+        assertLifecycleActionDefaults(properties.getLifecycleAction());
+
+        properties.setLifecycleAction(null);
+        assertLifecycleActionDefaults(properties.getLifecycleAction());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "dispatch-interval-ms",
+            "batch-size",
+            "lease-sec",
+            "retry-initial-sec",
+            "retry-max-sec",
+            "cleanup-alert-attempts"
+    })
+    void rejectsNonPositiveLifecycleActionSettings(String setting) throws Exception {
+        EciProperties properties = validProperties();
+        EciProperties.LifecycleAction action = properties.getLifecycleAction();
+        switch (setting) {
+            case "dispatch-interval-ms" -> action.setDispatchIntervalMs(0);
+            case "batch-size" -> action.setBatchSize(0);
+            case "lease-sec" -> action.setLeaseSec(0);
+            case "retry-initial-sec" -> action.setRetryInitialSec(0);
+            case "retry-max-sec" -> action.setRetryMaxSec(0);
+            case "cleanup-alert-attempts" -> action.setCleanupAlertAttempts(0);
+            default -> throw new IllegalArgumentException(setting);
+        }
+
+        ApplicationRunner runner = new ProviderConfig().apiKeyStartupCheck(properties);
+        assertThatThrownBy(() -> runner.run(null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("eci.lifecycle-action." + setting);
     }
 
     @Test
@@ -138,5 +177,15 @@ class ProviderConfigValidationTest {
         properties.setDeleteTimeoutSec(300);
         properties.setDefaultMaxRuntimeSec(14400);
         return properties;
+    }
+
+    private static void assertLifecycleActionDefaults(EciProperties.LifecycleAction action) {
+        assertThat(action).isNotNull();
+        assertThat(action.getDispatchIntervalMs()).isEqualTo(1000);
+        assertThat(action.getBatchSize()).isEqualTo(20);
+        assertThat(action.getLeaseSec()).isEqualTo(60);
+        assertThat(action.getRetryInitialSec()).isEqualTo(2);
+        assertThat(action.getRetryMaxSec()).isEqualTo(300);
+        assertThat(action.getCleanupAlertAttempts()).isEqualTo(5);
     }
 }

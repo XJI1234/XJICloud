@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.Executor;
+import java.time.Clock;
 
 /**
  * 异步任务线程池：供创建后轮询、删除确认等生命周期任务使用。
@@ -21,7 +21,7 @@ public class AsyncConfig {
      * 命名为 {@code eciLifecycleExecutor}，与 {@code @Async("eciLifecycleExecutor")} 对应。
      */
     @Bean(name = "eciLifecycleExecutor")
-    public Executor eciLifecycleExecutor() {
+    public ThreadPoolTaskExecutor eciLifecycleExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(8);
@@ -29,5 +29,10 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("eci-lifecycle-");
         executor.initialize();
         return executor;
+    }
+
+    @Bean
+    public Clock clock() {
+        return Clock.systemUTC();
     }
 }

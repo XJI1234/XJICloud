@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.common.BusinessException;
 import com.xjicloud.eci.config.EciProperties;
+import com.xjicloud.eci.instance.InstanceStatus;
 import com.xjicloud.eci.instance.EciInstanceService;
 import com.xjicloud.eci.instance.dto.CreateInstanceRequest;
 import com.xjicloud.eci.instance.dto.InstanceResponse;
@@ -141,35 +142,36 @@ public class EciTaskService {
         return toResponse(findEntity(id));
     }
 
-    /**
-     * 取消任务：幂等 CANCELLED；SUCCEEDED/FAILED 拒绝；否则删关联实例。
-     * <p>
-     * 条件更新避免与超时 FAILED 竞态互相覆盖；删除失败则回滚。
-     */
+    /** 取消请求先持久进入 CANCELLING，待关联 DELETE 确认后再进入 CANCELLED。 */
     @Transactional
     public TaskResponse cancel(UUID id) {
         EciTaskEntity entity = findEntity(id);
 
-        if (entity.getStatus() == TaskStatus.CANCELLED) {
+        if (entity.getStatus() == TaskStatus.CANCELLING || entity.getStatus() == TaskStatus.CANCELLED) {
             return toResponse(entity);
         }
         if (entity.getStatus() == TaskStatus.SUCCEEDED || entity.getStatus() == TaskStatus.FAILED) {
             throw new BusinessException("任务已终态，无法取消: " + entity.getStatus(), HttpStatus.CONFLICT);
         }
+        if (entity.getInstanceId() == null) {
+            throw new BusinessException("任务未关联实例，无法取消", HttpStatus.CONFLICT);
+        }
 
         Instant now = Instant.now();
-        int updated = repository.markCancelledIfActive(
-                id, TaskStatus.CANCELLED, now, ACTIVE_STATUSES);
+        int updated = repository.markCancellingIfActive(
+                id, TaskStatus.CANCELLING, now, ACTIVE_STATUSES);
         if (updated == 0) {
             EciTaskEntity latest = findEntity(id);
-            if (latest.getStatus() == TaskStatus.CANCELLED) {
+            if (latest.getStatus() == TaskStatus.CANCELLING || latest.getStatus() == TaskStatus.CANCELLED) {
                 return toResponse(latest);
             }
             throw new BusinessException("任务已终态，无法取消: " + latest.getStatus(), HttpStatus.CONFLICT);
         }
 
-        if (entity.getInstanceId() != null) {
-            instanceService.deleteForTaskCancel(entity.getInstanceId());
+        InstanceResponse instance = instanceService.deleteForTaskCancel(entity.getInstanceId());
+        if (instance.status() == InstanceStatus.TERMINATED) {
+            repository.markCancelledIfCancelling(
+                    id, TaskStatus.CANCELLED, Instant.now(), TaskStatus.CANCELLING);
         }
 
         return toResponse(findEntity(id));
@@ -197,7 +199,7 @@ public class EciTaskService {
     }
 
     /**
-     * 实例创建/运行失败时回写任务（不覆盖已终态，含 CANCELLED）。
+     * 实例创建/运行失败时回写任务（不覆盖取消中或已终态的任务）。
      * <p>
      * 使用条件 UPDATE，避免与 cancel 的丢失更新竞态。
      */
@@ -233,6 +235,35 @@ public class EciTaskService {
         }
         repository.markSucceededIfActive(
                 taskId, TaskStatus.SUCCEEDED, Instant.now(), ACTIVE_STATUSES);
+    }
+
+    /** DELETE completion shares cancel's task -> instance -> action lock order. */
+    @Transactional
+    public void lockForDeleteCompletion(UUID taskId) {
+        if (taskId != null) {
+            repository.findForUpdateById(taskId);
+        }
+    }
+
+    /** DELETE completion is the only cancellation terminalization point. */
+    @Transactional
+    public void onInstanceTerminated(UUID taskId, String cloudStatus) {
+        if (taskId == null) {
+            return;
+        }
+        EciTaskEntity task = repository.findById(taskId).orElse(null);
+        if (task == null) {
+            return;
+        }
+        Instant now = Instant.now();
+        if (task.getStatus() == TaskStatus.CANCELLING) {
+            repository.markCancelledIfCancelling(
+                    taskId, TaskStatus.CANCELLED, now, TaskStatus.CANCELLING);
+        } else if (ACTIVE_STATUSES.contains(task.getStatus())
+                && cloudStatus != null && "Succeeded".equalsIgnoreCase(cloudStatus)) {
+            repository.markSucceededIfActive(
+                    taskId, TaskStatus.SUCCEEDED, now, ACTIVE_STATUSES);
+        }
     }
 
     /** 终态轮询：STARTING / RUNNING。 */

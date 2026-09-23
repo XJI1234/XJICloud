@@ -1,6 +1,10 @@
 package com.xjicloud.eci.config;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -109,6 +113,75 @@ class ConsoleStaticResourceTest {
                 .doesNotContain("revoke-prev")
                 .doesNotContain("/credentials/http-api-key")
                 .doesNotContain("/credentials/revoke-previous-api-key");
+    }
+
+    @Test
+    void cancellingTaskBehaviorKeepsOnlyRealTerminalsPolling() throws Exception {
+        String script = mockMvc.perform(get("/console/console.js"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        Matcher terminalMatcher = Pattern.compile("var TERMINAL = \\{([^}]*)\\};").matcher(script);
+        assertThat(terminalMatcher.find())
+                .as("Detects a production mutation that changes which states stop polling")
+                .isTrue();
+        assertThat(objectKeys(terminalMatcher.group(1)))
+                .as("Detects a production mutation that makes CANCELLING or another non-terminal state terminal")
+                .containsExactly("SUCCEEDED", "FAILED", "CANCELLED");
+
+        Matcher labelsMatcher = Pattern.compile("var STATUS_LABELS = \\{([^}]*)\\};").matcher(script);
+        assertThat(labelsMatcher.find())
+                .as("Detects a missing CANCELLING status label map")
+                .isTrue();
+        assertThat(labelsMatcher.group(1).trim())
+                .as("Detects a wrong CANCELLING status label")
+                .isEqualTo("CANCELLING: \"正在清理\"");
+
+        String statusLabelHelper = script.substring(
+                script.indexOf("function statusLabel(status)"),
+                script.indexOf("function getKey()"));
+        assertThat(statusLabelHelper)
+                .as("Detects a production mutation that ignores STATUS_LABELS when resolving a task status")
+                .contains("return STATUS_LABELS[status] || status || \"?\";");
+
+        String renderTaskList = script.substring(
+                script.indexOf("function renderTaskList(tasks)"),
+                script.indexOf("function renderTaskDetail(task)"));
+        assertThat(renderTaskList)
+                .as("Detects a production mutation that bypasses the CANCELLING label in the task list")
+                .contains("pill.textContent = statusLabel(task.status);");
+
+        String renderTaskDetail = script.substring(
+                script.indexOf("function renderTaskDetail(task)"),
+                script.indexOf("function loadLogs(task)"));
+        assertThat(renderTaskDetail)
+                .as("Detects a production mutation that bypasses the CANCELLING label in task detail")
+                .contains("setText($(\"task-status-line\"), \"status=\" + statusLabel(task.status)");
+        assertThat(renderTaskDetail)
+                .as("Detects a production mutation that leaves cancel enabled while CANCELLING")
+                .contains("$(\"cancel-task\").disabled = !!TERMINAL[task.status] || task.status === \"CANCELLING\";");
+
+        String pollLoop = script.substring(
+                script.indexOf("function pollLoop()"),
+                script.indexOf("function startPolling()"));
+        assertThat(pollLoop)
+                .as("Detects a production mutation that stops polling on CANCELLING")
+                .contains("if (!selectedTask || TERMINAL[selectedTask.status]) return;")
+                .doesNotContain("CANCELLING");
+        assertThat(pollLoop)
+                .as("Detects a production mutation that stops requesting the selected task detail")
+                .contains("api(\"/tasks/\" + selectedTask.id)");
+    }
+
+    private static List<String> objectKeys(String objectBody) {
+        Matcher matcher = Pattern.compile("([A-Z]+)\\s*:").matcher(objectBody);
+        List<String> keys = new ArrayList<>();
+        while (matcher.find()) {
+            keys.add(matcher.group(1));
+        }
+        return keys;
     }
 
     @Test

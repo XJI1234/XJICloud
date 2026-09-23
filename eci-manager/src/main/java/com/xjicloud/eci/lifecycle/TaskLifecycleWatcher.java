@@ -15,10 +15,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
+import java.time.Clock;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 任务终态轮询：对 STARTING/RUNNING 任务按云侧状态或 maxRuntimeSec 触发删除并回写任务。
@@ -39,19 +38,19 @@ public class TaskLifecycleWatcher {
     private final EciInstanceService instanceService;
     private final EciProvider eciProvider;
     private final EciProperties properties;
-
-    /** 已见云侧 Succeeded、等待本地实例 TERMINATED 后再 markSucceeded。 */
-    private final Set<UUID> pendingSucceeded = ConcurrentHashMap.newKeySet();
+    private final Clock clock;
 
     public TaskLifecycleWatcher(
             EciTaskService taskService,
             EciInstanceService instanceService,
             EciProvider eciProvider,
-            EciProperties properties) {
+            EciProperties properties,
+            Clock clock) {
         this.taskService = taskService;
         this.instanceService = instanceService;
         this.eciProvider = eciProvider;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Scheduled(fixedDelayString = "#{${eci.task-poll-interval-sec} * 1000}")
@@ -81,7 +80,6 @@ public class TaskLifecycleWatcher {
         UUID instanceId = task.getInstanceId();
         if (instanceId == null) {
             taskService.onInstanceFailed(taskId, MISSING_INSTANCE_REASON);
-            pendingSucceeded.remove(taskId);
             return;
         }
 
@@ -92,7 +90,6 @@ public class TaskLifecycleWatcher {
             log.warn("taskId={} instanceId={} lookup failed, marking task FAILED",
                     taskId, instanceId, e);
             taskService.onInstanceFailed(taskId, MISSING_INSTANCE_REASON);
-            pendingSucceeded.remove(taskId);
             return;
         }
 
@@ -100,11 +97,10 @@ public class TaskLifecycleWatcher {
         log.debug("task poll taskId={} instanceId={} cloudInstanceId={} taskStatus={} instanceStatus={}",
                 taskId, instanceId, cloudInstanceId, task.getStatus(), instance.status());
 
-        if (isTimedOut(task)) {
+        if (isTimedOut(task, clock.instant())) {
             log.info("task timeout taskId={} instanceId={} cloudInstanceId={} maxRuntimeSec={}",
                     taskId, instanceId, cloudInstanceId, task.getMaxRuntimeSec());
             failPersistThenDelete(taskId, instance, cloudInstanceId, TIMEOUT_REASON);
-            pendingSucceeded.remove(taskId);
             return;
         }
 
@@ -113,12 +109,11 @@ public class TaskLifecycleWatcher {
                     ? instance.failureReason()
                     : "实例失败";
             failPersistThenDelete(taskId, instance, cloudInstanceId, reason);
-            pendingSucceeded.remove(taskId);
             return;
         }
 
         if (instance.status() == InstanceStatus.TERMINATED) {
-            if (pendingSucceeded.remove(taskId) || isCloudSucceeded(instance.cloudStatus())) {
+            if (isCloudSucceeded(instance.cloudStatus())) {
                 taskService.markSucceeded(taskId);
             } else {
                 taskService.onInstanceFailed(taskId, ORPHAN_TERMINATED_REASON);
@@ -127,7 +122,7 @@ public class TaskLifecycleWatcher {
         }
 
         if (instance.status() == InstanceStatus.STOPPING) {
-            // 等待异步删完成；若已登记 Succeeded 意图则下轮 TERMINATED 后 SUCCEEDED
+            // 持久化 DELETE action 负责收敛实例终态。
             return;
         }
 
@@ -151,8 +146,7 @@ public class TaskLifecycleWatcher {
                 || "OnFailure".equalsIgnoreCase(restartPolicy);
 
         if (view.isSucceeded() && !ignoreCloudTerminal) {
-            // 同事务落库 Succeeded 证据并受理删除；SUCCEEDED 仅在见 TERMINATED 后落库
-            pendingSucceeded.add(taskId);
+            // 同事务落库 Succeeded 证据并受理删除；删除完成后再依持久证据终态化。
             try {
                 instanceService.recordCloudSucceededAndDeleteForTask(instanceId);
             } catch (Exception e) {
@@ -167,7 +161,6 @@ public class TaskLifecycleWatcher {
                         ? view.statusDetail()
                         : "云侧状态: " + view.status();
                 failPersistThenDelete(taskId, instance, cloudInstanceId, reason);
-                pendingSucceeded.remove(taskId);
             }
             // OnFailure/Always：云侧 Failed 可能随后重启，等待 Succeeded / 超时 / cancel，勿标 RUNNING
             return;
@@ -186,8 +179,8 @@ public class TaskLifecycleWatcher {
             UUID taskId, InstanceResponse instance, String cloudInstanceId, String reason) {
         String logTail = fetchLogSafe(cloudInstanceId);
         taskService.onInstanceFailed(taskId, reason, logTail);
-        applyFailureGrace(taskId, cloudInstanceId);
-        ensureDelete(instance);
+        int graceSec = Math.max(0, properties.getFailureLogGraceSec());
+        instanceService.deleteForTaskCancel(instance.id(), clock.instant().plusSeconds(graceSec));
     }
 
     private String fetchLogSafe(String cloudInstanceId) {
@@ -204,25 +197,10 @@ public class TaskLifecycleWatcher {
         }
     }
 
-    private void applyFailureGrace(UUID taskId, String cloudInstanceId) {
-        int graceSec = properties.getFailureLogGraceSec();
-        if (graceSec <= 0) {
-            return;
-        }
-        log.info("failure log grace sleep={}s taskId={} cloudInstanceId={}",
-                graceSec, taskId, cloudInstanceId);
-        try {
-            Thread.sleep(graceSec * 1000L);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("failure log grace interrupted taskId={}", taskId);
-        }
-    }
-
     /**
      * maxRuntimeSec 从实际开始运行（startedAt）起算；STARTING/排队等待不计超时。
      */
-    private static boolean isTimedOut(EciTaskEntity task) {
+    private static boolean isTimedOut(EciTaskEntity task, Instant now) {
         Instant startedAt = task.getStartedAt();
         if (startedAt == null) {
             return false;
@@ -231,7 +209,7 @@ public class TaskLifecycleWatcher {
         if (maxRuntimeSec <= 0) {
             return false;
         }
-        long elapsedSec = Instant.now().getEpochSecond() - startedAt.getEpochSecond();
+        long elapsedSec = now.getEpochSecond() - startedAt.getEpochSecond();
         return elapsedSec > maxRuntimeSec;
     }
 
@@ -239,16 +217,4 @@ public class TaskLifecycleWatcher {
         return cloudStatus != null && "Succeeded".equalsIgnoreCase(cloudStatus);
     }
 
-    private void ensureDelete(InstanceResponse instance) {
-        if (instance.status() == InstanceStatus.TERMINATED
-                || instance.status() == InstanceStatus.STOPPING) {
-            return;
-        }
-        try {
-            instanceService.deleteForTaskCancel(instance.id());
-        } catch (Exception e) {
-            log.warn("ensure delete failed instanceId={} taskId={}",
-                    instance.id(), instance.taskId(), e);
-        }
-    }
 }

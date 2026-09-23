@@ -3,6 +3,7 @@ package com.xjicloud.eci.lifecycle;
 import com.xjicloud.eci.instance.EciInstanceService;
 import com.xjicloud.eci.instance.InstanceStatus;
 import com.xjicloud.eci.instance.dto.InstanceResponse;
+import com.xjicloud.eci.lifecycle.action.LifecycleActionService;
 import com.xjicloud.eci.task.EciTaskEntity;
 import com.xjicloud.eci.task.EciTaskService;
 import com.xjicloud.eci.task.TaskStatus;
@@ -12,12 +13,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.DefaultApplicationArguments;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +37,8 @@ class StartupCompensationRunnerTest {
     private EciInstanceService instanceService;
     @Mock
     private EciTaskService taskService;
+    @Mock
+    private LifecycleActionService lifecycleActionService;
 
     @Test
     void terminatedInstanceFailsTask() {
@@ -39,13 +46,13 @@ class StartupCompensationRunnerTest {
         UUID instanceId = UUID.randomUUID();
         EciTaskEntity task = runningTask(taskId, instanceId);
 
-        when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of());
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(
                 instance(instanceId, taskId, InstanceStatus.TERMINATED, "Deleted", null));
 
-        new StartupCompensationRunner(instanceService, taskService)
-                .run(new DefaultApplicationArguments(new String[0]));
+        runStartupCompensation();
 
         verify(taskService).onInstanceFailed(taskId, "进程中断或资源已清理");
     }
@@ -56,13 +63,13 @@ class StartupCompensationRunnerTest {
         UUID instanceId = UUID.randomUUID();
         EciTaskEntity task = runningTask(taskId, instanceId);
 
-        when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of());
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(
                 instance(instanceId, taskId, InstanceStatus.TERMINATED, "Succeeded", null));
 
-        new StartupCompensationRunner(instanceService, taskService)
-                .run(new DefaultApplicationArguments(new String[0]));
+        runStartupCompensation();
 
         verify(taskService).markSucceeded(taskId);
         verify(taskService, never()).onInstanceFailed(any(), any());
@@ -74,13 +81,13 @@ class StartupCompensationRunnerTest {
         UUID instanceId = UUID.randomUUID();
         EciTaskEntity task = runningTask(taskId, instanceId);
 
-        when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of());
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(
                 instance(instanceId, taskId, InstanceStatus.FAILED, "Failed", "create boom"));
 
-        new StartupCompensationRunner(instanceService, taskService)
-                .run(new DefaultApplicationArguments(new String[0]));
+        runStartupCompensation();
 
         verify(taskService).onInstanceFailed(taskId, "create boom");
     }
@@ -91,13 +98,13 @@ class StartupCompensationRunnerTest {
         UUID instanceId = UUID.randomUUID();
         EciTaskEntity task = runningTask(taskId, instanceId);
 
-        when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of());
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(
                 instance(instanceId, taskId, InstanceStatus.RUNNING, "Running", null));
 
-        new StartupCompensationRunner(instanceService, taskService)
-                .run(new DefaultApplicationArguments(new String[0]));
+        runStartupCompensation();
 
         verify(taskService, never()).onInstanceFailed(any(), any());
         verify(taskService, never()).markSucceeded(any());
@@ -108,13 +115,70 @@ class StartupCompensationRunnerTest {
         UUID taskId = UUID.randomUUID();
         EciTaskEntity task = runningTask(taskId, null);
 
-        when(instanceService.listIdsForStartupCompensation()).thenReturn(List.of());
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of());
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of());
         when(taskService.findNonTerminalForCompensation()).thenReturn(List.of(task));
 
-        new StartupCompensationRunner(instanceService, taskService)
-                .run(new DefaultApplicationArguments(new String[0]));
+        runStartupCompensation();
 
         verify(taskService).onInstanceFailed(taskId, "关联实例不存在");
+    }
+
+    @Test
+    void startupProcessesLeasesInstancesLegacyTasksThenTaskEvidenceInOrder() {
+        UUID instanceId = UUID.randomUUID();
+        UUID cancelledTaskId = UUID.randomUUID();
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of(instanceId));
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of(cancelledTaskId));
+        when(taskService.findNonTerminalForCompensation()).thenReturn(List.of());
+
+        runStartupCompensation();
+
+        var order = inOrder(lifecycleActionService, instanceService, taskService);
+        order.verify(lifecycleActionService).recoverExpiredLeases(any(Instant.class));
+        order.verify(instanceService).findCandidateInstanceIds();
+        order.verify(instanceService).ensureLegacyActionsForInstance(instanceId);
+        order.verify(instanceService).findLegacyCancelledTaskIds();
+        order.verify(instanceService).migrateLegacyCancelledTask(cancelledTaskId);
+        order.verify(taskService).findNonTerminalForCompensation();
+    }
+
+    @Test
+    void oneBadInstanceCandidateDoesNotStopLaterRows() {
+        UUID broken = UUID.randomUUID();
+        UUID valid = UUID.randomUUID();
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of(broken, valid));
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of());
+        when(taskService.findNonTerminalForCompensation()).thenReturn(List.of());
+        doThrow(new IllegalStateException("corrupt row"))
+                .when(instanceService).ensureLegacyActionsForInstance(broken);
+
+        runStartupCompensation();
+
+        verify(instanceService).ensureLegacyActionsForInstance(valid);
+    }
+
+    @Test
+    void oneBadLegacyCancellationDoesNotStopLaterRowsInCandidateOrder() {
+        UUID mismatched = UUID.randomUUID();
+        UUID valid = UUID.randomUUID();
+        when(instanceService.findCandidateInstanceIds()).thenReturn(List.of());
+        when(instanceService.findLegacyCancelledTaskIds()).thenReturn(List.of(mismatched, valid));
+        when(taskService.findNonTerminalForCompensation()).thenReturn(List.of());
+        doThrow(new IllegalStateException("association mismatch"))
+                .when(instanceService).migrateLegacyCancelledTask(mismatched);
+
+        runStartupCompensation();
+
+        var order = inOrder(instanceService);
+        order.verify(instanceService).migrateLegacyCancelledTask(mismatched);
+        order.verify(instanceService).migrateLegacyCancelledTask(valid);
+    }
+
+    private void runStartupCompensation() {
+        new StartupCompensationRunner(instanceService, taskService, lifecycleActionService,
+                Clock.fixed(Instant.parse("2026-09-21T12:00:00Z"), ZoneOffset.UTC))
+                .run(new DefaultApplicationArguments(new String[0]));
     }
 
     private static EciTaskEntity runningTask(UUID taskId, UUID instanceId) {

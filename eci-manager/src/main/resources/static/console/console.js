@@ -4,6 +4,7 @@
   var STORAGE_KEY = "eci.apiKey";
   var API = "/api/v1/eci";
   var TERMINAL = { SUCCEEDED: true, FAILED: true, CANCELLED: true };
+  var STATUS_LABELS = { CANCELLING: "正在清理" };
 
   var meta = null;
   var selectedTaskId = null;
@@ -24,6 +25,10 @@
 
   function setText(el, text) {
     if (el) el.textContent = text == null ? "" : String(text);
+  }
+
+  function statusLabel(status) {
+    return STATUS_LABELS[status] || status || "?";
   }
 
   function getKey() {
@@ -253,7 +258,7 @@
       li.dataset.id = task.id;
       var pill = document.createElement("span");
       pill.className = "status-pill " + (task.status || "");
-      pill.textContent = task.status || "?";
+      pill.textContent = statusLabel(task.status);
       var name = document.createElement("span");
       name.textContent = task.name || task.id;
       var id = document.createElement("span");
@@ -273,10 +278,10 @@
     selectedTask = task;
     show($("task-detail"), true);
     setText($("task-detail-title"), task.name || task.id);
-    setText($("task-status-line"), "status=" + task.status + " instanceId=" + (task.instanceId || "-"));
+    setText($("task-status-line"), "status=" + statusLabel(task.status) + " instanceId=" + (task.instanceId || "-"));
     setText($("task-json"), JSON.stringify(task, null, 2));
     renderTimer(task);
-    $("cancel-task").disabled = !!TERMINAL[task.status];
+    $("cancel-task").disabled = !!TERMINAL[task.status] || task.status === "CANCELLING";
   }
 
   function loadLogs(task) {

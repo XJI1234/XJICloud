@@ -4,9 +4,9 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-09-16（本地操作台：静态页 + `/meta` + `/tasks/{id}/logs` + 就绪开浏览器）
+**最后更新：** 2026-09-21（P0 生命周期可靠性已交付）
 
-**3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`，默认 `shmSize=8Gi`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → grace → delete；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
+**3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`，默认 `shmSize=8Gi`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → 持久化 not-before → DELETE；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
 ---
 
@@ -37,6 +37,14 @@
   - ✅ HTTP Api-Key 配置鉴权（`eci.api-key` / `ECI_API_KEY`）
   - ✅ `POST /runtime-credentials/test`（草稿或已保存；不改当前）
   - ✅ 文档：8081 只有当前钥；列表在主后端第二步；`.env` 是种子
+- **已交付（P0 生命周期可靠性，2026-09-21）：**
+  - ✅ `eci_lifecycle_action` 持久化 CREATE/DELETE 动作、租约、退避与启动恢复；移除 `AsyncLifecycleWorker` 长轮询
+  - ✅ DELETE 失败 2 秒起、300 秒封顶指数退避无限重试；`delete-timeout-sec` 只告警，不停止清理
+  - ✅ Failed/TIMEOUT 的 `failure-log-grace-sec` 是持久化 not-before，不阻塞 watcher；硬顺序仍为抓日志→持久化失败→登记删除
+  - ✅ P0 CREATE 使用本地实例 UUID ClientToken 与 `xjicloud-local-instance-id` Tag；未知结果继续用同 token 恢复
+  - ✅ pre-P0 无 token CREATE 只创建 `Legacy CREATE outcome unknown` 隔离标记，禁止自动重放或云侧猜测；首次处理记录安全 ERROR，需人工核对后恢复
+  - ✅ 任务取消状态为 `CANCELLING → CANCELLED`；仅实例 `TERMINATED`/`NotFound` 后写 `CANCELLED`
+  - ✅ Mock 覆盖崩溃/未知 CREATE、DELETE 重试/超时、取消收敛；真云验证须明确授权
 - **已交付（shm EmptyDir，2026-09-16）：**
   - ✅ `POST /tasks` / `POST /instances` 可选 `shmSize`；配置 `eci.default-shm-size`（默认空）
   - ✅ `AliyunEciProvider` 挂 Memory EmptyDir 到 `/dev/shm`；须 >64Mi 且严格小于容器 memory
@@ -54,6 +62,48 @@
 - **当前钥（第一步 C1–C5）：** [`docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md`](../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md)、[设计](../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md)
 
 **当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、独立 Node/React 前端、业务回调、镜像注册表、批量提交、运行时切换 `EciProvider`；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）；SSE/WebSocket 流式日志；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（第二步主后端）。本地静态操作台已交付，不另起构建步骤。
+
+### 1.1 下一步路线图（按紧急程度）
+
+> **执行规则：** 先完成 P0，再继续真云规模化使用或主后端集成。每一项单独确认契约、单独按 TDD 实现和审查，不把多个阶段捆成一次大改。本文只记录方向与验收口径；开始实现时仍须先写对应设计或计划。
+>
+> **P0 设计：** [`docs/superpowers/specs/2026-09-21-eci-manager-p0-lifecycle-reliability-design.md`](../docs/superpowers/specs/2026-09-21-eci-manager-p0-lifecycle-reliability-design.md)
+>
+> **P0 实施计划：** [`docs/superpowers/plans/2026-09-21-eci-manager-p0-lifecycle-reliability.md`](../docs/superpowers/plans/2026-09-21-eci-manager-p0-lifecycle-reliability.md)
+
+#### P0：云资源安全与状态一致性（最紧急）
+
+这些问题可能造成 ECI 残留、额外费用或本地终态与真实资源不一致，应优先于新增功能。
+
+| 顺序 | 任务 | 当前风险 | 最小实现范围 | 完成标准 |
+|------|------|----------|--------------|----------|
+| **P0-1** | 删除失败持久化重试 + 非阻塞宽限 | 已交付：动作表持久化宽限与清理重试，避免 watcher 阻塞 | `failure-log-grace-sec` 写入 DELETE `not-before`；DELETE 失败按有上限退避无限重试，继续登记 `lastError`，`FAILED` 实例仍清理 | 同时失败 20 个任务不互相阻塞；模拟前两次 Delete 失败后最终 `TERMINATED`；日志仍严格保持“抓取→持久化→宽限→删除” |
+| **P0-2** | 创建幂等与崩溃补偿 | 已交付：稳定 token、未知结果恢复与启动动作补偿 | P0 请求使用本地实例 UUID 作为阿里云 `ClientToken`，写入本地 UUID Tag；未知 CREATE 超时仍后台恢复并最终清理。pre-P0 无 token 历史行进入隔离并人工核对 | Create 成功后模拟写 cloudId 前崩溃，重启后至多一个 ECI，且本地最终关联并清理 |
+| **P0-3** | 取消终态契约对齐 | 已交付：增加 `CANCELLING`，避免清理失败被终态掩盖 | 取消先写 `CANCELLING` 并登记 DELETE；实例 `TERMINATED`/`NotFound` 后条件更新 `CANCELLED`；同步 API、测试与文档 | 返回 `CANCELLED` 时云实例必为 `TERMINATED` 或确认不存在；取消幂等；竞态由条件更新测试覆盖 |
+
+#### P1：完成当前 3DGS 里程碑与测试可信度
+
+| 顺序 | 任务 | 最小实现范围 | 完成标准 |
+|------|------|--------------|----------|
+| **P1-1** | 3DGS 失败取证收尾 | bootstrap 顶层异常输出 traceback 到 stderr 并 flush；提交环境加入 `PYTHONUNBUFFERED=1`；按现有脚本完成 O5.3 / 真云失败冒烟 | 故意失败任务的 `containerLogTail` 可直接定位根因；任务为 `FAILED`；实例已删除；控制台确认无残留 |
+| **P1-2** | 测试后台任务隔离 | 非生命周期 Spring 测试关闭 scheduling；生命周期 IT 显式控制 watcher；后台未捕获异常应使测试失败 | `mvn test` 继续全绿，日志中不再出现 scheduler `NullPointerException` 或跨测试上下文噪声 |
+
+#### P2：接入主后端前的 API、数据与安全治理
+
+| 顺序 | 任务 | 最小实现范围 | 完成标准 |
+|------|------|--------------|----------|
+| **P2-1** | 查询分页与响应脱敏 | 任务/实例列表分页；拆分 summary/detail DTO；列表不返回 `env`、`containerLogTail`；详情对预签名 URL 和敏感 env 值脱敏，日志继续走 `/logs` | 历史任务增长后响应大小有界；API 响应不暴露 Secret 或有效预签名 URL；操作台适配分页 |
+| **P2-2** | 输入校验与稳定错误码 | 校验名称、镜像、CPU、内存、GPU、env 数量/长度、command/args、日志行数；通用 500 不返回原始异常文案 | 非法请求稳定返回 400；内部异常只记录服务端 requestId，客户端得到固定安全文案 |
+| **P2-3** | 生产持久化与凭据保护 | 明确 H2 仅供本地；生产使用 PostgreSQL；引入 Flyway，关闭生产 `ddl-auto=update`；当前 AK/SK 使用 KMS、外部 Secret Store 或部署主密钥字段加密 | 可从现有 H2 数据迁移/回滚；数据库文件泄露时不能直接读取 SK；升级有可重复迁移测试 |
+| **P2-4** | 可观测性与资源巡检 | 增加任务状态、清理重试、云 API 延迟/错误、疑似残留资源指标；readiness 检查 DB 和配置状态；用 Tag 做云侧残留巡检 | 能回答“有多少任务卡住、多少实例待清理、最近失败原因”；告警可定位 taskId/local instanceId/cloudInstanceId |
+
+#### P3：产品集成与后续扩展（P0-P2 后）
+
+1. 主后端统一 AK 目录调用现有 `GET/PUT /runtime-credentials` 与 `POST .../test`；8081 继续只保存每个 resource 的当前钥，不新增第二套目录。
+2. 设计并实现 `storage.mode=dataset` / `storageResolved`，再对接 XJICloud backend 的训练任务数据；先锁定 jobId、对象 key、输出校验和失败回滚契约。
+3. 仍不在本阶段加入训练队列、Worker 注册/心跳、自动扩缩、批量提交、独立前端或运行时 Provider 切换；这些能力必须另立 PRD。
+
+**P0 已交付。** 后续改动仍须按对应设计/计划单独确认，不得以“顺手重构”为由扩大范围。
 
 ---
 
@@ -96,7 +146,8 @@ eci-manager/
 |------|------|
 | `.env` / `.env.example` | **推荐**：HTTP Api-Key、网络、**种子** `ECI_ACCESS_KEY_*` / `ECI_OSS_*`（`.env` gitignore） |
 | `scripts/load-env.sh` / `start.sh` | 加载 `.env`；`ALIBABA_CLOUD_*` **仅脚本**映射到 `ECI_ACCESS_KEY_*`（Java 不读） |
-| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`failure-log-*`、`eci.console.open-browser` |
+| `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`failure-log-*`、`lifecycle-action.*`、`eci.console.open-browser` |
+| `eci.lifecycle-action.*` | 默认 `1000/20/60/2/300/5`：dispatcher 周期、批量、租约、初始退避、退避上限、ERROR 告警起始次数 |
 | `application-dev.yml` | `mock=true` |
 | `application-cloud.yml` | `mock=false` + 推荐阿里云镜像 |
 | `application-local.yml.example` | 旧模板（推荐改用 `.env`） |
@@ -121,9 +172,11 @@ flowchart LR
   TaskSvc --> InstSvc
   InstSvc --> DB[(H2)]
   TaskSvc --> DB
-  InstSvc --> Worker["AsyncLifecycleWorker"]
-  Worker --> Prov["EciProvider"]
-  Worker --> TaskSvc
+  InstSvc --> Actions[(eci_lifecycle_action)]
+  Actions --> Dispatcher["LifecycleActionDispatcher"]
+  Dispatcher --> Processor["LifecycleActionProcessor"]
+  Processor --> Prov["EciProvider"]
+  Processor --> TaskSvc
   Prov --> Mock["MockEciProvider"]
   Prov --> Aliyun["AliyunEciProvider"]
   Aliyun --> Cloud["Aliyun_ECI_OpenAPI"]
@@ -138,8 +191,9 @@ flowchart LR
 | EciTaskService | 任务落库、驱动 `createForTask`、cancel、`onInstanceRunning`/`onInstanceFailed`(可带 `containerLogTail`)/`markSucceeded` |
 | EciInstanceService | **本地实例状态权威**；`createForTask` 写 `taskId`；`deleteForTaskCancel`（允许 CREATING）；refresh 钩子通知任务 |
 | EciProvider | 云侧 Create / Describe / **fetchContainerLog** / Delete |
-| AsyncLifecycleWorker | 创建/删除轮询；Succeeded 视为创建成功路径 markRunning；cancel 竞态 abort→删；回调任务状态 |
-| TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；Failed/TIMEOUT：**抓日志→落库→宽限→删**；SUCCEEDED 门闩 |
+| LifecycleActionDispatcher / Processor | 持久化动作的租约领取与单步 Create/Describe/Delete；不循环、不 sleep |
+| LifecycleActionService | 动作幂等、租约/退避、实例终态和任务终态收敛 |
+| TaskLifecycleWatcher | 按 `task-poll-interval-sec` 扫 STARTING/RUNNING；Failed/TIMEOUT：**抓日志→落库→持久化 not-before→删**；不阻塞 watcher |
 | StartupCompensationRunner | 启动扫实例 CREATING/STOPPING/RUNNING + 非终态任务对齐 |
 | ApiKeyAuthFilter | 按应用内路径拦截 `/api/v1/eci/**`（非根 context path 也须生效）；只比对进程配置 `eci.api-key`；`/` 操作台与 `/actuator/health` 公开 |
 | RuntimeCredentialService | 每 resource 当前云钥：种子、GET/PUT、热切；`test` 只读 |
@@ -148,18 +202,18 @@ flowchart LR
 
 ```
 CREATING → RUNNING | FAILED
-RUNNING  → STOPPING → TERMINATED | FAILED
+RUNNING  → STOPPING → TERMINATED
 CREATING|RUNNING|STOPPING|FAILED + 云侧已删/NotFound → TERMINATED（refresh）
 ```
 
-短任务云侧可能 Pending→Succeeded（未见 Running）：`pollUntilRunning` 将 Succeeded 对齐为本地 `RUNNING`，再由 `TaskLifecycleWatcher` 删实例并 `SUCCEEDED`。
+短任务云侧可能 Pending→Succeeded（未见 Running）：`LifecycleActionProcessor` 将 Succeeded 对齐为本地 `RUNNING`，再登记 DELETE；实例终止后任务才 `SUCCEEDED`。
 
-### 任务状态机（T1–T2）
+### 任务状态机（P0）
 
 ```
 PENDING → STARTING → RUNNING → SUCCEEDED | FAILED
 STARTING → SUCCEEDED | FAILED（短任务可跳过 Running）
-PENDING|STARTING|RUNNING → CANCELLED（cancel）
+PENDING|STARTING|RUNNING → CANCELLING → CANCELLED（cancel 后清理完成）
 任意非终态 → FAILED（创建失败、云 Failed、TIMEOUT、资源已清）
 ```
 
@@ -168,7 +222,7 @@ PENDING|STARTING|RUNNING → CANCELLED（cancel）
 ### 创建语义（已锁定：**异步**）
 
 - `POST` **立即**返回；后台调云  
-- **先 `repository.save` 再 `@Async`**  
+- **先 `repository.save` 再由 dispatcher 投递短步骤动作**
 - 任务路径：先存任务 → `createForTask` → 任务 `STARTING` + `instanceId`
 
 删除：
@@ -223,7 +277,7 @@ HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把�
 | GET | `/tasks?status=` | 列表 |
 | GET | `/tasks/{id}` | 详情（失败时含 `failureReason` + `containerLogTail`） |
 | GET | `/tasks/{id}/logs?tailLines=` | 运行中走 `fetchContainerLog`；终态走 `containerLogTail`；尚无 cloudId → 200 空日志 |
-| POST | `/tasks/{id}/cancel` | 幂等 CANCELLED + 删关联实例 |
+| POST | `/tasks/{id}/cancel` | 幂等 CANCELLING → CANCELLED + 持久化删关联实例 |
 
 未传规格/重启/超时 → 用配置默认值，**实际值写入任务行**。
 
@@ -264,12 +318,12 @@ HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把�
 | Failed 诊断 | 短 `failureReason`（exitCode/events）+ 任务字段 `containerLogTail`（删前日志尾） |
 | 失败日志顺序 | **硬约束** `fetchContainerLog` → 落库 FAILED(+logTail) →（可选 grace）→ `ensureDelete`；拉日志失败不阻断删除 |
 | `failure-log-tail-lines` | 默认 **1000**（`ECI_FAILURE_LOG_TAIL_LINES`） |
-| `failure-log-grace-sec` | 默认 **90**（`ECI_FAILURE_LOG_GRACE_SEC`）；测试 / 可配 `0` |
+| `failure-log-grace-sec` | 默认 **90**（`ECI_FAILURE_LOG_GRACE_SEC`）；持久化 DELETE not-before，不阻塞 watcher；测试 / 可配 `0` |
 | 成功任务日志 | **不存** `containerLogTail`（防磁盘膨胀） |
 | 生产选型 ECI/CCI | 待定，不阻塞 |
 | 云凭证 | 每 resource 一把当前钥（落盘+热切）；`.env` 仅种子；Java 不读 `ALIBABA_CLOUD_*`；成对 AK → STATIC_AK；空则 RAM/默认链 |
 | 8081 目录 | **不做**；列表与绑定在主后端第二步 |
-| T1 范围 | Task 1–7 完成；一期 mock 验收 closure |
+| P0 范围 | Task 1–8 完成；动作恢复、删除重试、取消收敛与 Mock 验证已纳入 |
 | `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 `TaskLifecycleWatcher` 在 Describe=Succeeded 且实例 TERMINATED 后写入 |
 | 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
 | Always/OnFailure | 忽略云 Failed/Succeeded 时**不**误调 `onInstanceRunning`（Watcher 2026-07-28 修正） |
@@ -343,7 +397,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 - **C1–C5** 当前钥执行器（STATIC_AK、云当前钥落盘热切、POST test、文档，2026-09-09）；HTTP Api-Key 改为配置权威
 - **shm** Memory EmptyDir 放大 `/dev/shm`（`shmSize`，2026-09-16）  
 - **console** 本地静态操作台（`GET /`、`/meta`、`/tasks/{id}/logs`、就绪开浏览器，2026-09-16）  
-- **下一刀** 联合 3dgs（traceback / `PYTHONUNBUFFERED`）；可选真云失败取证冒烟；O5.3 云端验收清单收尾；**第二步**主后端 AK 目录  
+- 后续统一以 **§1.1 路线图** 为准；旧“下一刀”已并入 P0–P3，不再从本分期列表单独判断优先级
 
 ### §5.1 变更记录：失败日志可观测性（2026-09-02）
 
@@ -441,7 +495,7 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 - 本地操作台已交付；不要另起 Node/React 工程，不要运行时热切 Provider  
 - 云身份：当前钥成对则 **STATIC_AK**（种子 `ECI_ACCESS_KEY_*`；`ALIBABA_CLOUD_*` 仅 `load-env.sh` 映射）；空则 ECS RAM / 默认链  
 - 保持：本地状态权威、异步创建、删除=删云、一任务一实例  
-- 实现进度与下一刀以计划文件勾选为准；逐步测试命令看 `docs/测试说明.md`  
+- 后续优先级以 **§1.1 路线图** 为准；具体任务的实现进度以对应计划文件勾选为准；逐步测试命令看 `docs/测试说明.md`
 - 用户未明确要求时：**不要**自动 `git commit` / `git push`  
 
 ---
@@ -473,8 +527,10 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | `src/.../provider/AliyunEciProvider.java` | 真实云 SDK + DescribeContainerLog + Failed 诊断串 + shm EmptyDir |
 | `src/.../provider/ShmSize.java` | shm SizeLimit 规范化与相对 memory 校验 |
 | `src/.../lifecycle/TaskLifecycleWatcher.java` | 终态轮询；失败删前抓日志 |
-| `src/.../lifecycle/AsyncLifecycleWorker.java` | 异步轮询 / 任务回调 |
-| `src/.../config/EciProperties.java` | 含 `failureLogTailLines` / `failureLogGraceSec` / `defaultShmSize` / `console.openBrowser` |
+| `src/.../lifecycle/action/LifecycleActionDispatcher.java` | 到期动作扫描、租约领取、短任务投递 |
+| `src/.../lifecycle/action/LifecycleActionProcessor.java` | 单步 CREATE/DELETE/Describe 处理，不循环、不 sleep |
+| `src/.../lifecycle/action/LifecycleActionService.java` | 动作幂等、实例终态和任务终态收敛 |
+| `src/.../config/EciProperties.java` | 含失败取证、`lifecycleAction` 六项配置、`defaultShmSize`、`console.openBrowser` |
 | `src/main/resources/static/` | 本地操作台（无构建） |
 | `src/.../config/EciMetaController.java` | `GET /meta` |
 | `src/.../task/EciTaskLogService.java` | `GET /tasks/{id}/logs` |

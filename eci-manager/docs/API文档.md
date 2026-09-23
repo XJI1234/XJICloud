@@ -3,7 +3,7 @@
 > **服务：** `eci-manager`（默认 `http://127.0.0.1:8081`）  
 > **API 前缀：** `/api/v1/eci`  
 > **对应 PRD：** [ECI任务驱动容器编排服务产品需求文档(PRD).md](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) v2.0.3  
-> **更新日期：** 2026-09-16 
+> **更新日期：** 2026-09-21
 
 本文面向三类读者：
 
@@ -44,7 +44,7 @@
 
 1. 提交任务 → 自动创建关联容器  
 2. 查询任务 / 实例状态（创建中 → 运行中 → 成功/失败）  
-3. 取消任务 → 删除关联容器  
+3. 取消任务 → 进入 `CANCELLING`，删除完成后变为 `CANCELLED`
 4. 云侧 Succeeded/Failed 或 `maxRuntimeSec` 超时后自动删并回写任务  
 5. Mock 下时间触发终态（`mock-auto-complete-sec`）全流程不调云  
 6. 手动创建 / 删除 / 刷新实例  
@@ -53,7 +53,7 @@
 
 ```text
 提交任务 → 创建中 → 运行中 →（脚本结束）→ 成功/失败 → 云资源已清理
-                ↘ 任意时刻可取消 → 已取消 → 云资源已清理
+                ↘ 任意时刻可取消 → CANCELLING → CANCELLED（实例已清理）
                 ↘ 超时 → 失败(TIMEOUT) → 云资源已清理
 ```
 
@@ -118,14 +118,15 @@
 | `RUNNING` | 实例已 Running，任务执行中 | **已实现** |
 | `SUCCEEDED` | 云侧成功结束且自动清理完成 | **已实现** |
 | `FAILED` | 创建失败、进程失败、超时等 | **已实现**（含 `failureReason=TIMEOUT`） |
-| `CANCELLED` | 调用方取消 | **已实现** |
+| `CANCELLING` | 已接受取消，持久化 DELETE 正在收敛；仍是非终态 | **已实现** |
+| `CANCELLED` | 调用方取消且关联实例已 `TERMINATED` 或确认 `NotFound` | **已实现** |
 
 流转：
 
 ```text
 PENDING → STARTING → RUNNING → SUCCEEDED | FAILED
 STARTING → SUCCEEDED | FAILED
-PENDING / STARTING / RUNNING → CANCELLED
+PENDING / STARTING / RUNNING → CANCELLING → CANCELLED
 非终态 → FAILED（创建失败、超时、云异常）
 ```
 
@@ -137,11 +138,11 @@ PENDING / STARTING / RUNNING → CANCELLED
 | `RUNNING` | 云侧已 Running（或 Mock 成功） |
 | `STOPPING` | 已受理删除 |
 | `TERMINATED` | 云侧已删除，终态 |
-| `FAILED` | 创建或删除失败 |
+| `FAILED` | 创建失败或云侧运行失败；DELETE 失败保持 `STOPPING` 并持续重试 |
 
 ```text
 CREATING → RUNNING | FAILED
-RUNNING → STOPPING → TERMINATED | FAILED
+RUNNING → STOPPING → TERMINATED
 ```
 
 ### 2.6 默认配置（未传字段时）
@@ -156,11 +157,17 @@ RUNNING → STOPPING → TERMINATED | FAILED
 | `eci.default-shm-size` | 空 | 未传 `shmSize` 时使用；空则不挂 EmptyDir，保留 64Mi `/dev/shm` |
 | `eci.task-poll-interval-sec` | `10` | 运行中任务轮询云终态周期 |
 | `eci.failure-log-tail-lines` | `1000` | Failed/TIMEOUT 删前 `DescribeContainerLog` 尾部行数 |
-| `eci.failure-log-grace-sec` | `90` | 落库后、删实例前取证宽限（秒）；`0` 关闭 |
+| `eci.failure-log-grace-sec` | `90` | FAILED 落库后 DELETE 动作的持久化 `not-before`（秒）；不阻塞 watcher，`0` 立即执行 |
 | `eci.mock-auto-complete-sec` | `3` | Mock：创建后 N 秒自动迁终态；`<=0` 关闭 |
 | `eci.mock-auto-complete-status` | `Succeeded` | Mock 自动终态：`Succeeded` / `Failed` |
-| `eci.create-timeout-sec` | `300` | 创建等待上限 |
-| `eci.delete-timeout-sec` | `300` | 删除等待上限 |
+| `eci.create-timeout-sec` | `300` | P0 tokenized CREATE 动作超时后暴露业务失败；未知结果仍后台用同一 token 恢复。pre-P0 无 token 历史行保持隔离，不自动重放 |
+| `eci.delete-timeout-sec` | `300` | DELETE 动作登记起的超时告警；不停止清理或重试 |
+| `eci.lifecycle-action.dispatch-interval-ms` | `1000` | 生命周期动作 dispatcher 周期 |
+| `eci.lifecycle-action.batch-size` | `20` | 每轮最多领取动作数 |
+| `eci.lifecycle-action.lease-sec` | `60` | 动作租约秒数，过期可恢复 |
+| `eci.lifecycle-action.retry-initial-sec` | `2` | DELETE 失败首次退避秒数 |
+| `eci.lifecycle-action.retry-max-sec` | `300` | DELETE 失败退避上限秒数 |
+| `eci.lifecycle-action.cleanup-alert-attempts` | `5` | DELETE 第 5 次失败起记录 ERROR 告警，之后继续重试 |
 | `eci.console.open-browser` | `true` | 就绪后打开 `http://127.0.0.1:{port}/`；测试 / 无桌面设 `false` |
 
 `restartPolicy` 合法值：`Never` | `OnFailure` | `Always`。
@@ -361,7 +368,9 @@ OSS 联调（`mode=test` + 联调镜像）：
 
 `POST /api/v1/eci/tasks/{id}/cancel`
 
-- 非终态 → 标为 `CANCELLED`，并删除关联实例（若有）  
+- 非终态 → 先标为 `CANCELLING`，并登记持久化 DELETE 动作；首次响应通常为 `CANCELLING`
+- DELETE 确认云侧 `TERMINATED` 或 `NotFound` 后才标为 `CANCELLED`
+- 已是 `CANCELLING` → **幂等**成功，继续返回当前任务并由后台轮询
 - 已是 `CANCELLED` → **幂等**成功，仍返回当前任务  
 - 已是 `SUCCEEDED` / `FAILED` → **409**，不可取消  
 
@@ -374,11 +383,19 @@ OSS 联调（`mode=test` + 联调镜像）：
 | 行为 | 说明 | 状态 |
 |------|------|------|
 | 云侧 `Succeeded` → 删实例 → 任务 `SUCCEEDED` | 仅实例已 `TERMINATED` 后落成功 | **已实现** |
-| 云侧 `Failed` → 抓日志 → 落库 →（可选宽限）→ 删实例 → 任务 `FAILED` | `Never`；含 `containerLogTail` | **已实现** |
+| 云侧 `Failed` → 抓日志 → 落库 → 持久化 not-before → 删实例 → 任务 `FAILED` | `Never`；含 `containerLogTail`，不阻塞 watcher | **已实现** |
 | 超过 `maxRuntimeSec` 强制删 | `failureReason=TIMEOUT`，同样先抓日志 | **已实现** |
 | Mock 时间触发终态 | `mock-auto-complete-sec` / `status` | **已实现** |
 
 调用方对接：轮询 `GET /tasks/{id}` 的 `status` 直至终态。
+
+### 3.6 P0 生命周期可靠性语义 — **已实现**
+
+- 创建和删除均写入 `eci_lifecycle_action`，dispatcher 每秒最多领取 20 条动作；每个 processor 步骤最多调用一次 Create、Describe 或 Delete，不在线程内 `sleep`。
+- P0 CREATE 的 `ClientToken` 固定为本地实例 UUID 字符串，阿里云请求同时写入 `xjicloud-local-instance-id` Tag。网络、超时或服务端等未知 P0 CREATE 结果必须使用同一 token 重试；即使 `create-timeout-sec` 已暴露业务失败，动作仍会后台恢复并在取得 cloudId 后清理。pre-P0 无 token 的历史 CREATE 会被隔离为 `WAITING`，不调用 Create 或自动查云；首次处理只记录含 `actionId`/`instanceId` 的安全 ERROR，需人工核对后再由 DBA 恢复。
+- DELETE 失败记录 `lastError`，按 2 秒起、300 秒封顶的指数退避无限重试；`delete-timeout-sec` 只产生超时告警，不停止清理。实例本地状态保持 `STOPPING`，直到云侧 `Deleted`/`NotFound` 才为 `TERMINATED`。
+- Failed/TIMEOUT 的硬顺序仍是抓取容器日志、持久化任务失败与日志、登记 `failure-log-grace-sec` 的 not-before，再由动作 dispatcher 清理；not-before 不阻塞 watcher。
+- Mock 本地可验证崩溃窗口重启、tokenized 未知 CREATE 重试、legacy CREATE 隔离、DELETE 前两次失败后成功、取消 `CANCELLING → CANCELLED` 收敛；真云 Create/Delete 需要明确授权、有效配置并承担费用，自动化测试不访问真云。
 
 ---
 
@@ -491,7 +508,7 @@ GPU 示例（贵、看库存；测完必须删）：
 | `TERMINATED` | 幂等成功 |
 | 其它可删状态 | 进入 `STOPPING`，异步删云资源 |
 
-业务任务收尾优先用 **任务 cancel**，而不是只删实例（只删实例时，任务在 T1 可能仍显示 `RUNNING`）。
+业务任务收尾优先用 **任务 cancel**，而不是只删实例（只删实例时，watcher 会将任务标为 `FAILED`「进程中断或资源已清理」，不会猜 `SUCCEEDED`）。
 
 ---
 
@@ -686,7 +703,7 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/<TASK_ID>/cancel" \
   -H "X-Api-Key: $ECI_API_KEY"
 ```
 
-期望：`status=CANCELLED`；关联实例最终 `TERMINATED`。控制台确认 ECI 已删除。
+期望：首次响应通常为 `status=CANCELLING`；继续轮询任务，只有关联实例 `TERMINATED` 或 `NotFound` 后才为 `CANCELLED`。控制台确认 ECI 已删除。
 
 ### 7.4 手动实例（调试）
 
