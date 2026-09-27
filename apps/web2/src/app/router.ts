@@ -37,6 +37,12 @@ const router = createRouter({
           component: () => import('@/features/editor/presentation/SuperSplatEditorView.vue'),
           meta: { immersive: true },
         },
+        {
+          path: 'mission',
+          name: 'mission',
+          component: () => import('@/features/mission-ops/presentation/TaskExecutionView.vue'),
+          meta: { transition: 'app-fade' },
+        },
         { path: 'help', name: 'help', component: () => import('@/presentation/views/HelpView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/features/model-asset/presentation/SettingsView.vue') },
       ],

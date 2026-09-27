@@ -33,3 +33,12 @@ deploy/config/install-summary.txt
 *.sw?
 Cookies
 tmp/
+
+# Local-only convenience scripts (do not commit)
+/start-infra.sh
+/start-backend.sh
+/start-frontend.sh
+
+# Windows installer served by web2; too large to commit
+apps/web2/public/downloads/*.exe
+/_tmp_*

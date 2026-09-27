@@ -12,6 +12,7 @@ const requiredUseCases = [
   'features/model-asset/application/use-cases/model-asset.usecase.ts',
   'features/viewer/application/use-cases/viewer-config.usecase.ts',
   'features/editor/application/use-cases/editor.usecase.ts',
+  'features/mission-ops/application/use-cases/mission-ops.usecase.ts',
 ]
 
 describe('use case parity with apps/web capabilities', () => {

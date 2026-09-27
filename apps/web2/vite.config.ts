@@ -4,6 +4,7 @@ import MagicString from 'magic-string'
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import glsl from 'vite-plugin-glsl'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(appDir, '../..')
@@ -39,10 +40,19 @@ function fixWasmDataUrl(): Plugin {
 export default defineConfig({
   base: '/',
   clearScreen: false,
+  define: { CESIUM_BASE_URL: JSON.stringify('/cesium/') },
   plugins: [
     vue(),
     glsl({ include: ['**/*.glsl'] }),
     fixWasmDataUrl(),
+    viteStaticCopy({
+      targets: ['Workers', 'Assets', 'ThirdParty', 'Widgets'].map((directory) => ({
+        src: path.resolve(appDir, 'node_modules/cesium/Build/Cesium', directory),
+        dest: 'cesium',
+        // v4 preserves source paths; strip node_modules/cesium/Build/Cesium.
+        rename: { stripBase: 4 },
+      })),
+    }),
   ],
   resolve: {
     alias: {

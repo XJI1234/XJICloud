@@ -265,6 +265,10 @@ CREATE TABLE model_versions (
 - `GET /models/{id}/download` 的字节由 web2 `model-asset` 仓储经 OPFS 按 modelId + 修订（`updatedAt`+`sizeBytes`）缓存，查看器与高级编辑共用；覆盖导出/恢复会使该模型缓存失效
 - 测试：`pnpm test:web2`；构建：`pnpm build` / `pnpm build:web2`；开发：`pnpm dev`（指向 web2）
 
+### 7.0.1 Sky Command 任务执行（独立本机程序）
+
+`apps/web2/src/features/mission-ops` 的任务执行页借助独立 Sky-Command 托盘宿主 `127.0.0.1:17890` 操作原有 `DesktopUiGateway`，视频走本机 `127.0.0.1:18080` HTTP-FLV，手机 MSDK 的 WebSocket/RTMP 仍留在本机程序。默认网页来源 `localhost:5176`；部署来源由本机程序的 `SKYCOMMAND_CLOUD_ORIGIN` 指定。未对目标 Windows 浏览器/手机/飞行器做实机验证，公网 HTTPS → 本机 HTTP 的 PNA/混合内容需要额外验收；返航二次确认已接入原网关的请求/确认/取消链路，实机效果仍需验收。
+
 ## 7.1 已弃用：旧用户前端（`apps/web/`）
 
 包名 `@xjicloud/web`，端口 **5174**。Pinia + `src/api` 直连。仅作对照与历史构建：`pnpm dev:web-legacy` / `pnpm build:web-legacy`。

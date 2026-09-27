@@ -55,6 +55,7 @@ pnpm build
 | `/app/upload` | Dataset-training | 图片数据集归档直传 + 训练任务 |
 | `/app/layer` | Viewer + ModelAsset | 原生 Spark 查看（轨道/平移/缩放，无涂抹编辑） |
 | `/app/supersplat` | Editor | SuperSplat iframe；无云端模型也可进，可打开本地 PLY/SPZ |
+| `/app/mission` | Mission-ops | 任务执行预览：本机 KML 单条 LineString 航线可解析并绘制；飞行命令与图传尚未接通，控件锁定，不得用于实飞 |
 | `/app/help` | Presentation | 帮助 |
 
 未登录访问 `/app/**` 会按 `resolveAuthNavigation` 跳到 `/login`。

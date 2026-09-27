@@ -34,6 +34,7 @@ const navItems = computed(() => [
 
 const toolItems = computed(() => [
   { labelKey: 'tools.routePlanning', route: null, icon: 'route' as const },
+  { labelKey: 'tools.taskExecution', route: '/app/mission', icon: 'mission' as const },
   { labelKey: 'tools.dataUpload', route: '/app/upload', icon: 'upload' as const },
   { labelKey: 'tools.modelView', route: '/app/layer', icon: 'view' as const },
   { labelKey: 'tools.advancedEdit', route: '/app/supersplat', icon: 'edit' as const },
@@ -94,7 +95,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onDocumentKeydown)
 })
 
-const fillMain = computed(() => route.name === 'layer' || route.name === 'supersplat')
+const fillMain = computed(
+  () => route.name === 'layer' || route.name === 'supersplat',
+)
 const isImmersive = computed(() => route.name === 'home' || !activeProjectId.value)
 </script>
 

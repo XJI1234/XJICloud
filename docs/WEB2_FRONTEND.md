@@ -301,6 +301,10 @@ LoginView
 
 ---
 
+## 11.1 任务执行 / 本机 Sky Command
+
+`mission-ops` 通过 `LocalBridgePort` 接到独立 Sky-Command 托盘进程（默认 `127.0.0.1:17890`）。网页仅处理状态、航线与本机 HTTP-FLV 显示，手机 MSDK Relay 和 RTMP 继续由本机程序提供。宿主必须校验浏览器 Origin；`skycommand://open` 只负责唤起已安装的本机程序。开发来源为 `localhost:5176`，部署需要 `SKYCOMMAND_CLOUD_ORIGIN` 与实际 HTTPS 站点完全一致；HTTPS 页面访问本机 HTTP 必须实机验证浏览器 Private Network Access 支持。返航沿用原网关的 `flight.request` → 用户确认 → `flight.confirm`；取消则调用 `flight.cancel`，不以网页布尔值替代 DJI 确认 ID。
+
 ## 12. 已知产品事实（避免 Agent 回退）
 
 - **默认开发入口是 `apps/web2` :5176**（根目录 `pnpm dev`）。

@@ -4,6 +4,7 @@ import {
   PhGlobe as Globe,
   PhHouse as House,
   PhMapTrifold as MapTrifold,
+  PhPaperPlaneTilt as PaperPlaneTilt,
   PhPencilSimple as PencilSimple,
   PhQuestion as Question,
   PhUploadSimple as UploadSimple,
@@ -11,12 +12,13 @@ import {
 } from '@phosphor-icons/vue'
 
 const props = defineProps<{
-  name: 'home' | 'route' | 'upload' | 'view' | 'edit' | 'team' | 'language' | 'help'
+  name: 'home' | 'route' | 'mission' | 'upload' | 'view' | 'edit' | 'team' | 'language' | 'help'
 }>()
 
 const icons = {
   home: House,
   route: MapTrifold,
+  mission: PaperPlaneTilt,
   upload: UploadSimple,
   view: Cube,
   edit: PencilSimple,

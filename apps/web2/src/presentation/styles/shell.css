@@ -487,6 +487,9 @@ a {
 }
 
 .cloud-shell {
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
   display: grid;
   grid-template-rows: var(--header) minmax(0, 1fr);
   height: 100%;

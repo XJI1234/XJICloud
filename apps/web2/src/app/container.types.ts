@@ -8,6 +8,9 @@ import type { ObjectStoragePort } from '@/features/dataset-training/domain/repos
 import type { ModelAssetRepository } from '@/features/model-asset/domain/repositories/model-asset.repository'
 import type { ViewerStoragePort } from '@/features/viewer/domain/repositories/viewer-storage.port'
 import type { EditorBridgePort } from '@/features/editor/domain/repositories/editor-bridge.port'
+import type { LocalBridgePort } from '@/features/mission-ops/domain/repositories/local-bridge.port'
+import type { RoutePreviewPort } from '@/features/mission-ops/domain/repositories/route-preview.port'
+import type { InstallerAssetPort } from '@/features/mission-ops/domain/repositories/installer-asset.port'
 import type { JobWatchHub } from '@/features/dataset-training/application/job-watch-hub'
 
 export type Web2Container = {
@@ -22,5 +25,8 @@ export type Web2Container = {
   models: ModelAssetRepository
   viewerStorage: ViewerStoragePort
   editorBridge: EditorBridgePort
+  localBridge: LocalBridgePort
+  routePreview: RoutePreviewPort
+  installerAsset: InstallerAssetPort
   resetWorkspace: () => void
 }
