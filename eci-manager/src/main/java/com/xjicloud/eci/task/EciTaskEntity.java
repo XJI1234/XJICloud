@@ -22,6 +22,10 @@ public class EciTaskEntity {
     @Id
     private UUID id;
 
+    /** Optional request deduplication key; null keeps legacy create-per-request semantics. */
+    @Column(name = "client_request_id", unique = true)
+    private String clientRequestId;
+
     @Column(length = 128)
     private String name;
 
@@ -102,6 +106,14 @@ public class EciTaskEntity {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getClientRequestId() {
+        return clientRequestId;
+    }
+
+    public void setClientRequestId(String clientRequestId) {
+        this.clientRequestId = clientRequestId;
     }
 
     public String getName() {

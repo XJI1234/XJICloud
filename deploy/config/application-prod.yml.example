@@ -50,7 +50,7 @@ xjicloud:
     access-key: minioadmin
     secret-key: minioadmin
     path-style-access: true
-    presign-expiration-minutes: 120
+    presign-expiration-minutes: 1440
   redis:
     queue-key: xjicloud:jobs
   worker:

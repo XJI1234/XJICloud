@@ -8,7 +8,7 @@
 |----|-----|-----------|----------|
 | 本机 | 192.168.203.133 | edge | K3s Server、Ingress、frontend |
 | VM2 | 192.168.203.134 | backend | PostgreSQL、Redis、backend |
-| VM3 | 192.168.203.135 | storage | MinIO、gpu-worker |
+| VM3 | 192.168.203.135 | storage | MinIO |
 
 ## 快速开始（本地 K3s）
 
@@ -55,6 +55,8 @@ sudo ./deploy/k8s/scripts/label-nodes.sh
 
 ### 3. 构建并导入镜像
 
+该脚本只构建并导入 backend 和 frontend 镜像；训练使用已经上传、由 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 引用的 3DGS 镜像。
+
 ```bash
 sudo ./deploy/k8s/scripts/build-and-import-images.sh
 ```
@@ -91,22 +93,22 @@ deploy/k8s/
 ├── postgres/
 ├── minio/                   # NodePort 30900（浏览器直传）
 ├── backend/
-├── gpu-worker/
+├── gpu-worker/              # 历史 Deployment 文件，不属于活动资源
 ├── frontend/                # Dockerfile + nginx.conf
 ├── ingress.yaml
 ├── scripts/                 # 安装、构建、部署、验证脚本
-└── overlays/aliyun/         # ACK + RDS + OSS（无 MinIO/Postgres/gpu-worker）
+└── overlays/aliyun/         # ACK + RDS + OSS；CCI 由 ECI Manager 按 backend 任务创建
 ```
 
 ## 阿里云 ACK
 
 ```bash
 cp deploy/k8s/overlays/aliyun/secrets.example.yaml deploy/k8s/overlays/aliyun/secrets.yaml
-# 编辑 configmap-aliyun.yaml、kustomization.yaml 中的 ACR 地址与域名
+# 编辑 backend/frontend 镜像、已有训练镜像配置和域名
 kubectl apply -k deploy/k8s/overlays/aliyun/
 ```
 
-GPU 算力见 [overlays/aliyun/CCI.md](overlays/aliyun/CCI.md)。
+训练镜像配置及 CCI 运行参数见 [overlays/aliyun/CCI.md](overlays/aliyun/CCI.md)。
 
 ## 关键配置
 

@@ -26,12 +26,5 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  gpu-worker:
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
-
 volumes:
   postgres_data:

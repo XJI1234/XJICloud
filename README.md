@@ -21,7 +21,7 @@ XJICloud/
 │   └── shared/              # 共享 TS 类型 @xjicloud/shared
 ├── services/
 │   ├── backend/             # Spring Boot API（:8080）
-│   └── gpu-worker/          # Python GPU Worker 容器
+│   └── gpu-worker/          # legacy Redis Worker 源码（仅留存，不由活动部署启动）
 ├── rust/                    # Spark WASM（Cargo workspace）
 ├── vendors/
 │   └── supersplat/          # SuperSplat 预编译静态资源（构建时复制到 public）
@@ -38,7 +38,8 @@ XJICloud/
 | 用户前端（已弃用） | `apps/web` | `pnpm dev:web-legacy` |
 | 管理前端 | `apps/admin` | `pnpm --filter @xjicloud/admin dev` |
 | 后端 | `services/backend` | `cd services/backend && mvn spring-boot:run` |
-| Worker | `services/gpu-worker` | `docker build -t xjicloud/gpu-worker services/gpu-worker` |
+| ECI 训练镜像 | 已上传的 3DGS 镜像 | backend 使用 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 配置 |
+| legacy Worker | `services/gpu-worker` | 仅保留源码；不由 Compose、K8s 或部署脚本构建/启动 |
 | SuperSplat | `vendors/supersplat`（预编译） | web2 `predev`/`prebuild` 自动复制 |
 
 ---
@@ -49,7 +50,7 @@ XJICloud/
 
 - **Node.js** ≥ 18、**pnpm** 9（`corepack enable`）
 - **Java** 17+、**Maven** 3.9+
-- **Docker**（Redis、MinIO、Worker）
+- **Docker**（本地 Redis、MinIO 和 backend Compose）
 
 ### 1. 克隆与安装
 
@@ -89,15 +90,9 @@ pnpm dev:web-legacy  # :5174，仅旧版对照
 
 架构说明见 [apps/web2/README.md](apps/web2/README.md) 与 [docs/WEB2_FRONTEND.md](docs/WEB2_FRONTEND.md)。
 
-### 5. GPU Worker（可选）
+### 5. 训练镜像配置
 
-```bash
-docker build -t xjicloud/gpu-worker services/gpu-worker/
-docker run --rm \
-  -e XJICLOUD_BACKEND_URL=http://host.docker.internal:8080 \
-  -e WORKER_SECRET=change-me-worker-secret-in-production \
-  xjicloud/gpu-worker
-```
+训练使用已上传的 3DGS 镜像。将 backend 的 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 配置为该镜像地址；此仓库的活动 Compose、K8s 和镜像辅助脚本不构建或推送训练镜像。现有独立 ECI 任务提交样例见 [`eci-manager/scripts/submit-3dgs-standard.sh`](eci-manager/scripts/submit-3dgs-standard.sh)。
 
 ---
 
@@ -128,7 +123,7 @@ cd services/backend && mvn -DskipTests package
 |----|------|
 | 用户端（web2） | 工程管理、图片数据集 OSS 直传训练、PLY/SPZ 上传、Spark 查看、SuperSplat iframe 编辑 |
 | 管理端 | OSS 配置、Worker / 任务监控、仪表盘 |
-| Worker | 注册 / 心跳 / 领任务；当前为 mock 训练（可替换 `mock_trainer.py`） |
+| 训练 | 用户上传写入 Redis，由主 backend `TrainingDispatchScheduler` 派发到 ECI Manager；训练镜像通过 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 引用已上传的 3DGS 镜像 |
 
 默认管理员：`admin` / `admin123`（生产务必修改）。
 
@@ -143,7 +138,7 @@ cd services/backend && mvn -DskipTests package
 | `deploy/deploy-backend.sh` | 后端一键构建 + systemd（路径：`services/backend`） |
 | `deploy/nginx-frontend.conf.example` | 前端 Nginx（`/api/`、`/admin/`、`/supersplat/`） |
 | `deploy/k8s/` | K8s 清单 |
-| `deploy/docker-compose.yml` | 单机演示（backend + redis + minio + worker） |
+| `deploy/docker-compose.yml` | 单机演示（backend + redis + minio），不启动训练 Worker |
 
 ```bash
 cp deploy/config/application-prod.yml.example deploy/config/application-prod.yml

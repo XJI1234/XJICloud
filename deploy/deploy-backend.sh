@@ -218,7 +218,7 @@ xjicloud:
     access-key: $(yaml_quote "$OSS_ACCESS_KEY")
     secret-key: $(yaml_quote "$OSS_SECRET_KEY")
     path-style-access: ${OSS_PATH_STYLE}
-    presign-expiration-minutes: 120
+    presign-expiration-minutes: 1440
   redis:
     queue-key: xjicloud:jobs
   worker:

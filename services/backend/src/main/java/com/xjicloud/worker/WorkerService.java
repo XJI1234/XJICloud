@@ -92,53 +92,25 @@ public class WorkerService {
     @Transactional
     public WorkerJobPayload pollNextJob(WorkerNode worker) {
         heartbeat(worker, new WorkerHeartbeatRequest(worker.getGpuInfo()));
-        if (worker.getStatus() == WorkerStatus.BUSY && worker.getCurrentJobId() != null) {
-            return buildPayload(worker.getCurrentJobId());
-        }
-
-        for (int attempt = 0; attempt < 5; attempt++) {
-            UUID jobId = redisQueueService.dequeueBlocking(workerProperties.pollTimeoutSec());
-            if (jobId == null) {
-                return null;
-            }
-
-            TrainingJob job = trainingJobRepository.findById(jobId).orElse(null);
-            if (job == null || job.getStatus() == JobStatus.CANCELLED) {
-                continue;
-            }
-
-            worker.setStatus(WorkerStatus.BUSY);
-            worker.setCurrentJobId(jobId);
-            workerNodeRepository.save(worker);
-
-            trainingJobService.markRunning(jobId, worker.getId());
-            return buildPayload(jobId);
-        }
+        worker.setStatus(WorkerStatus.IDLE);
+        worker.setCurrentJobId(null);
+        workerNodeRepository.save(worker);
         return null;
     }
 
     @Transactional
     public void reportProgress(WorkerNode worker, UUID jobId, JobProgressRequest request) {
-        requireWorkerJob(worker, jobId);
-        trainingJobService.updateProgress(jobId, JobStatus.RUNNING, request.percent(), request.stage(), request.message());
+        throw legacyTrainingDisabled();
     }
 
-    /**
-     * FIXME(H2): 与 TrainingJobService.cancelJob 同源问题——任务已被用户/管理员取消后，
-     * 此处仍会 markCompleted 覆盖终态。待 Worker 中断协议确认后再拦截。
-     */
     @Transactional
     public void completeJob(WorkerNode worker, UUID jobId, JobCompleteRequest request) {
-        requireWorkerJob(worker, jobId);
-        trainingJobService.markCompleted(jobId, request.outputOssKey());
-        releaseWorker(worker);
+        throw legacyTrainingDisabled();
     }
 
     @Transactional
     public void failJob(WorkerNode worker, UUID jobId, JobFailRequest request) {
-        requireWorkerJob(worker, jobId);
-        trainingJobService.markFailed(jobId, request.errorMessage());
-        releaseWorker(worker);
+        throw legacyTrainingDisabled();
     }
 
     public List<WorkerResponse> listWorkers() {
@@ -210,6 +182,10 @@ public class WorkerService {
         if (sharedSecret == null || !sharedSecret.equals(workerProperties.sharedSecret())) {
             throw new BusinessException("Worker 密钥无效", HttpStatus.UNAUTHORIZED);
         }
+    }
+
+    private BusinessException legacyTrainingDisabled() {
+        return new BusinessException("旧版 Worker 训练接口已停用", HttpStatus.GONE);
     }
 
     private WorkerResponse toResponse(WorkerNode worker) {

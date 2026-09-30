@@ -1,3 +1,4 @@
+# Historical manifest only. It is intentionally not included by an active Kustomize resource list.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,7 +7,7 @@ metadata:
   labels:
     app: gpu-worker
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: gpu-worker
@@ -21,6 +22,8 @@ spec:
         - name: gpu-worker
           image: xjicloud/gpu-worker:local
           imagePullPolicy: IfNotPresent
+          # Explicit opt-in for the legacy Redis worker. ECI tasks use the image ENTRYPOINT.
+          command: ["python3", "worker_agent.py"]
           env:
             - name: XJICLOUD_BACKEND_URL
               value: http://backend:8080

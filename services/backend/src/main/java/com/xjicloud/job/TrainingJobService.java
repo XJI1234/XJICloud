@@ -103,6 +103,11 @@ public class TrainingJobService {
         job.setProgress(0);
         job.setStage("queued");
         job.setMessage("已入队，等待算力容器");
+        if (job.getDispatchAttempt() < 1) {
+            job.setDispatchAttempt(1);
+            job.setClientRequestId(UUID.randomUUID().toString());
+        }
+        job.setDispatchEnqueuedAt(Instant.now());
         job.setUpdatedAt(Instant.now());
         trainingJobRepository.save(job);
 
@@ -143,6 +148,11 @@ public class TrainingJobService {
             throw new BusinessException("任务不属于该项目", HttpStatus.BAD_REQUEST);
         }
         return job;
+    }
+
+    private TrainingJob requireJobForUpdate(UUID jobId) {
+        return trainingJobRepository.findForUpdateById(jobId)
+                .orElseThrow(() -> new BusinessException("任务不存在", HttpStatus.NOT_FOUND));
     }
 
     @Transactional
@@ -199,9 +209,12 @@ public class TrainingJobService {
 
     @Transactional
     public JobResponse retryJob(UUID jobId) {
-        TrainingJob job = requireJob(jobId);
+        TrainingJob job = requireJobForUpdate(jobId);
         if (job.getStatus() != JobStatus.FAILED && job.getStatus() != JobStatus.CANCELLED) {
             throw new BusinessException("仅失败或已取消的任务可重试");
+        }
+        if (job.isEciCancellationPending()) {
+            throw new BusinessException("ECI 实例取消尚未收敛，暂不能重试");
         }
         job.setStatus(JobStatus.QUEUED);
         job.setProgress(0);
@@ -209,6 +222,15 @@ public class TrainingJobService {
         job.setMessage("已重新入队");
         job.setErrorMessage(null);
         job.setWorkerId(null);
+        job.setDispatchAttempt(job.getDispatchAttempt() + 1);
+        job.setClientRequestId(UUID.randomUUID().toString());
+        job.setEciTaskId(null);
+        job.setDispatchClaimActive(false);
+        job.setDispatchClaimToken(null);
+        job.setDispatchClaimedAt(null);
+        job.setDispatchEnqueuedAt(Instant.now());
+        job.setDispatchNextAttemptAt(null);
+        job.setEciCancellationPending(false);
         job.setUpdatedAt(Instant.now());
         trainingJobRepository.save(job);
         redisQueueService.enqueue(jobId);
@@ -216,17 +238,18 @@ public class TrainingJobService {
         return toResponse(job);
     }
 
-    /**
-     * 取消任务：写 CANCELLED 并从 Redis 队列移除。
-     *
-     * FIXME(H2): RUNNING 任务取消后，Worker 仍可能通过 markCompleted/updateProgress
-     * 覆盖终态。GPU Worker 中断协议未确认前暂不拦截 Worker 回写。
-     */
+    /** 取消任务并记录需要由调度器收敛的 ECI 取消意向。 */
     @Transactional
     public JobResponse cancelJob(UUID jobId) {
-        TrainingJob job = requireJob(jobId);
+        TrainingJob job = requireJobForUpdate(jobId);
         if (job.getStatus() == JobStatus.COMPLETED) {
             throw new BusinessException("已完成的任务无法取消");
+        }
+        if (job.getEciTaskId() != null || job.isDispatchClaimActive() || job.getDispatchClaimedAt() != null) {
+            job.setEciCancellationPending(true);
+        }
+        if (!job.isEciCancellationPending()) {
+            job.setDispatchNextAttemptAt(null);
         }
         job.setStatus(JobStatus.CANCELLED);
         job.setStage("cancelled");
@@ -248,7 +271,14 @@ public class TrainingJobService {
     /** 用户侧删除记录：仅终态（完成/失败/已取消）可删除 */
     @Transactional
     public void deleteOwnedJob(UserAccount user, UUID jobId) {
-        TrainingJob job = requireOwnedJob(user, jobId);
+        TrainingJob owned = requireOwnedJob(user, jobId);
+        TrainingJob job = requireJobForUpdate(owned.getId());
+        if (!job.getUserId().equals(user.getId())) {
+            throw new BusinessException("无权访问该任务", HttpStatus.FORBIDDEN);
+        }
+        if (job.isEciCancellationPending()) {
+            throw new BusinessException("ECI 实例取消尚未收敛，暂不能删除");
+        }
         if (job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.UPLOADING
                 || job.getStatus() == JobStatus.QUEUED || job.getStatus() == JobStatus.RUNNING) {
             throw new BusinessException("进行中的任务请先取消，再删除");

@@ -7,6 +7,8 @@ import com.xjicloud.common.BusinessException;
 import com.xjicloud.config.EciManagerProperties;
 import java.io.IOException;
 import java.util.Map;
+import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -25,6 +27,35 @@ public class EciManagerClient {
     public EciManagerClient(RestClient restClient, EciManagerProperties properties) {
         this.restClient = restClient;
         this.properties = properties;
+    }
+
+    public EciManagerTaskResponse createTask(EciManagerTaskRequest request) {
+        requireApiKey();
+        return exchangeTask(() -> restClient.post()
+                .uri("/api/v1/eci/tasks")
+                .header("X-Api-Key", properties.apiKey().trim())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(String.class));
+    }
+
+    public EciManagerTaskResponse getTask(UUID taskId) {
+        requireApiKey();
+        return exchangeTask(() -> restClient.get()
+                .uri("/api/v1/eci/tasks/{id}", taskId)
+                .header("X-Api-Key", properties.apiKey().trim())
+                .retrieve()
+                .body(String.class));
+    }
+
+    public EciManagerTaskResponse cancelTask(UUID taskId) {
+        requireApiKey();
+        return exchangeTask(() -> restClient.post()
+                .uri("/api/v1/eci/tasks/{id}/cancel", taskId)
+                .header("X-Api-Key", properties.apiKey().trim())
+                .retrieve()
+                .body(String.class));
     }
 
     public void putRuntimeCredential(String resource, String accessKeyId, String accessKeySecret) {
@@ -87,6 +118,40 @@ public class EciManagerClient {
         EciEnvelope envelope = parseEnvelope(responseBody);
         if (envelope != null && !envelope.success()) {
             throw new BusinessException("eci-manager 应用失败: resource=" + resource, HttpStatus.BAD_GATEWAY);
+        }
+    }
+
+    private EciManagerTaskResponse exchangeTask(Supplier<String> request) {
+        try {
+            String responseBody = request.get();
+            if (responseBody == null || responseBody.isBlank()) {
+                throw new BusinessException("eci-manager 返回空响应", HttpStatus.BAD_GATEWAY);
+            }
+            JsonNode envelope = objectMapper.readTree(responseBody);
+            if (!envelope.path("success").asBoolean(false)) {
+                throw new BusinessException("eci-manager 训练任务请求失败", HttpStatus.BAD_GATEWAY);
+            }
+            JsonNode data = envelope.path("data");
+            UUID id = UUID.fromString(data.path("id").asText());
+            String status = data.path("status").asText();
+            if (status.isBlank()) {
+                throw new BusinessException("eci-manager 返回的任务状态为空", HttpStatus.BAD_GATEWAY);
+            }
+            return new EciManagerTaskResponse(id, status);
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (ResourceAccessException ex) {
+            throw new BusinessException("eci-manager 不可达", HttpStatus.BAD_GATEWAY);
+        } catch (RestClientResponseException ex) {
+            throw new BusinessException("eci-manager 训练任务请求失败", HttpStatus.BAD_GATEWAY);
+        } catch (Exception ex) {
+            throw new BusinessException("eci-manager 返回无效响应", HttpStatus.BAD_GATEWAY);
+        }
+    }
+
+    private void requireApiKey() {
+        if (!properties.hasApiKey()) {
+            throw new BusinessException("eci-manager API key 未配置", HttpStatus.BAD_GATEWAY);
         }
     }
 

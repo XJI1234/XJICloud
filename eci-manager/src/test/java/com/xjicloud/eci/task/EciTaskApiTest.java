@@ -1,5 +1,8 @@
 package com.xjicloud.eci.task;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.xjicloud.eci.instance.EciInstanceEntity;
+import com.xjicloud.eci.instance.EciInstanceRepository;
 import com.xjicloud.eci.task.dto.TaskResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -12,6 +15,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -44,6 +51,9 @@ class EciTaskApiTest {
 
     @Autowired
     private EciTaskRepository taskRepository;
+
+    @Autowired
+    private EciInstanceRepository instanceRepository;
 
     @Test
     void rejectsMissingApiKey() throws Exception {
@@ -115,6 +125,131 @@ class EciTaskApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.imageSnapshotId").value("imc-test-snapshot-id"));
+    }
+
+    @Test
+    void repeatedClientRequestIdReturnsTheSameTaskAndOneInstance() throws Exception {
+        String clientRequestId = "repeat-" + UUID.randomUUID();
+        long tasksBefore = taskRepository.count();
+        long instancesBefore = instanceRepository.count();
+
+        JsonNode first = submitTaskWithClientRequestId(clientRequestId);
+        JsonNode second = submitTaskWithClientRequestId(clientRequestId);
+
+        UUID taskId = UUID.fromString(first.path("data").path("id").asText());
+        assertThat(second.path("data").path("id").asText())
+                .isEqualTo(first.path("data").path("id").asText());
+        assertThat(second.path("data").path("instanceId").asText())
+                .isEqualTo(first.path("data").path("instanceId").asText());
+        assertThat(taskRepository.count() - tasksBefore).isEqualTo(1);
+        assertThat(instanceRepository.count() - instancesBefore).isEqualTo(1);
+        assertThat(instancesForTask(taskId)).isEqualTo(1);
+    }
+
+    @Test
+    void differentClientRequestIdsCreateDifferentTasksAndInstances() throws Exception {
+        String firstKey = "distinct-a-" + UUID.randomUUID();
+        String secondKey = "distinct-b-" + UUID.randomUUID();
+        long tasksBefore = taskRepository.count();
+        long instancesBefore = instanceRepository.count();
+
+        JsonNode first = submitTaskWithClientRequestId(firstKey);
+        JsonNode second = submitTaskWithClientRequestId(secondKey);
+
+        assertThat(second.path("data").path("id").asText())
+                .isNotEqualTo(first.path("data").path("id").asText());
+        assertThat(second.path("data").path("instanceId").asText())
+                .isNotEqualTo(first.path("data").path("instanceId").asText());
+        assertThat(taskRepository.count() - tasksBefore).isEqualTo(2);
+        assertThat(instanceRepository.count() - instancesBefore).isEqualTo(2);
+    }
+
+    @Test
+    void concurrentRequestsWithTheSameClientRequestIdConverge() throws Exception {
+        String clientRequestId = "concurrent-" + UUID.randomUUID();
+        long tasksBefore = taskRepository.count();
+        long instancesBefore = instanceRepository.count();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<JsonNode> firstFuture = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("timed out waiting to submit concurrent request");
+                }
+                return submitTaskWithClientRequestId(clientRequestId);
+            });
+            Future<JsonNode> secondFuture = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("timed out waiting to submit concurrent request");
+                }
+                return submitTaskWithClientRequestId(clientRequestId);
+            });
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            JsonNode first = firstFuture.get(15, TimeUnit.SECONDS);
+            JsonNode second = secondFuture.get(15, TimeUnit.SECONDS);
+
+            UUID taskId = UUID.fromString(first.path("data").path("id").asText());
+            assertThat(second.path("data").path("id").asText())
+                    .isEqualTo(first.path("data").path("id").asText());
+            assertThat(second.path("data").path("instanceId").asText())
+                    .isEqualTo(first.path("data").path("instanceId").asText());
+            assertThat(taskRepository.count() - tasksBefore).isEqualTo(1);
+            assertThat(instanceRepository.count() - instancesBefore).isEqualTo(1);
+            assertThat(instancesForTask(taskId)).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void requestsWithoutClientRequestIdStillCreateSeparateTasks() throws Exception {
+        long tasksBefore = taskRepository.count();
+        long instancesBefore = instanceRepository.count();
+
+        JsonNode first = submitTaskWithoutClientRequestId();
+        JsonNode second = submitTaskWithoutClientRequestId();
+
+        assertThat(second.path("data").path("id").asText())
+                .isNotEqualTo(first.path("data").path("id").asText());
+        assertThat(second.path("data").path("instanceId").asText())
+                .isNotEqualTo(first.path("data").path("instanceId").asText());
+        assertThat(taskRepository.count() - tasksBefore).isEqualTo(2);
+        assertThat(instanceRepository.count() - instancesBefore).isEqualTo(2);
+    }
+
+    private JsonNode submitTaskWithClientRequestId(String clientRequestId) throws Exception {
+        String body = objectMapper.createObjectNode()
+                .put("image", "nginx:alpine")
+                .put("clientRequestId", clientRequestId)
+                .toString();
+        return submitTask(body);
+    }
+
+    private JsonNode submitTaskWithoutClientRequestId() throws Exception {
+        return submitTask("{\"image\":\"nginx:alpine\"}");
+    }
+
+    private JsonNode submitTask(String body) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/eci/tasks")
+                        .header("X-Api-Key", "test-api-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    private long instancesForTask(UUID taskId) {
+        return instanceRepository.findAll().stream()
+                .map(EciInstanceEntity::getTaskId)
+                .filter(taskId::equals)
+                .count();
     }
 
     @Test

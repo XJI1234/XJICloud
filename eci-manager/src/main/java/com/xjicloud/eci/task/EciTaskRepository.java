@@ -24,6 +24,8 @@ public interface EciTaskRepository extends JpaRepository<EciTaskEntity, UUID> {
 
     List<EciTaskEntity> findAllByOrderByCreatedAtDesc();
 
+    Optional<EciTaskEntity> findByClientRequestId(String clientRequestId);
+
     /** 启动恢复 / 终态轮询：按状态集合拉取非终态任务。 */
     List<EciTaskEntity> findByStatusIn(Collection<TaskStatus> statuses);
 

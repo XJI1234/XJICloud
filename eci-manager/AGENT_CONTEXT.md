@@ -45,6 +45,10 @@
   - ✅ pre-P0 无 token CREATE 只创建 `Legacy CREATE outcome unknown` 隔离标记，禁止自动重放或云侧猜测；首次处理记录安全 ERROR，需人工核对后恢复
   - ✅ 任务取消状态为 `CANCELLING → CANCELLED`；仅实例 `TERMINATED`/`NotFound` 后写 `CANCELLED`
   - ✅ Mock 覆盖崩溃/未知 CREATE、DELETE 重试/超时、取消收敛；真云验证须明确授权
+- **已交付（主后端训练派发，2026-09-23）：**
+  - ✅ `POST /tasks` 支持可选 `clientRequestId`；同 key 返回既有任务，避免歧义重试创建第二个 ECI task
+  - ✅ 主 backend 使用 `storage.mode=keys` 传输入对象 key 与固定输出 key，并显式命令运行 one-shot 训练入口
+  - ✅ 重复 key 冲突时回滚新建事务，再读取唯一键胜出的既有任务；未提供 key 的旧调用仍每次新建
 - **已交付（shm EmptyDir，2026-09-16）：**
   - ✅ `POST /tasks` / `POST /instances` 可选 `shmSize`；配置 `eci.default-shm-size`（默认空）
   - ✅ `AliyunEciProvider` 挂 Memory EmptyDir 到 `/dev/shm`；须 >64Mi 且严格小于容器 memory
@@ -61,7 +65,7 @@
 - **OSS 计划 / 续跑：** [`docs/superpowers/plans/2026-07-30-eci-oss-integration.md`](../docs/superpowers/plans/2026-07-30-eci-oss-integration.md)、[`docs/superpowers/2026-07-31-eci-oss-handoff.md`](../docs/superpowers/2026-07-31-eci-oss-handoff.md)
 - **当前钥（第一步 C1–C5）：** [`docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md`](../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md)、[设计](../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md)
 
-**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、独立 Node/React 前端、业务回调、镜像注册表、批量提交、运行时切换 `EciProvider`；`storage.mode=dataset` / 响应 `storageResolved` / backend 对接（二期）；SSE/WebSocket 流式日志；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（第二步主后端）。本地静态操作台已交付，不另起构建步骤。
+**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、独立 Node/React 前端、业务回调、镜像注册表、批量提交、运行时切换 `EciProvider`；`storage.mode=dataset` / 响应 `storageResolved`；SSE/WebSocket 流式日志；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（第二步主后端）。主 backend 已通过 `/tasks`、`clientRequestId` 和 `storage.mode=keys` 接入；本地静态操作台已交付，不另起构建步骤。
 
 ### 1.1 下一步路线图（按紧急程度）
 
@@ -100,7 +104,7 @@
 #### P3：产品集成与后续扩展（P0-P2 后）
 
 1. 主后端统一 AK 目录调用现有 `GET/PUT /runtime-credentials` 与 `POST .../test`；8081 继续只保存每个 resource 的当前钥，不新增第二套目录。
-2. 设计并实现 `storage.mode=dataset` / `storageResolved`，再对接 XJICloud backend 的训练任务数据；先锁定 jobId、对象 key、输出校验和失败回滚契约。
+2. 如需进一步封装，再设计 `storage.mode=dataset` / `storageResolved`；当前 backend 使用 `storage.mode=keys`，契约为输入 OSS key 列表和输出 OSS key。
 3. 仍不在本阶段加入训练队列、Worker 注册/心跳、自动扩缩、批量提交、独立前端或运行时 Provider 切换；这些能力必须另立 PRD。
 
 **P0 已交付。** 后续改动仍须按对应设计/计划单独确认，不得以“顺手重构”为由扩大范围。

@@ -92,6 +92,11 @@ spec:
                 configMapKeyRef:
                   name: backend-config
                   key: XJICLOUD_ADMIN_USERNAME
+            - name: XJICLOUD_ECI_MANAGER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: xjicloud-secrets
+                  key: XJICLOUD_ECI_MANAGER_API_KEY
           volumeMounts:
             - name: backend-data
               mountPath: /data/xjicloud

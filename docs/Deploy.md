@@ -2,7 +2,7 @@
 
 本文档说明如何在 **Linux（Ubuntu / CentOS / Alibaba Cloud Linux）** 上部署 XJICloud。
 
-**推荐生产拓扑：** 前端、后端、对象存储、算力容器分机部署；生产环境对象存储使用 **阿里云 OSS**，算力使用 **阿里云 CCI 弹性容器实例**（按需启动）。预生产/自建环境可用 **MinIO + 自建 GPU 服务器** 替代。
+**推荐生产拓扑：** 前端、后端与对象存储分机部署；生产环境使用 **阿里云 OSS**，主 backend 经 ECI Manager 按训练任务创建 **CCI one-shot 容器**。训练镜像已上传并通过 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 配置，不部署常驻 Worker。
 
 ---
 
@@ -28,12 +28,9 @@ flowchart TB
     MinIO[MinIO_9000]
   end
 
-  subgraph serverD [ServerD_Compute]
-    Worker[GPU_Worker]
-  end
-
   subgraph prodCloud [Production_Cloud]
     AliOSS[Aliyun_OSS]
+    EciManager[ECI_Manager]
     CCI[Aliyun_CCI]
   end
 
@@ -46,10 +43,10 @@ flowchart TB
   API --> Redis
   API -->|"S3 SDK"| MinIO
   API -.->|"生产"| AliOSS
-  Worker -->|"register/jobs"| API
-  Worker -->|"presigned URLs"| MinIO
-  Worker -.->|"生产"| AliOSS
-  CCI -.-> Worker
+  API -->|"consume Redis queue"| Dispatch[TrainingDispatchScheduler]
+  Dispatch -->|"create task"| EciManager
+  EciManager --> CCI
+  CCI -->|"presigned URLs"| AliOSS
 ```
 
 
@@ -60,7 +57,7 @@ flowchart TB
 | **A — 前端** | 静态站点 + 反向代理 | Nginx、`dist/`、`admin/dist/`      | 可叠加 CDN           |
 | **B — 后端** | 业务 API      | Spring Boot JAR、PostgreSQL、Redis | RDS、云 Redis（可选）   |
 | **C — 存储** | 对象存储        | **MinIO**（S3 兼容）                 | **阿里云 OSS**       |
-| **D — 算力** | 训练 Worker   | **Docker GPU 容器**                | **阿里云 CCI**（按需启动） |
+| **算力** | 主 backend scheduler → ECI Manager → CCI one-shot 容器 | 无常驻 Worker | 每个用户训练任务按需创建实例 |
 
 
 > **说明：** PLY/SPZ 模型文件仍存后端服务器 B 本地磁盘（`xjicloud.storage.root`）；图片数据集与训练产出走 OSS（C 或阿里云 OSS）。
@@ -77,8 +74,8 @@ flowchart TB
 | 用户浏览器       | 服务器 C / 阿里云 OSS    | 9000 或 HTTPS     | **浏览器直传**图片（presigned URL） |
 | 服务器 B       | 服务器 C / 阿里云 OSS    | S3 API           | 签发 presigned URL、管理配置      |
 | 服务器 B       | PostgreSQL / Redis | 5432 / 6379      | 元数据与任务队列                   |
-| 服务器 D / CCI | 服务器 B              | 8080 HTTP(S)     | Worker 注册、心跳、领任务           |
-| 服务器 D / CCI | OSS                | HTTPS            | 通过 presigned URL 下载图片、上传模型 |
+| backend scheduler | ECI Manager | HTTP(S) | 消费 Redis 任务并创建 ECI task |
+| CCI one-shot 任务容器 | OSS | HTTPS | 通过 presigned URL 下载图片、上传模型 |
 
 
 
@@ -90,7 +87,7 @@ flowchart TB
 | ------------ | ------------------------------------------------- | ---------------------------------------------------------- |
 | 对象存储         | 服务器 C：MinIO                                       | 阿里云 OSS（不再部署 MinIO）                                        |
 | OSS endpoint | `http://10.0.1.30:9000`，`path-style-access: true` | `https://oss-cn-*.aliyuncs.com`，`path-style-access: false` |
-| 算力           | 服务器 D：常驻 Docker Worker                            | **CCI 弹性容器实例**，有任务时启动                                      |
+| 算力           | ECI Manager mock 或测试 ECI | **CCI 按任务创建 one-shot 容器** |
 | 数据库          | 服务器 B 本机 PostgreSQL                               | 推荐 **RDS PostgreSQL**                                      |
 | 缓存           | 服务器 B 本机 Redis                                    | 可选 **云 Redis**                                             |
 | 前端           | 服务器 A + 域名 + HTTPS                                | 同左，建议 WAF/CDN                                              |
@@ -107,10 +104,10 @@ flowchart TB
 | ----------------- | ----------------------------------------------------------------------------------------------- |
 | OSS / 数据库初始配置     | `sudo ./deploy/deploy-backend.sh configure` 写入 `/etc/xjicloud/application-prod.yml`             |
 | OSS 运行时热更新        | 管理后台 **OSS 对象存储**（写入 `system_config` 表）                                                         |
-| GPU 算力 / Worker   | 手动启动 Docker Worker 或阿里云 CCI，向 `/api/v1/worker/*` 注册；队列深度见管理面板                                   |
-| SSH 终端 / 节点 Agent | 运维直连 SSH；Worker 心跳在管理面板「算力容器」查看                                                                 |
+| GPU 算力 / Worker   | 主 backend scheduler 经 ECI Manager 按任务创建 CCI one-shot 容器 |
+| SSH 终端 / 节点 Agent | 运维直连 SSH；训练计算实例由 ECI Manager 管理 |
 | K8s / Docker 部署   | `[deploy/k8s/scripts/](k8s/scripts/)` 与 `docker-compose`（K8s 用 secrets + configmap，不用 shell 向导） |
-| ECI 自动扩缩          | 不内置；可按队列深度用阿里云 API / 运维脚本手动启停 CCI（见 [§5.6.3](#563-按需启停)）                                        |
+| ECI 容量策略          | 每个训练任务由 ECI Manager 创建并清理实例；平台不额外做队列深度扩缩或常驻 CCI 池 |
 
 
 ---
@@ -129,9 +126,8 @@ flowchart TB
 | Nginx                    | 1.18+                                             | 服务器 A                         |
 | PostgreSQL               | 14+                                               | 服务器 B 或 RDS                   |
 | Redis                    | 7+                                                | 服务器 B 或云 Redis                |
-| Docker                   | 24+                                               | 服务器 D（Worker）；单机 Compose 演示可选 |
+| Docker                   | 24+                                               | 单机 Compose 演示（可选） |
 | MinIO                    | 最新稳定版二进制                                          | 服务器 C（Linux 原生安装）             |
-| NVIDIA Container Toolkit | 最新                                                | 服务器 D（GPU 时）                  |
 
 
 ---
@@ -160,10 +156,10 @@ flowchart TB
 | 方向  | 端口         | 来源              | 说明                       |
 | --- | ---------- | --------------- | ------------------------ |
 | 入站  | 8080       | 服务器 A 内网 IP     | API（勿对公网裸奔，或经 SLB + 白名单） |
-| 入站  | 8080       | 服务器 D / CCI 网段  | Worker 注册与心跳             |
 | 入站  | 5432       | 本机或 RDS 安全组     | PostgreSQL               |
 | 入站  | 6379       | 本机              | Redis                    |
 | 出站  | 9000 或 443 | 服务器 C / 阿里云 OSS | S3 协议                    |
+| 出站  | 8081 或部署端口 | ECI Manager | 任务创建与状态查询 |
 
 
 `**xjicloud.cors.allowed-origins`：** 填服务器 A 的 **前端域名**（如 `https://cloud.example.com`），**不是**后端地址。
@@ -180,13 +176,9 @@ flowchart TB
 
 
 
-### 3.4 服务器 D（GPU Worker，预生产）
+### 3.4 ECI 训练容器
 
-
-| 方向  | 端口         | 来源          | 说明              |
-| --- | ---------- | ----------- | --------------- |
-| 出站  | 8080       | 服务器 B       | 连接后端            |
-| 出站  | 9000 或 443 | 服务器 C / OSS | presigned 下载/上传 |
+CCI 容器由 ECI Manager 按任务创建，不作为服务器 D 上的常驻服务。容器只需出站 HTTPS 访问 OSS presigned URL；训练任务不注册 Worker、不轮询 Redis，也不回调 backend。
 
 
 ---
@@ -221,16 +213,22 @@ cd services/backend && mvn -DskipTests package
 # 产物：services/backend/target/xjicloud-backend-1.0.0.jar
 ```
 
-
-
-### 4.3 GPU Worker 镜像
+升级已有 PostgreSQL 数据库前，先备份数据库并应用训练派发字段迁移；生产 profile 使用 `ddl-auto: validate`，不会自动补列：
 
 ```bash
-docker build -t xjicloud/gpu-worker:latest services/gpu-worker/
-# 生产：推送到阿里云 ACR，供 CCI 拉取
-# docker tag xjicloud/gpu-worker:latest registry.cn-hangzhou.aliyuncs.com/your-ns/xjicloud-gpu-worker:latest
-# docker push registry.cn-hangzhou.aliyuncs.com/your-ns/xjicloud-gpu-worker:latest
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V20260923_01__training_dispatch_fields.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V20260923_02__training_dispatch_backoff.sql
 ```
+
+第一项迁移将现有任务的 `dispatch_attempt` 回填为 `0`、将 claim/cancellation 标志初始化为 `false`。第二项为 ECI 派发失败和配置缺失添加持久化重试时间。后端会在派发前为旧 `QUEUED` 任务补齐 attempt 和幂等键。
+
+
+
+### 4.3 ECI 训练镜像配置
+
+训练使用已经上传的 3DGS 镜像，由 backend 配置 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 引用。部署仓库不创建、构建或推送训练镜像。独立 ECI 标准档任务样例见 [`eci-manager/scripts/submit-3dgs-standard.sh`](../eci-manager/scripts/submit-3dgs-standard.sh)；产品训练仍经用户上传、Redis 和主 backend `TrainingDispatchScheduler` 派发。
+
+backend 同时配置可访问的 `XJICLOUD_ECI_MANAGER_BASE_URL` 和服务间 HTTP 鉴权值 `XJICLOUD_ECI_MANAGER_API_KEY`。此 API key 用于 `X-Api-Key`，不是阿里云 AccessKey，必须与 ECI Manager `ECI_API_KEY` 一致并存放在受保护的 Secret/env 文件中。阿里云 ECI/OSS AK/SK 继续由主 backend 云钥列表管理，选用后经现有 `/runtime-credentials` 接口推送给 ECI Manager；不要把 AK/SK 注入训练容器。
 
 ---
 
@@ -246,7 +244,6 @@ docker build -t xjicloud/gpu-worker:latest services/gpu-worker/
 | A 前端    | —           | `https://cloud.example.com`          |
 | B 后端    | `10.0.1.20` | `api-internal.example.com`（可选内网 DNS） |
 | C MinIO | `10.0.1.30` | —                                    |
-| D GPU   | `10.0.1.40` | —                                    |
 
 
 ---
@@ -600,21 +597,9 @@ sudo certbot --nginx -d cloud.example.com
 
 
 
-### 5.4 服务器 D — GPU Worker（预生产）
+### 5.4 训练计算
 
-```bash
-# 在服务器 D 上，已安装 Docker + NVIDIA Container Toolkit（可选）
-docker run -d --name xjicloud-worker --restart unless-stopped \
-  --gpus all \
-  -e XJICLOUD_BACKEND_URL=http://10.0.1.20:8080 \
-  -e WORKER_SECRET='与后端 xjicloud.worker.shared-secret 一致' \
-  -e WORKER_NAME=gpu-worker-1 \
-  xjicloud/gpu-worker:latest
-```
-
-Worker 通过后端下发的 **presigned URL** 访问 OSS，通常**无需**在 Worker 上单独配置 OSS 凭证（除非改为直连 SDK）。
-
-启动流程：等待 B `/actuator/health` → 注册 → 心跳 → 长轮询领任务 → mock 训练 → 回传模型。
+当前不部署服务器 D 常驻 Worker。backend 从 Redis 消费训练任务，调用 ECI Manager 创建 one-shot CCI 容器；旧 `services/gpu-worker/` 仅保留源码，活动 Compose、Kustomize 与部署脚本均不构建或启动它。
 
 ---
 
@@ -633,7 +618,7 @@ xjicloud:
     access-key: RAM 子账号 AccessKey
     secret-key: RAM 子账号 SecretKey
     path-style-access: false
-    presign-expiration-minutes: 120
+    presign-expiration-minutes: 1440
 ```
 
 **控制台基础配置：**
@@ -773,7 +758,9 @@ curl -i -X OPTIONS "http://114.55.113.49/api/v1/projects" \
 2. 上述 **3a OSS CORS 预检** 成功
 3. 用户前端打开项目 → **数据上传** → 选择图片文件夹 → **开始上传并训练**
 4. 浏览器 Network 中 presigned **PUT** 返回 `200`（非 CORS / `net::ERR_FAILED`）
-5. 任务进入 **排队中**，Worker 消费后 SSE 显示进度，完成后可下载 `model.ply`
+5. 任务进入 **排队中**，backend scheduler 派发到 ECI，SSE 显示状态，完成后可下载 `model.ply`
+
+当前真云训练路径仅有 JPG/JPEG 格式验证证据；PNG/WebP 虽被前端筛选器接受，仍是待确认项。
 
 ---
 
@@ -781,65 +768,29 @@ curl -i -X OPTIONS "http://114.55.113.49/api/v1/projects" \
 
 ### 5.6 生产环境 — 阿里云 CCI 弹性容器实例
 
-预生产服务器 D 的 Docker Worker，在生产替换为 **CCI**：有训练任务时启动实例，空闲时可停止以节省成本。
+用户上传完成后，主 backend 将任务写入 Redis；主 backend `TrainingDispatchScheduler` 消费队列并调用 ECI Manager 创建 CCI one-shot 容器。调度责任保留在主 backend。
 
-#### 5.6.1 准备镜像（ACR）
+#### 5.6.1 配置已上传的训练镜像
 
-```bash
-# 构建机
-docker build -t xjicloud/gpu-worker:latest services/gpu-worker/
-docker tag xjicloud/gpu-worker:latest \
-  registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest
-docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker:latest
+设置 backend 属性 `xjicloud.eci-manager.training-image`，或通过环境变量 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 引用已经上传且可由 ECI 拉取的 3DGS 镜像。配置示例中的地址是占位值：
+
+```yaml
+xjicloud:
+  eci-manager:
+    base-url: ${XJICLOUD_ECI_MANAGER_BASE_URL:http://127.0.0.1:8081}
+    api-key: ${XJICLOUD_ECI_MANAGER_API_KEY:}
+    training-image: ${XJICLOUD_ECI_MANAGER_TRAINING_IMAGE:registry.example.com/your-project/3dgs:1.0.0}
 ```
 
+将 `XJICLOUD_ECI_MANAGER_BASE_URL` 指向 backend 可访问的 ECI Manager 根地址（不带 `/api/v1`）；`XJICLOUD_ECI_MANAGER_API_KEY` 必须与 ECI Manager 的 `ECI_API_KEY` 相同，并存放在 Secret 或受保护的 env 文件中。未配置 API key 或训练镜像时，任务会保持 `QUEUED` 并等待配置后重试。
 
+ECI Manager 使用 `storage.mode=keys` 为输入 GET 和输出 PUT 签发 OSS URL。真云配置 `ECI_OSS_PRESIGN_EXPIRATION_MINUTES` 必须至少为 `1440` 分钟，以覆盖最长 `21600` 秒运行时间及余量；使用与 OSS 同地域的内网 endpoint。不要将 OSS AK/SK 注入训练容器。
 
-#### 5.6.2 创建 CCI 实例（控制台要点）
+backend 提交的命令为 `/opt/3dgs/docker/entrypoint.sh` + `shell` + base64 bootstrap，资源为 16 CPU、60 GiB、1 GPU、`gn7i-c16g1.4xlarge`、共享内存 `8Gi`、最长运行 `21600` 秒。bootstrap 源文件 `eci-manager/scripts/3dgs-bootstrap.py` 的修改须同步 backend classpath snapshot `services/backend/src/main/resources/3dgs-bootstrap.py`，并保持测试中的字节一致性校验。
 
+现有独立 ECI 标准档任务提交样例见 [`eci-manager/scripts/submit-3dgs-standard.sh`](../eci-manager/scripts/submit-3dgs-standard.sh)；产品训练仍由 backend scheduler 按任务派发。
 
-| 配置项  | 建议值                                |
-| ---- | ---------------------------------- |
-| 镜像   | ACR 中 `xjicloud-gpu-worker:latest` |
-| 规格   | 按 GPU 需求选择（如 GPU 计算型）              |
-| 网络   | 与**服务器 B 同一 VPC**，分配私网 IP          |
-| 重启策略 | 按需；任务结束后可手动/脚本停止实例                 |
-
-
-**环境变量（必填）：**
-
-
-| 变量                     | 示例                      | 说明             |
-| ---------------------- | ----------------------- | -------------- |
-| `XJICLOUD_BACKEND_URL` | `http://10.0.1.20:8080` | 后端**内网**地址（推荐） |
-| `WORKER_SECRET`        | 与后端一致                   | Worker 注册密钥    |
-| `WORKER_NAME`          | `cci-worker-01`         | 管理面板中显示的名称     |
-
-
-> Worker 使用后端 API 返回的 presigned URL 读写 OSS，**生产一般无需**在 CCI 中配置 OSS AccessKey。
-
-
-
-#### 5.6.3 按需启停
-
-
-| 场景                | 操作                                                                      |
-| ----------------- | ----------------------------------------------------------------------- |
-| 有训练任务、队列积压        | 启动 1~N 个 CCI 实例                                                         |
-| 队列清空、无 RUNNING 任务 | 停止 CCI 实例                                                               |
-| 自动扩缩（进阶）          | 可通过阿里云函数计算 / 运维脚本监听 Admin 面板队列深度或 Redis `LLEN xjicloud:jobs` 触发 CCI API |
-
-
-**安全组：** CCI 所在安全组需 **出站** 访问 B:8080；B 的安全组需 **入站** 允许 CCI 网段访问 8080。
-
-#### 5.6.4 使用 CLI 启动示例（可选）
-
-```bash
-# 需安装 aliyun CLI 并配置凭证；参数以当前 CCI API 文档为准
-# aliyun cci CreateContainerGroup --ContainerGroupName xjicloud-worker-1 ...
-```
-
-具体 API 字段随阿里云产品更新，请以 [容器计算服务 CCI 文档](https://help.aliyun.com/product/97658.html) 为准。
+网络上，backend 访问 ECI Manager；训练容器出站 HTTPS 访问 OSS。活动部署不启动常驻 Worker 或第二个队列消费者。
 
 ---
 
@@ -854,8 +805,8 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 | CORS          | 服务器 B `application-prod.yml` | 含 `https://cloud.example.com`                |
 | OSS CORS      | MinIO / 阿里云 Bucket           | 允许前端域名 PUT/GET                               |
 | OSS endpoint  | 服务器 B                        | 预生产：`http://C:9000`；生产：阿里云 OSS HTTPS         |
-| Worker 密钥     | B 与 D/CCI                    | `worker.shared-secret` = `WORKER_SECRET`     |
-| Worker 可达后端   | D/CCI → B                    | `curl http://10.0.1.20:8080/actuator/health` |
+| ECI 训练镜像 | backend | `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 指向已上传 3DGS 镜像 |
+| ECI OSS presign | ECI Manager | `ECI_OSS_PRESIGN_EXPIRATION_MINUTES >= 1440` |
 | SSE           | 服务器 A Nginx                  | `proxy_buffering off`                        |
 | 浏览器直传         | 用户 → OSS                     | 开发者工具 Network 中 PUT 指向 C 或 `*.aliyuncs.com`  |
 
@@ -866,7 +817,7 @@ docker push registry.cn-hangzhou.aliyuncs.com/YOUR_NAMESPACE/xjicloud-gpu-worker
 
 ## 7. 单机 / 开发环境（可选）
 
-本地或单机演示仍可使用 Docker Compose（Redis + MinIO + Backend + Worker 同机）：
+本地或单机演示可使用 Docker Compose（Redis + MinIO + Backend；不启动训练 Worker）：
 
 ```bash
 cd deploy && docker compose up -d --build
@@ -926,7 +877,7 @@ sudo systemctl restart xjicloud-backend
 
 > **注意：** `spring.datasource.username/password` 是**数据库连接**凭证，不是管理面板登录账号。
 
-- 可在面板中修改 OSS 配置（生产切到阿里云 OSS 时尤其方便），支持连接测试、Worker 与任务监控；首次参数来自安装向导，此后可在本页热更新
+- 可在面板中修改 OSS 配置（生产切到阿里云 OSS 时尤其方便），支持连接测试与训练任务监控；首次参数来自安装向导，此后可在本页热更新
 
 ---
 
@@ -936,11 +887,11 @@ sudo systemctl restart xjicloud-backend
 
 - [ ] 用户通过 **服务器 A 域名** 注册/登录
 - [ ] 图片文件夹上传：浏览器直传 **MinIO/OSS** 成功（Network 可见 PUT）
-- [ ] 训练任务入队；**服务器 D 或 CCI** 上 Worker 在管理面板显示 ONLINE
-- [ ] SSE 训练进度正常刷新
+- [ ] ECI 训练任务经主 backend scheduler 派发并完成
+- [ ] SSE 收到 `QUEUED`、`RUNNING` 和终态粗状态更新
 - [ ] 完成后可下载 `model.ply`
 - [ ] PLY/SPZ 模型上传与 Spark 查看器正常（文件在 **服务器 B** 本地盘）
-- [ ] 生产：OSS 为阿里云、CCI 可按需启动并完成一次完整训练
+- [ ] 生产：OSS 为阿里云，ECI Manager 能按任务创建 CCI 并完成一次完整训练
 - [ ] 管理后台 **OSS 对象存储** 可保存配置并测试连接成功
 - [ ] **阿里云 OSS：** Bucket 跨域 CORS 已允许前端 Origin；`curl` OSS OPTIONS 预检通过（见 [§5.5.4](#554-步骤-3验证在用户-pc或浏览器所在机器上执行)）
 - [ ] 图片数据集可浏览器直传 OSS（PUT 200），任务可入队并完成训练
@@ -959,9 +910,8 @@ sudo systemctl restart xjicloud-backend
 | CORS 错误（调 `/api/` 失败）      | B 未配置前端 Origin                                  | 修改 `xjicloud.cors.allowed-origins`（见 [§5.5.3](#553-步骤-2在后端-b-配置-api-cors与-oss-bucket-cors-无关)） |
 | OSS PUT 失败 / 前端「网络错误」      | **预生产 MinIO：** 全局 CORS 填错；防火墙只放了 A/B、未放用户 PC 网段 | 见 [§5.1.5](#515-cors社区版-minio仅全局-cors)                                                         |
 | OSS PUT 失败 / 浏览器 CORS（阿里云） | **生产 OSS：** Bucket 未配置跨域；Origin 与地址栏不一致         | 见 [§5.5.1](#551-为什么-oss-测试成功但前端上传仍报-cors--网络错误)～[§5.5.4](#554-步骤-3验证在用户-pc或浏览器所在机器上执行)         |
-| 任务一直 QUEUED                | Worker/CCI 未运行                                  | 启动 D 或 CCI；检查 `WORKER_SECRET`                                                                  |
-| Worker OFFLINE             | 心跳超时                                            | B 防火墙；`XJICLOUD_BACKEND_URL` 是否用内网地址                                                           |
-| CCI 无法注册                   | VPC 不通或 URL 错误                                  | CCI 与 B 同 VPC；健康检查 `/actuator/health`                                                          |
+| ECI 任务未启动 | backend 未配置已有训练镜像，或 ECI Manager 无法创建实例 | 核对 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE`、ECI Manager 日志与云侧实例状态 |
+| CCI 无法下载/上传对象 | presigned URL 网络不可达或过期 | 检查 CCI 到 OSS 的 HTTPS 出站和 ECI 任务日志 |
 | SSE 无进度                    | Nginx 缓冲                                        | A 上 `proxy_buffering off`                                                                      |
 | 生产 OSS 失败（管理端测试）           | RAM 权限 / endpoint 地域 / 密钥错误                     | 管理面板测试连接；核对 `path-style-access: false`；密钥须完整明文保存                                               |
 | 管理面板 401                   | yml 改密未同步到 `admin_users`                        | 见 [§8.1](#81-管理员账号与-yml-的关系)                                                                   |
@@ -983,7 +933,7 @@ sudo systemctl restart xjicloud-backend
 | `[deploy/config/README.md](config/README.md)`                                       | 后端配置说明                    |
 | `[deploy/docker-compose.yml](docker-compose.yml)`                                   | 单机/开发 Compose             |
 | `[deploy/env.example](env.example)`                                                 | Compose 环境变量              |
-| `[gpu-worker/Dockerfile](../services/gpu-worker/Dockerfile)`                        | Worker 镜像（预生产 D / 生产 CCI） |
+| `[services/gpu-worker/](../services/gpu-worker/)`                                  | 旧 Worker 源码留存；活动部署不构建或启动 |
 | `[AGENT_CONTEXT.md](../AGENT_CONTEXT.md)`                                           | Agent 项目上下文               |
 | `[deploy/k8s/README.md](k8s/README.md)`                                             | **K3s/K8s** 本地三节点与 ACK 上云 |
 
@@ -997,7 +947,7 @@ sudo systemctl restart xjicloud-backend
 本地 3 VM（192.168.203.133/134/135）可用 K3s 验证完整流水线，清单与脚本见 **[deploy/k8s/README.md](k8s/README.md)**。
 
 ```bash
-# 133 本机：安装 K3s（推荐 --docker）、构建镜像、部署
+# 133 本机：安装 K3s（推荐 --docker）、构建 backend/frontend 镜像、部署
 sudo ./deploy/k8s/scripts/install-k3s-server.sh
 sudo ./deploy/k8s/scripts/build-and-import-images.sh
 cp deploy/k8s/secrets.example.yaml deploy/k8s/secrets.yaml
@@ -1005,4 +955,4 @@ sudo ./deploy/k8s/scripts/deploy-local.sh
 sudo ./deploy/k8s/scripts/validate-local.sh
 ```
 
-134/135 加入 Agent 后执行 `label-nodes.sh`；生产 ACK 使用 `deploy/k8s/overlays/aliyun/`，GPU 算力见 `overlays/aliyun/CCI.md`。
+134/135 加入 Agent 后执行 `label-nodes.sh`；生产 ACK 使用 `deploy/k8s/overlays/aliyun/`，ECI 镜像配置与运行参数见 `overlays/aliyun/CCI.md`。

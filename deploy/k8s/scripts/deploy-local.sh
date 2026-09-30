@@ -21,7 +21,6 @@ kubectl -n xjicloud rollout status statefulset/postgres --timeout=180s
 kubectl -n xjicloud rollout status statefulset/minio --timeout=180s
 kubectl -n xjicloud rollout status deployment/backend --timeout=300s
 kubectl -n xjicloud rollout status deployment/frontend --timeout=120s
-kubectl -n xjicloud rollout status deployment/gpu-worker --timeout=120s
 
 echo ""
 kubectl -n xjicloud get pods -o wide

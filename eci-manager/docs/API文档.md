@@ -200,12 +200,13 @@ RUNNING → STOPPING → TERMINATED
 
 `POST /api/v1/eci/tasks`
 
-受理后落库实际规格，创建关联实例，立即返回（异步创建云资源）。成功时任务多为 `STARTING`，并带非空 `instanceId`。
+受理后落库实际规格，创建关联实例，立即返回（异步创建云资源）。成功时任务多为 `STARTING`，并带非空 `instanceId`。可传 `clientRequestId` 实现提交幂等：同一 key 返回已创建任务及其实例，不重复创建；未传或为空白时每次请求仍创建新任务。
 
 #### 请求体
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
+| `clientRequestId` | string | 否 | 可选客户端请求幂等 key；同一 key 在任务记录中唯一，重复提交返回原任务，不再创建实例。任务记录保留期间 key 不可复用；不同 key 创建独立任务 |
 | `image` | string | **是** | 完整镜像地址 |
 | `name` | string | 否 | 未传则 `task-` + UUID 前 8 位 |
 | `command` | string[] | 否 | 覆盖镜像 ENTRYPOINT |
@@ -255,6 +256,7 @@ RUNNING → STOPPING → TERMINATED
 
 ```json
 {
+  "clientRequestId": "training-submit-2026-09-23-001",
   "name": "cloud-task-1",
   "image": "registry-vpc.cn-hangzhou.aliyuncs.com/eci_open/nginx:1.14.2",
   "imageSnapshotId": "imc-2zebxkiifuyzzlhl",

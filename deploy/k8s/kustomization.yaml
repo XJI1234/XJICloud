@@ -17,7 +17,6 @@ resources:
   - backend/pvc.yaml
   - backend/deployment.yaml
   - backend/service.yaml
-  - gpu-worker/deployment.yaml
   - frontend/deployment.yaml
   - frontend/service.yaml
   - ingress.yaml
@@ -25,9 +24,6 @@ resources:
 images:
   - name: xjicloud/backend
     newName: xjicloud/backend
-    newTag: local
-  - name: xjicloud/gpu-worker
-    newName: xjicloud/gpu-worker
     newTag: local
   - name: xjicloud/frontend
     newName: xjicloud/frontend

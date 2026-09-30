@@ -9,15 +9,11 @@ echo "[build] backend..."
 docker build -t xjicloud/backend:local services/backend/
 
 
-echo "[build] gpu-worker..."
-docker build -t xjicloud/gpu-worker:local services/gpu-worker/
-
 echo "[build] frontend (may take several minutes)..."
 docker build -f deploy/k8s/frontend/Dockerfile -t xjicloud/frontend:local .
 
 echo "[import] Loading images into K3s..."
 docker save xjicloud/backend:local | /usr/local/bin/k3s ctr images import -
-docker save xjicloud/gpu-worker:local | /usr/local/bin/k3s ctr images import -
 docker save xjicloud/frontend:local | /usr/local/bin/k3s ctr images import -
 
 echo "[build] Done. Images:"

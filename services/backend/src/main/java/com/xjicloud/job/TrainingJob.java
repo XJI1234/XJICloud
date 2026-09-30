@@ -49,6 +49,28 @@ public class TrainingJob {
 
     private UUID workerId;
 
+    @Column(nullable = false)
+    private int dispatchAttempt;
+
+    @Column(length = 128, unique = true)
+    private String clientRequestId;
+
+    private UUID eciTaskId;
+
+    private Instant dispatchClaimedAt;
+
+    @Column(nullable = false)
+    private boolean dispatchClaimActive;
+
+    private UUID dispatchClaimToken;
+
+    private Instant dispatchEnqueuedAt;
+
+    private Instant dispatchNextAttemptAt;
+
+    @Column(nullable = false)
+    private boolean eciCancellationPending;
+
     @Column(length = 1024)
     private String errorMessage;
 
@@ -152,6 +174,78 @@ public class TrainingJob {
 
     public void setWorkerId(UUID workerId) {
         this.workerId = workerId;
+    }
+
+    public int getDispatchAttempt() {
+        return dispatchAttempt;
+    }
+
+    public void setDispatchAttempt(int dispatchAttempt) {
+        this.dispatchAttempt = dispatchAttempt;
+    }
+
+    public String getClientRequestId() {
+        return clientRequestId;
+    }
+
+    public void setClientRequestId(String clientRequestId) {
+        this.clientRequestId = clientRequestId;
+    }
+
+    public UUID getEciTaskId() {
+        return eciTaskId;
+    }
+
+    public void setEciTaskId(UUID eciTaskId) {
+        this.eciTaskId = eciTaskId;
+    }
+
+    public Instant getDispatchClaimedAt() {
+        return dispatchClaimedAt;
+    }
+
+    public void setDispatchClaimedAt(Instant dispatchClaimedAt) {
+        this.dispatchClaimedAt = dispatchClaimedAt;
+    }
+
+    public boolean isDispatchClaimActive() {
+        return dispatchClaimActive;
+    }
+
+    public void setDispatchClaimActive(boolean dispatchClaimActive) {
+        this.dispatchClaimActive = dispatchClaimActive;
+    }
+
+    public UUID getDispatchClaimToken() {
+        return dispatchClaimToken;
+    }
+
+    public void setDispatchClaimToken(UUID dispatchClaimToken) {
+        this.dispatchClaimToken = dispatchClaimToken;
+    }
+
+    public Instant getDispatchEnqueuedAt() {
+        return dispatchEnqueuedAt;
+    }
+
+    public void setDispatchEnqueuedAt(Instant dispatchEnqueuedAt) {
+        this.dispatchEnqueuedAt = dispatchEnqueuedAt;
+    }
+
+    public Instant getDispatchNextAttemptAt() {
+        return dispatchNextAttemptAt;
+    }
+
+    public void setDispatchNextAttemptAt(Instant dispatchNextAttemptAt) {
+        this.dispatchNextAttemptAt = dispatchNextAttemptAt;
+    }
+
+    public boolean isEciCancellationPending() {
+        return eciCancellationPending;
+    }
+
+    public void setEciCancellationPending(boolean eciCancellationPending) {
+        this.eciCancellationPending = eciCancellationPending;
     }
 
     public String getErrorMessage() {

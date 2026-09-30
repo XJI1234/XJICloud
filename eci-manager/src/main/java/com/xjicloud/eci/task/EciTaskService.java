@@ -13,9 +13,12 @@ import com.xjicloud.eci.provider.ShmSize;
 import com.xjicloud.eci.task.dto.CreateTaskRequest;
 import com.xjicloud.eci.task.dto.TaskResponse;
 import com.xjicloud.eci.task.storage.TaskStorageResolver;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
@@ -43,18 +46,21 @@ public class EciTaskService {
     private final EciProperties properties;
     private final ObjectMapper objectMapper;
     private final TaskStorageResolver taskStorageResolver;
+    private final TransactionTemplate createTransaction;
 
     public EciTaskService(
             EciTaskRepository repository,
             EciInstanceService instanceService,
             EciProperties properties,
             ObjectMapper objectMapper,
-            TaskStorageResolver taskStorageResolver) {
+            TaskStorageResolver taskStorageResolver,
+            PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.instanceService = instanceService;
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.taskStorageResolver = taskStorageResolver;
+        this.createTransaction = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -62,8 +68,28 @@ public class EciTaskService {
      * <p>
      * 同一事务内完成；实例创建失败则回滚，避免留下无 instanceId 的 PENDING。
      */
-    @Transactional
     public TaskResponse create(CreateTaskRequest request) {
+        String clientRequestId = resolveClientRequestId(request != null ? request.getClientRequestId() : null);
+        if (clientRequestId != null) {
+            EciTaskEntity existing = repository.findByClientRequestId(clientRequestId).orElse(null);
+            if (existing != null) {
+                return toResponse(existing);
+            }
+        }
+
+        try {
+            return createTransaction.execute(status -> createNewTask(request, clientRequestId));
+        } catch (DataIntegrityViolationException exception) {
+            if (clientRequestId == null) {
+                throw exception;
+            }
+            return repository.findByClientRequestId(clientRequestId)
+                    .map(this::toResponse)
+                    .orElseThrow(() -> exception);
+        }
+    }
+
+    private TaskResponse createNewTask(CreateTaskRequest request, String clientRequestId) {
         if (request == null || !StringUtils.hasText(request.getImage())) {
             throw new BusinessException("image 为必填项");
         }
@@ -87,6 +113,7 @@ public class EciTaskService {
 
         EciTaskEntity entity = new EciTaskEntity();
         entity.setId(taskId);
+        entity.setClientRequestId(clientRequestId);
         entity.setName(name);
         entity.setStatus(TaskStatus.PENDING);
         entity.setImage(image);
@@ -103,7 +130,12 @@ public class EciTaskService {
         entity.setEnvJson(toJson(env));
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
-        repository.save(entity);
+        if (clientRequestId != null) {
+            // Claim the unique key before creating an instance; a losing concurrent request exits here.
+            repository.saveAndFlush(entity);
+        } else {
+            repository.save(entity);
+        }
 
         CreateInstanceRequest instanceRequest = new CreateInstanceRequest();
         instanceRequest.setName(name);
@@ -127,6 +159,10 @@ public class EciTaskService {
         repository.save(entity);
 
         return toResponse(entity);
+    }
+
+    private static String resolveClientRequestId(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     @Transactional(readOnly = true)

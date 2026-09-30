@@ -33,7 +33,7 @@ XJICloud/
 ├── packages/spark/           # Spark 2.0 TS 渲染库 @xjicloud/spark
 ├── packages/shared/          # 共享 ApiResponse / ApiError
 ├── services/backend/         # Spring Boot（:8080）
-├── services/gpu-worker/      # Python Worker + Dockerfile
+├── services/gpu-worker/      # legacy Worker 源码留存；不由活动部署构建或启动
 ├── rust/                     # spark-rs、spark-worker-rs WASM
 ├── vendors/supersplat/       # SuperSplat 预编译静态资源
 ├── deploy/                   # Compose、Nginx、systemd、K8s
@@ -76,7 +76,10 @@ flowchart TB
   end
 
   subgraph compute [Compute]
-    Worker[gpu-worker_container]
+    Dispatch[TrainingDispatchScheduler]
+    EciManager[eci-manager]
+    Container[ECI_one-shot_container]
+    LegacyApi[legacy_Worker_API_compatibility]
   end
 
   UserFE --> Nginx
@@ -90,8 +93,11 @@ flowchart TB
   API --> LocalStore --> Disk
   SSE --> UserFE
   Queue --> Redis
-  Worker -->|register_heartbeat_jobs| API
-  Worker --> OSS
+  Queue --> Dispatch
+  Dispatch -->|clientRequestId| EciManager
+  EciManager --> Container
+  Container -->|presigned_GET_PUT| OSS
+  LegacyApi -.->|仅保留旧 API 兼容| API
 ```
 
 ### 3.1 双存储策略（重要）
@@ -99,7 +105,7 @@ flowchart TB
 | 数据类型 | 存储 | 服务类 |
 |----------|------|--------|
 | PLY/SPZ 模型、viewer.json | **本地磁盘** `{xjicloud.storage.root}` | `LocalFileStoreService` |
-| 图片数据集、训练产出 model.ply | **OSS**（浏览器/Worker 直传） | `OssStorageService` |
+| 图片数据集、训练产出 model.ply | **OSS**（浏览器/ECI one-shot 容器直传） | `OssStorageService` |
 | 元数据（用户、项目、任务、Worker） | **H2（dev）/ PostgreSQL（prod）** | JPA 实体 |
 
 **不要**在未规划的情况下把 PLY/SPZ 模型迁移到 OSS，会破坏 Spark/SuperSplat 现有下载/Range 逻辑。
@@ -126,6 +132,8 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 - **不是** zip/tar 压缩包
 - **是** 浏览器端逻辑归档：`datasetArchive.ts` 过滤 JPG/PNG/WebP → 按 `webkitRelativePath` 排序 → 4 位序列重命名（`0001.jpg`…）→ 生成 `manifest.json` → 逐文件 presigned PUT 到 OSS
 
+前端归档器会筛选 JPG/PNG/WebP；目前真云训练路径仅有 JPG/JPEG 验证证据，不据此承诺 PNG/WebP 可用。其他格式仍是真云路径待确认项。
+
 ```
 1. 用户选择文件夹（webkitdirectory，须先打开项目）
    → src/utils/datasetArchive.ts 过滤 jpg/png/webp，重命名为 0001.jpg…
@@ -138,15 +146,22 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
    → datasets/{jobId}/images/{archivedName} + datasets/{jobId}/manifest.json
 
 4. POST /api/v1/projects/{id}/datasets/{jobId}/complete
-   → status=QUEUED，RPUSH 写入 Redis 队列 xjicloud:jobs
+   → status=QUEUED，RPUSH 写入 Redis 待派发队列 xjicloud:jobs
 
-5. gpu-worker poll GET /api/v1/worker/jobs/next
-   → presigned GET 下载图片 → mock_trainer.py 分阶段上报进度
-   → presigned PUT output.ply 至 OSS → POST .../complete
+5. 主 backend 的 TrainingDispatchScheduler 消费 Redis 并 POST eci-manager `/api/v1/eci/tasks`
+   → 使用本 attempt 稳定的 `clientRequestId`、`storage.mode=keys` 和配置项 `XJICLOUD_ECI_MANAGER_TRAINING_IMAGE` 指向的已上传 3DGS 镜像
+   → 请求使用 `/opt/3dgs/docker/entrypoint.sh` + `shell` + base64 bootstrap；资源为 16 CPU / 60 GiB / 1 GPU、`gn7i-c16g1.4xlarge`、`shm=8Gi`、`maxRuntime=21600` 秒
+   → bootstrap 来源为 `eci-manager/scripts/3dgs-bootstrap.py`，backend classpath snapshot 位于 `services/backend/src/main/resources/3dgs-bootstrap.py`；源文件修改须同步 snapshot，并由测试验证字节一致
+   → eci-manager 为输入/输出签发 URL，容器下载图片、运行训练、上传 `output.ply` 后退出；不回调 backend
 
-6. 用户 GET /api/v1/jobs/{id}/events（SSE）实时看进度
+6. backend 轮询已绑定的 ECI task，将 RUNNING 和终态投影到 TrainingJob/SSE
+   → 用户 GET /api/v1/jobs/{id}/events 接收粗状态
    → COMPLETED 后 GET /api/v1/jobs/{id} 拿 presigned 下载 URL
 ```
+
+ECI 派发失败或配置缺失时，backend 将 `dispatch_next_attempt_at` 持久化为 30 秒后的重试时间；恢复扫描和实际 claim 都受该时间约束。取消中的任务若 ECI task ID 尚未绑定，也会沿同一退避与恢复路径收敛。
+
+调度责任留在主 backend：链路为用户上传 → Redis → 主 backend `TrainingDispatchScheduler` → eci-manager → ECI。真云 ECI OSS 预签名 URL 有效期须配置为至少 1440 分钟，以覆盖最长 21600 秒任务和余量。独立 3DGS 标准任务样例见 [`eci-manager/scripts/submit-3dgs-standard.sh`](../eci-manager/scripts/submit-3dgs-standard.sh)，不改变上述应用派发链路。
 
 **与 PLY/SPZ 模型上传的区别：** 图片数据集走 OSS + 训练队列；PLY/SPZ 走 `/projects/{id}/models/upload` 存本地盘，供查看器加载，**不是**训练输入。
 
@@ -162,7 +177,7 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 | `project/` | 工程项目 CRUD |
 | `model/` | PLY/SPZ 本地上传下载、viewer-config、export |
 | `job/` | 训练任务、数据集 API、`TrainingJobService` |
-| `worker/` | Worker 节点注册、心跳、领任务、进度 |
+| `worker/` | legacy Worker 注册/心跳；旧队列领取与进度/完成/失败回调已停用 |
 | `admin/` | 管理员账户、Admin API |
 | `oss/` | S3 兼容存储、presigned URL、DB 热更新配置 |
 | `queue/` | Redis 列表队列 |
@@ -172,7 +187,7 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 **入口：** `services/backend/src/main/java/com/xjicloud/XjiCloudApplication.java`（`@EnableScheduling`）
 
 **配置：** `services/backend/src/main/resources/application.yml`  
-关键前缀：`xjicloud.jwt` / `storage` / `oss` / `worker` / `admin` / `cors`
+关键前缀：`xjicloud.jwt` / `storage` / `oss` / `worker` / `eci-manager` / `admin` / `cors`
 
 **OSS 运行时配置：** 默认读 yml，管理员可通过 Admin API 写入 `system_config` 表并 `reloadClients()`。
 
@@ -212,10 +227,10 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 |------|------|
 | POST | `/worker/register` |
 | POST | `/worker/heartbeat` |
-| GET | `/worker/jobs/next` | 长轮询（默认 25s） |
-| POST | `/worker/jobs/{id}/progress` |
-| POST | `/worker/jobs/{id}/complete` |
-| POST | `/worker/jobs/{id}/fail` |
+| GET | `/worker/jobs/next` | legacy 路由已停用消费，返回空任务 |
+| POST | `/worker/jobs/{id}/progress` | legacy 回调已停用，返回 410 |
+| POST | `/worker/jobs/{id}/complete` | legacy 回调已停用，返回 410 |
+| POST | `/worker/jobs/{id}/fail` | legacy 回调已停用，返回 410 |
 
 ### 6.3 Admin（Bearer admin JWT）
 
@@ -261,9 +276,9 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 - `base: /admin/`，端口 5175，包名 `@xjicloud/admin`
 - 共用 `@xjicloud/shared`；构建：`pnpm build:admin`
 
-## 9. GPU Worker（`services/gpu-worker/`）
+## 9. Legacy GPU Worker 源码（`services/gpu-worker/`）
 
-`worker_agent.py` + `mock_trainer.py`；Docker 构建上下文为 `services/gpu-worker/`。
+该目录仅保留旧 Redis Worker 源码供兼容参考，不是 ECI 训练镜像的构建上下文。活动 Compose、Kustomize、构建/导入脚本和本地部署脚本均不构建或启动它；`deploy/k8s/gpu-worker/deployment.yaml` 是未被活动资源引用的历史清单。旧 Worker API 路由仍保留，行为见 §6.2。
 
 ## 10. 本地开发
 
@@ -275,18 +290,17 @@ cd services/backend && mvn spring-boot:run
 pnpm dev
 pnpm dev:admin
 pnpm dev:web-legacy
-docker build -t xjicloud/gpu-worker services/gpu-worker/
 ```
 
-部署见 [Deploy.md](Deploy.md)；compose 上下文为 `services/backend`、`services/gpu-worker`。
+部署见 [Deploy.md](Deploy.md)；本地 Compose 不启动训练 Worker。
 
 ## 11. 已知限制
 
 1. SuperSplat：使用 `vendors/supersplat` 预编译资源；web2（及旧版 web）`predev`/`prebuild` 自动复制到各自 `public/supersplat`
 2. OSS CORS / 用户 PC 网段防火墙（Deploy.md §5.1.5）
 3. SSE 需 Nginx `proxy_buffering off`
-4. Worker 密钥须与后端一致
-5. 训练仍为 mock
+4. 旧 Worker API 保留兼容语义；活动训练路径使用现有 ECI 3DGS 镜像
+5. 真云训练格式目前仅有 JPG/JPEG 验证证据；PNG/WebP 尚待确认
 
 ## 12. Agent 约定
 

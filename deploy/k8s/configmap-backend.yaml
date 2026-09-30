@@ -14,3 +14,7 @@ data:
   XJICLOUD_CORS_ORIGINS: http://192.168.203.133
   XJICLOUD_STORAGE_ROOT: /data/xjicloud
   XJICLOUD_ADMIN_USERNAME: admin
+  # Replace with an address reachable from the backend pod.
+  XJICLOUD_ECI_MANAGER_BASE_URL: http://192.168.203.133:8081
+  # Placeholder only; replace with the already-uploaded 3DGS image.
+  XJICLOUD_ECI_MANAGER_TRAINING_IMAGE: registry.example.com/your-project/3dgs:1.0.0

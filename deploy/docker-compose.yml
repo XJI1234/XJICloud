@@ -48,6 +48,9 @@ services:
       OSS_BUCKET: ${OSS_BUCKET:-xjicloud}
       OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:-minioadmin}
       OSS_SECRET_KEY: ${OSS_SECRET_KEY:-minioadmin}
+      XJICLOUD_ECI_MANAGER_BASE_URL: ${XJICLOUD_ECI_MANAGER_BASE_URL:-http://host.docker.internal:8081}
+      XJICLOUD_ECI_MANAGER_API_KEY: ${XJICLOUD_ECI_MANAGER_API_KEY:-}
+      XJICLOUD_ECI_MANAGER_TRAINING_IMAGE: ${XJICLOUD_ECI_MANAGER_TRAINING_IMAGE:-}
       XJICLOUD_JWT_SECRET: ${XJICLOUD_JWT_SECRET:-change-me-in-production-use-at-least-32-chars-long-secret-key}
       XJICLOUD_WORKER_SECRET: ${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
     command:
@@ -66,23 +69,6 @@ services:
       - "8080:8080"
     volumes:
       - backend_data:/app/data
-
-  gpu-worker:
-    build:
-      context: ../services/gpu-worker
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      - backend
-    environment:
-      XJICLOUD_BACKEND_URL: http://backend:8080
-      WORKER_SECRET: ${XJICLOUD_WORKER_SECRET:-change-me-worker-secret-in-production}
-      WORKER_NAME: ${WORKER_NAME:-xjicloud-gpu-worker-1}
-      OSS_ENDPOINT: http://minio:9000
-      OSS_REGION: ${OSS_REGION:-us-east-1}
-      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:-minioadmin}
-      OSS_SECRET_KEY: ${OSS_SECRET_KEY:-minioadmin}
-      OSS_PATH_STYLE: "true"
 
 volumes:
   minio_data:

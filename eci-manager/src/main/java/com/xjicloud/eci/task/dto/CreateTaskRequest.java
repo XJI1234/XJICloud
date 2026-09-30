@@ -9,6 +9,8 @@ import java.util.Map;
  */
 public class CreateTaskRequest {
 
+    /** 可选；同一值在任务记录中只受理一次。 */
+    private String clientRequestId;
     private String name;
     /** 必填：完整镜像地址。 */
     private String image;
@@ -32,6 +34,14 @@ public class CreateTaskRequest {
     private Map<String, String> env;
     /** 可选；OSS storage 块。有值时须 OSS 已启用；解析失败则整单 400，不落库。 */
     private TaskStorageRequest storage;
+
+    public String getClientRequestId() {
+        return clientRequestId;
+    }
+
+    public void setClientRequestId(String clientRequestId) {
+        this.clientRequestId = clientRequestId;
+    }
 
     public String getName() {
         return name;

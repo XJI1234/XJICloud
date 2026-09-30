@@ -35,6 +35,10 @@ xjicloud:
     api-key: ${XJICLOUD_ECI_MANAGER_API_KEY:}
     connect-timeout: ${XJICLOUD_ECI_MANAGER_CONNECT_TIMEOUT:3s}
     read-timeout: ${XJICLOUD_ECI_MANAGER_READ_TIMEOUT:20s}
+    training-image: ${XJICLOUD_ECI_MANAGER_TRAINING_IMAGE:}
+    dispatch-delay-ms: ${XJICLOUD_ECI_MANAGER_DISPATCH_DELAY_MS:1000}
+    recovery-delay-ms: ${XJICLOUD_ECI_MANAGER_RECOVERY_DELAY_MS:30000}
+    poll-delay-ms: ${XJICLOUD_ECI_MANAGER_POLL_DELAY_MS:5000}
 
 management:
   endpoints:
