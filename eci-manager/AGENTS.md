@@ -33,9 +33,9 @@
 | 角色 | 模型 | 职责 |
 | :--- | :--- | :--- |
 | **主 Agent** | gpt-6-sol high | 初始 Codex 会话；确认需求、编写计划、定义验收标准、拆分依赖、标注风险、汇总结果；不写实现代码。 |
-| **测试 Agent** (`eci_test_author`) | gpt-6-luna xhigh | 按需求编写必要测试；严格 TDD 时还负责最小可编译骨架；单任务。 |
-| **实现 Agent** (`eci_implementer`) | gpt-6-luna xhigh | 按已确认契约实现代码并验证；不改测试；单任务。 |
-| **审查/裁决 Agent** (`eci_reviewer`) | gpt-6-sol high | 独立语义审查、技术裁决；只读、单任务。 |
+| **测试 Agent** (`eci_test_author`) | gpt-6-luna max | 按需求编写必要测试；严格 TDD 时还负责最小可编译骨架；单任务。 |
+| **实现 Agent** (`eci_implementer`) | gpt-6-luna max | 按已确认契约实现代码并验证；不改测试；单任务。 |
+| **审查/裁决 Agent** (`eci_reviewer`) | gpt-6.1-sol high | 独立语义审查、技术裁决；只读、单任务。 |
 
 各角色的要求：
 

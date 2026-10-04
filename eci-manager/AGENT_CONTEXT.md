@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-09-21（P0 生命周期可靠性已交付）
+**最后更新：** 2026-10-04（旧 H2 任务状态 ENUM 启动升级）
 
 **3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`，默认 `shmSize=8Gi`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → 持久化 not-before → DELETE；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
@@ -44,6 +44,7 @@
   - ✅ P0 CREATE 使用本地实例 UUID ClientToken 与 `xjicloud-local-instance-id` Tag；未知结果继续用同 token 恢复
   - ✅ pre-P0 无 token CREATE 只创建 `Legacy CREATE outcome unknown` 隔离标记，禁止自动重放或云侧猜测；首次处理记录安全 ERROR，需人工核对后恢复
   - ✅ 任务取消状态为 `CANCELLING → CANCELLED`；仅实例 `TERMINATED`/`NotFound` 后写 `CANCELLED`
+  - ✅ H2 启动时幂等扩展旧 `eci_task.status` ENUM，先于 Hibernate 与生命周期恢复；升级前应停服务并备份数据库
   - ✅ Mock 覆盖崩溃/未知 CREATE、DELETE 重试/超时、取消收敛；真云验证须明确授权
 - **已交付（主后端训练派发，2026-09-23）：**
   - ✅ `POST /tasks` 支持可选 `clientRequestId`；同 key 返回既有任务，避免歧义重试创建第二个 ECI task
