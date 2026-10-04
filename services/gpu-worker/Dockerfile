@@ -9,11 +9,11 @@ COPY requirements.txt .
 RUN pip3 install --upgrade pip \
     && pip3 install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 
-COPY worker_agent.py mock_trainer.py oss_client.py entrypoint.sh ./
+COPY worker_agent.py mock_trainer.py oss_client.py entrypoint.sh run_once.py ./
 RUN chmod +x entrypoint.sh
 
 ENV XJICLOUD_BACKEND_URL=http://backend:8080 \
     WORKER_NAME=xjicloud-gpu-worker
 
-# WORKER_SECRET 请在 docker run -e 或 CCI 环境变量中注入，勿硬编码
-ENTRYPOINT ["./entrypoint.sh"]
+# ECI 默认运行单个训练任务并退出。legacy Worker 由部署入口显式覆盖启动命令。
+ENTRYPOINT ["python3", "/opt/xjicloud-worker/run_once.py"]

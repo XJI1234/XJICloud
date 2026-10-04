@@ -166,7 +166,7 @@ curl -s -X POST http://127.0.0.1:8081/api/v1/eci/tasks \
   -H "X-Api-Key: $ECI_API_KEY" \
   -d '{
     "name": "3dgs-job",
-    "image": "registry-vpc.cn-hangzhou.aliyuncs.com/your-ns/3dgs:latest",
+    "image": "registry.example.com/your-project/3dgs:1.0.0",
     "command": ["python", "train.py"],
     "args": ["--source_path", "/data/scene", "--iterations", "30000"],
     "cpu": 8,
