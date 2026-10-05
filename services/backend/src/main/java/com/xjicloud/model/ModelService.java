@@ -6,6 +6,8 @@ import com.xjicloud.auth.UserAccount;
 import com.xjicloud.common.BusinessException;
 import com.xjicloud.model.dto.DownloadTokenResponse;
 import com.xjicloud.model.dto.ModelResponse;
+import com.xjicloud.model.dto.ModelVersionResponse;
+import com.xjicloud.model.dto.RestoreModelVersionRequest;
 import com.xjicloud.model.dto.SaveViewerConfigRequest;
 import com.xjicloud.model.dto.UploadChunkResponse;
 import com.xjicloud.model.dto.UploadSessionResponse;
@@ -17,6 +19,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -41,6 +44,7 @@ public class ModelService {
 
     private final ModelAssetRepository modelAssetRepository;
     private final ViewerConfigRepository viewerConfigRepository;
+    private final ModelVersionRepository modelVersionRepository;
     private final ProjectService projectService;
     private final LocalFileStoreService localFileStoreService;
     private final ModelDownloadTokenService modelDownloadTokenService;
@@ -50,6 +54,7 @@ public class ModelService {
     public ModelService(
             ModelAssetRepository modelAssetRepository,
             ViewerConfigRepository viewerConfigRepository,
+            ModelVersionRepository modelVersionRepository,
             ProjectService projectService,
             LocalFileStoreService localFileStoreService,
             ModelDownloadTokenService modelDownloadTokenService,
@@ -58,6 +63,7 @@ public class ModelService {
     ) {
         this.modelAssetRepository = modelAssetRepository;
         this.viewerConfigRepository = viewerConfigRepository;
+        this.modelVersionRepository = modelVersionRepository;
         this.projectService = projectService;
         this.localFileStoreService = localFileStoreService;
         this.modelDownloadTokenService = modelDownloadTokenService;
@@ -153,6 +159,7 @@ public class ModelService {
         ModelAsset asset = requireOwnedModel(user, modelId);
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
         viewerConfigRepository.deleteById(modelId);
+        modelVersionRepository.deleteByModelId(modelId);
         modelAssetRepository.delete(asset);
         registerDeleteModelDirectoryAfterCommit(user, project, modelId);
     }
@@ -245,6 +252,7 @@ public class ModelService {
             Resource resource = new UrlResource(filePath.toUri());
             return ResponseEntity.ok()
                     .contentType(mediaType)
+                    .headers(noStoreHeaders())
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(asset.getFileName()))
                     .contentLength(fileSize)
@@ -259,11 +267,30 @@ public class ModelService {
         StreamingResponseBody body = outputStream -> localFileStoreService.copyRange(filePath, outputStream, start, end);
         return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                 .contentType(mediaType)
+                .headers(noStoreHeaders())
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize)
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(asset.getFileName()))
                 .contentLength(contentLength)
                 .body(body);
+    }
+
+    public ResponseEntity<StreamingResponseBody> downloadVersionFile(
+            UserAccount user,
+            UUID modelId,
+            UUID versionId
+    ) throws IOException {
+        requireOwnedModel(user, modelId);
+        ModelVersionEntity version = modelVersionRepository.findByIdAndModelId(versionId, modelId)
+                .orElseThrow(() -> new BusinessException("版本不存在", HttpStatus.NOT_FOUND));
+        Path filePath = localFileStoreService.resolveStoredPath(version.getStoragePath());
+        long fileSize = Files.size(filePath);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .headers(noStoreHeaders())
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(version.getFileName()))
+                .contentLength(fileSize)
+                .body(outputStream -> Files.copy(filePath, outputStream));
     }
 
     public ViewerConfigResponse getViewerConfig(UserAccount user, UUID modelId) {
@@ -301,28 +328,178 @@ public class ModelService {
 
         ModelAsset asset = requireOwnedModel(user, modelId);
         Project project = projectService.requireOwnedProject(user, asset.getProjectId());
+        return writeExport(user, project, asset, file);
+    }
 
+    ModelResponse writeExport(UserAccount user, Project project, ModelAsset asset, MultipartFile file) {
         String exportName = sanitizeFileName(file.getOriginalFilename());
         ExportTarget exportTarget = resolveExportTarget(exportName);
+        UUID snapshotId = UUID.randomUUID();
+        Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
 
         try {
-            byte[] bytes = file.getBytes();
-            localFileStoreService.storeExport(user, project, modelId, exportTarget.fileName(), bytes);
+            Path archivePath = replaceHistory(user, project, asset, snapshotId, livePath);
 
-            localFileStoreService.replaceModelFile(user, project, modelId, exportTarget.storedFileName(), bytes);
-            Path storedPath = localFileStoreService.modelFilePath(user, project, modelId, exportTarget.storedFileName());
-
-            asset.setFileName(exportTarget.fileName());
-            asset.setFormat(exportTarget.format());
-            asset.setSizeBytes(bytes.length);
-            asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
-            asset.setVersion(asset.getVersion() + 1);
-            asset.setUpdatedAt(Instant.now());
-            modelAssetRepository.save(asset);
-            return toResponse(asset);
+            try (InputStream input = file.getInputStream()) {
+                Path storedPath = localFileStoreService.replaceModelFile(
+                        user,
+                        project,
+                        asset.getId(),
+                        exportTarget.storedFileName(),
+                        input
+                );
+                asset.setFileName(exportTarget.fileName());
+                asset.setFormat(exportTarget.format());
+                asset.setSizeBytes(localFileStoreService.fileSize(storedPath));
+                asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
+                asset.setVersion(asset.getVersion() + 1);
+                asset.setUpdatedAt(Instant.now());
+                modelAssetRepository.save(asset);
+                return toResponse(asset);
+            }
         } catch (IOException ex) {
             throw new BusinessException("导出保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    public List<ModelVersionResponse> listModelVersions(UserAccount user, UUID modelId) {
+        ModelAsset asset = requireOwnedModel(user, modelId);
+        Project project = projectService.requireOwnedProject(user, asset.getProjectId());
+        return listOwnedVersions(user, project, asset);
+    }
+
+    List<ModelVersionResponse> listOwnedVersions(UserAccount user, Project project, ModelAsset asset) {
+        backfillLegacyExports(user, project, asset);
+
+        List<ModelVersionResponse> versions = new ArrayList<>();
+        versions.add(new ModelVersionResponse(
+                "current",
+                asset.getFileName(),
+                asset.getSizeBytes(),
+                asset.getUpdatedAt() != null ? asset.getUpdatedAt() : asset.getCreatedAt(),
+                true,
+                Math.max(1, asset.getVersion())
+        ));
+        List<ModelVersionEntity> history = modelVersionRepository.findByModelIdOrderByVersionDesc(asset.getId());
+        if (!history.isEmpty()) {
+            ModelVersionEntity row = history.get(0);
+            versions.add(new ModelVersionResponse(
+                    row.getId().toString(),
+                    row.getFileName(),
+                    row.getSizeBytes(),
+                    row.getCreatedAt(),
+                    false,
+                    row.getVersion()
+            ));
+        }
+        return versions;
+    }
+
+    private Path replaceHistory(UserAccount user, Project project, ModelAsset asset, UUID snapshotId, Path livePath) {
+        Path archivePath = localFileStoreService.archiveCurrentModel(
+                user,
+                project,
+                asset.getId(),
+                snapshotId,
+                livePath
+        );
+        modelVersionRepository.deleteByModelId(asset.getId());
+        persistSnapshot(asset, snapshotId, archivePath);
+        localFileStoreService.clearExportArchives(user, project, asset.getId(), archivePath);
+        return archivePath;
+    }
+
+    @Transactional
+    public ModelResponse restoreModelVersion(UserAccount user, UUID modelId, RestoreModelVersionRequest request) {
+        ModelAsset asset = requireOwnedModel(user, modelId);
+        Project project = projectService.requireOwnedProject(user, asset.getProjectId());
+        return writeRestore(user, project, asset, request.versionId());
+    }
+
+    ModelResponse writeRestore(UserAccount user, Project project, ModelAsset asset, UUID versionId) {
+        ModelVersionEntity snapshot = modelVersionRepository.findByIdAndModelId(versionId, asset.getId())
+                .orElseThrow(() -> new BusinessException("版本不存在", HttpStatus.NOT_FOUND));
+        Path snapshotPath = localFileStoreService.resolveStoredPath(snapshot.getStoragePath());
+        Path livePath = localFileStoreService.resolveStoredPath(asset.getStoragePath());
+        Path snapshotHold = livePath.getParent().resolve("restore.tmp");
+        try {
+            Files.copy(snapshotPath, snapshotHold, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            throw new BusinessException("恢复失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        UUID backupId = UUID.randomUUID();
+        replaceHistory(user, project, asset, backupId, livePath);
+
+        String exportName = sanitizeFileName(snapshot.getFileName());
+        ExportTarget exportTarget = resolveExportTarget(exportName);
+        Path storedPath = localFileStoreService.copyToLive(
+                user,
+                project,
+                asset.getId(),
+                exportTarget.storedFileName(),
+                snapshotHold
+        );
+        try {
+            Files.deleteIfExists(snapshotHold);
+        } catch (IOException ignored) {
+            // live already replaced
+        }
+        asset.setFileName(exportTarget.fileName());
+        asset.setFormat(exportTarget.format());
+        asset.setSizeBytes(localFileStoreService.fileSize(storedPath));
+        asset.setStoragePath(localFileStoreService.toRelativeStoragePath(storedPath));
+        asset.setVersion(asset.getVersion() + 1);
+        asset.setUpdatedAt(Instant.now());
+        modelAssetRepository.save(asset);
+        return toResponse(asset);
+    }
+
+    private void persistSnapshot(ModelAsset asset, UUID snapshotId, Path archivePath) {
+        if (modelVersionRepository.existsByModelIdAndVersion(asset.getId(), asset.getVersion())) {
+            return;
+        }
+        ModelVersionEntity row = new ModelVersionEntity();
+        row.setId(snapshotId);
+        row.setModelId(asset.getId());
+        row.setVersion(asset.getVersion());
+        row.setFileName(asset.getFileName());
+        row.setSizeBytes(localFileStoreService.fileSize(archivePath));
+        row.setStoragePath(localFileStoreService.toRelativeStoragePath(archivePath));
+        row.setCreatedAt(Instant.now());
+        modelVersionRepository.save(row);
+    }
+
+    private void backfillLegacyExports(UserAccount user, Project project, ModelAsset asset) {
+        if (modelVersionRepository.existsByModelId(asset.getId())) {
+            return;
+        }
+        List<LocalFileStoreService.ExportArchive> archives = localFileStoreService.listExports(user, project, asset.getId());
+        if (archives.isEmpty()) {
+            return;
+        }
+        List<LocalFileStoreService.ExportArchive> oldestFirst = new ArrayList<>(archives);
+        java.util.Collections.reverse(oldestFirst);
+        int versionNo = 1;
+        for (LocalFileStoreService.ExportArchive archive : oldestFirst) {
+            Path path = localFileStoreService.resolveExportPath(user, project, asset.getId(), archive.archiveName());
+            ModelVersionEntity row = new ModelVersionEntity();
+            row.setId(UUID.randomUUID());
+            row.setModelId(asset.getId());
+            row.setVersion(versionNo);
+            row.setFileName(archive.fileName());
+            row.setSizeBytes(archive.sizeBytes());
+            row.setStoragePath(localFileStoreService.toRelativeStoragePath(path));
+            row.setCreatedAt(archive.createdAt());
+            modelVersionRepository.save(row);
+            versionNo += 1;
+        }
+    }
+
+    private static HttpHeaders noStoreHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setCacheControl("no-store, no-cache, must-revalidate");
+        headers.setPragma("no-cache");
+        return headers;
     }
 
     private void syncViewerConfigEntity(ModelAsset asset, UserAccount user, Project project) {

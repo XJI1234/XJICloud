@@ -15,6 +15,7 @@ apps/web/public/supersplat
 apps/web2/public/supersplat
 release
 *.local
+*.local.*
 rust/target
 services/backend/data/
 data/
@@ -33,3 +34,4 @@ deploy/config/install-summary.txt
 *.sln
 *.sw?
 Cookies
+tmp/

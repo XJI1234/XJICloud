@@ -10,7 +10,8 @@ import { useViewerStorage } from '@/features/viewer/presentation/composables/use
 import { formatDomainError } from '@/presentation/errors'
 import AppButton from '@/presentation/components/AppButton.vue'
 import AppSheet from '@/presentation/components/AppSheet.vue'
-import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
+import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
+import { useWaitSession } from '@/presentation/composables/useWaitSession'
 import { createTransferRateTracker, formatTransferSpeed } from '@/shared/transfer-rate'
 import type { StoredDefaultView, ViewerModelSummary } from '@/features/viewer/domain/entities/viewer-config.entity'
 import type { Project } from '@/features/project/domain/entities/project.entity'
@@ -20,6 +21,8 @@ const route = useRoute()
 const workspace = useProjectWorkspace()
 const modelsApi = useModelAssets()
 const viewer = useViewerStorage()
+const wait = useWaitSession()
+const { waitView } = wait
 
 const projectList = ref<Project[]>([])
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
@@ -36,7 +39,7 @@ const flipYToken = ref(0)
 const menuOpen = ref(true)
 const modelSelectionVisible = ref(false)
 const modelCandidates = ref<ViewerModelSummary[]>([])
-const downloadById = ref<Record<string, { percent: number; speed: string }>>({})
+const downloadById = ref<Record<string, true>>({})
 const modelInfo = ref<{ fileName: string; splatCount: number } | null>(null)
 const actionError = ref('')
 const statusState = ref<
@@ -97,25 +100,25 @@ async function loadCloudModel(model: ViewerModelSummary) {
     return
   }
 
+  modelSelectionVisible.value = false
   viewer.rememberMeta(model.id, model.fileName)
   const tracker = createTransferRateTracker()
   downloadById.value = {
     ...downloadById.value,
-    [model.id]: { percent: 0, speed: '' },
+    [model.id]: true,
   }
+  wait.showBusy(t('wait.downloading'))
 
   try {
     setStatus('viewer.status.downloading', { name: model.fileName })
     const [error, loaded] = await viewer.loadBytes(model.id, (loadedBytes, total) => {
       const percent = total > 0 ? Math.min(99, Math.round((loadedBytes / total) * 100)) : 0
       const rate = tracker.push(loadedBytes, Date.now())
-      downloadById.value = {
-        ...downloadById.value,
-        [model.id]: {
-          percent,
-          speed: rate != null ? formatTransferSpeed(rate) : downloadById.value[model.id]?.speed ?? '',
-        },
-      }
+      wait.showProgress(
+        t('wait.downloading'),
+        percent,
+        rate != null ? formatTransferSpeed(rate) : waitView.value.speed,
+      )
       if (total > 0) {
         setStatus('viewer.status.downloadingProgress', {
           name: model.fileName,
@@ -123,21 +126,22 @@ async function loadCloudModel(model: ViewerModelSummary) {
         })
       }
     })
-    // #region agent log
-    fetch('http://127.0.0.1:7472/ingest/c56d38ea-12ae-41d7-a4b0-707021c1849e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67c29f'},body:JSON.stringify({sessionId:'67c29f',runId:'pre-fix',hypothesisId:'C',location:'LayerViewerView.vue:loadCloudModel',message:'viewer download finished',data:{ok:!error,fileName:model.fileName},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (error || !loaded) {
       actionError.value = formatDomainError(t, error)
       setRawStatus(formatDomainError(t, error))
+      wait.hide()
       return
     }
-    const next = { ...downloadById.value }
-    delete next[model.id]
-    downloadById.value = next
+    wait.showBusy(t('wait.loading'))
     setCurrentModelSource(loaded.file, loaded.modelId)
   } catch (error) {
     actionError.value = formatDomainError(t, error)
     setRawStatus(formatDomainError(t, error))
+    wait.hide()
+  } finally {
+    const next = { ...downloadById.value }
+    delete next[model.id]
+    downloadById.value = next
   }
 }
 
@@ -245,6 +249,7 @@ function handleLocalFile(event: Event) {
   }
 
   setCurrentModelSource(localFile, null)
+  wait.showBusy(t('wait.loading'))
 }
 
 function triggerUpload() {
@@ -268,29 +273,35 @@ async function handleUpload(event: Event) {
 
   try {
     setStatus('viewer.status.uploading', { name: file.name })
+    wait.showBusy(t('wait.uploading'))
     const [error, model] = await modelsApi.upload({
       projectId: activeProjectId.value,
       file,
       onProgress: ({ loaded, total }) => {
         if (total > 0) {
+          const percent = Math.round((loaded / total) * 100)
           setStatus('viewer.status.uploadingProgress', {
             name: file.name,
-            percent: Math.round((loaded / total) * 100),
+            percent,
           })
+          wait.showProgress(t('wait.uploading'), percent)
         }
       },
     })
     if (error || !model) {
       actionError.value = formatDomainError(t, error)
       setRawStatus(formatDomainError(t, error))
+      wait.hide()
       return
     }
     viewer.rememberMeta(model.id, model.fileName)
+    wait.showBusy(t('wait.loading'))
     setCurrentModelSource(file, model.id)
     setStatus('viewer.status.uploadDoneLoading', { name: file.name })
   } catch (error) {
     actionError.value = formatDomainError(t, error)
     setRawStatus(formatDomainError(t, error))
+    wait.hide()
   }
 }
 
@@ -329,6 +340,7 @@ function requestFlipY() {
 function handleLoaded(info: { fileName: string; splatCount: number; view: 'default' | 'framed' }) {
   modelInfo.value = { fileName: info.fileName, splatCount: info.splatCount }
   actionError.value = ''
+  wait.hide()
   if (info.view === 'default') {
     setStatus('viewer.status.appliedDefaultView')
     return
@@ -338,6 +350,7 @@ function handleLoaded(info: { fileName: string; splatCount: number; view: 'defau
 
 function handleFailed(message: string) {
   modelInfo.value = null
+  wait.hide()
   actionError.value = message === 'load-failed' ? String(t('viewer.status.loadModelFailed')) : message
   setRawStatus(actionError.value)
 }
@@ -513,7 +526,6 @@ onMounted(() => {
             <span class="model-choice-name">{{ candidate.fileName }}</span>
             <span class="model-choice-meta">
               {{ candidate.format || t('viewer.unknownFormat') }}
-              <template v-if="candidate.version"> · v{{ candidate.version }}</template>
               <template v-if="candidate.sizeBytes"> · {{ formatModelSize(candidate.sizeBytes) }}</template>
             </span>
             <span v-if="candidate.updatedAt" class="model-choice-updated">
@@ -521,11 +533,6 @@ onMounted(() => {
             </span>
             <span v-if="downloadById[candidate.id]" class="model-choice-badge">{{ t('viewer.downloading') }}</span>
             <span v-else-if="candidate.id === currentModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
-            <UploadProgressBar
-              v-if="downloadById[candidate.id]"
-              :percent="downloadById[candidate.id].percent"
-              :speed="downloadById[candidate.id].speed"
-            />
           </button>
           <AppButton compact variant="destructive" @click="deleteProjectModel(candidate, $event)">
             {{ t('viewer.deleteModel') }}
@@ -536,5 +543,15 @@ onMounted(() => {
         <AppButton @click="closeModelSelectionDialog">{{ t('common.cancel') }}</AppButton>
       </template>
     </AppSheet>
+    <WaitOverlay
+      :visible="waitView.visible"
+      :phase="waitView.phase"
+      :title="waitView.title"
+      :percent="waitView.percent"
+      :speed="waitView.speed"
+      :complete="waitView.complete"
+      :await-confirm="waitView.awaitConfirm"
+      @dismiss="wait.hide()"
+    />
   </main>
 </template>

@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -148,26 +147,142 @@ public class LocalFileStoreService {
         }
     }
 
-    public void replaceModelFile(UserAccount user, Project project, UUID modelId, String storedFileName, byte[] bytes) {
+    public Path archiveCurrentModel(UserAccount user, Project project, UUID modelId, UUID versionId, Path source) {
+        try {
+            Path exportsDir = exportsDirectory(user, project, modelId);
+            Files.createDirectories(exportsDir);
+            String fileName = source.getFileName().toString();
+            String ext = fileName.toLowerCase().endsWith(".spz") ? ".spz" : ".ply";
+            Path target = exportsDir.resolve(versionId.toString() + ext);
+            Files.copy(source, target);
+            return target;
+        } catch (IOException ex) {
+            throw new BusinessException("导出文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public void clearExportArchives(UserAccount user, Project project, UUID modelId) {
+        clearExportArchives(user, project, modelId, null);
+    }
+
+    public void clearExportArchives(UserAccount user, Project project, UUID modelId, Path keep) {
+        Path exportsDir = exportsDirectory(user, project, modelId);
+        if (!Files.isDirectory(exportsDir)) {
+            return;
+        }
+        Path keepNormalized = keep != null ? keep.normalize() : null;
+        try (var stream = Files.list(exportsDir)) {
+            stream.filter(Files::isRegularFile).forEach(path -> {
+                if (keepNormalized != null && path.normalize().equals(keepNormalized)) {
+                    return;
+                }
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    log.warn("Failed to delete export {}: {}", path, e.getMessage());
+                }
+            });
+        } catch (IOException e) {
+            log.warn("Failed to list exports {}: {}", exportsDir, e.getMessage());
+        }
+    }
+
+    public Path replaceModelFile(UserAccount user, Project project, UUID modelId, String storedFileName, InputStream input) {
         try {
             Path directory = modelDirectory(user, project, modelId);
             Files.createDirectories(directory);
-            Files.write(directory.resolve(storedFileName), bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Path target = directory.resolve(storedFileName);
+            Path temp = directory.resolve(storedFileName + ".tmp");
+            Files.copy(input, temp, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            deleteAlternateOriginal(directory, storedFileName);
+            return target;
         } catch (IOException ex) {
             throw new BusinessException("模型文件更新失败", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    public void storeExport(UserAccount user, Project project, UUID modelId, String fileName, byte[] bytes) {
-        try {
-            Path exportsDir = exportsDirectory(user, project, modelId);
-            Files.createDirectories(exportsDir);
-            String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now()).replace(":", "-");
-            Path exportPath = exportsDir.resolve(timestamp + "_" + fileName);
-            Files.write(exportPath, bytes, StandardOpenOption.CREATE_NEW);
+    public Path copyToLive(UserAccount user, Project project, UUID modelId, String storedFileName, Path source) {
+        try (InputStream input = Files.newInputStream(source)) {
+            return replaceModelFile(user, project, modelId, storedFileName, input);
         } catch (IOException ex) {
-            throw new BusinessException("导出文件保存失败", HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new BusinessException("模型文件更新失败", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private static void deleteAlternateOriginal(Path directory, String storedFileName) throws IOException {
+        if ("original.ply".equals(storedFileName)) {
+            Files.deleteIfExists(directory.resolve("original.spz"));
+        } else if ("original.spz".equals(storedFileName)) {
+            Files.deleteIfExists(directory.resolve("original.ply"));
+        }
+    }
+
+    public record ExportArchive(String archiveName, String fileName, long sizeBytes, Instant createdAt) {
+    }
+
+    public java.util.List<ExportArchive> listExports(UserAccount user, Project project, UUID modelId) {
+        Path exportsDir = exportsDirectory(user, project, modelId);
+        if (!Files.isDirectory(exportsDir)) {
+            return java.util.List.of();
+        }
+        try (var stream = Files.list(exportsDir)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(path -> {
+                        String archiveName = path.getFileName().toString();
+                        Instant createdAt = Instant.EPOCH;
+                        try {
+                            createdAt = Files.getLastModifiedTime(path).toInstant();
+                        } catch (IOException ignored) {
+                            // fall back to EPOCH
+                        }
+                        long size = 0L;
+                        try {
+                            size = Files.size(path);
+                        } catch (IOException ignored) {
+                            // fall back to 0
+                        }
+                        return new ExportArchive(archiveName, stripExportTimestamp(archiveName), size, createdAt);
+                    })
+                    .sorted(Comparator.comparing(ExportArchive::createdAt).reversed())
+                    .toList();
+        } catch (IOException ex) {
+            throw new BusinessException("读取导出历史失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public byte[] readExport(UserAccount user, Project project, UUID modelId, String archiveName) {
+        Path exportPath = resolveExportPath(user, project, modelId, archiveName);
+        try {
+            return Files.readAllBytes(exportPath);
+        } catch (IOException ex) {
+            throw new BusinessException("读取导出版本失败", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public Path resolveExportPath(UserAccount user, Project project, UUID modelId, String archiveName) {
+        if (archiveName == null || archiveName.isBlank() || archiveName.contains("/") || archiveName.contains("\\")
+                || archiveName.contains("..")) {
+            throw new BusinessException("非法版本文件名", HttpStatus.BAD_REQUEST);
+        }
+        Path exportsDir = exportsDirectory(user, project, modelId).normalize();
+        Path exportPath = exportsDir.resolve(archiveName).normalize();
+        if (!exportPath.startsWith(exportsDir)) {
+            throw new BusinessException("非法版本文件名", HttpStatus.BAD_REQUEST);
+        }
+        if (!Files.exists(exportPath) || !Files.isRegularFile(exportPath)) {
+            throw new BusinessException("版本不存在", HttpStatus.NOT_FOUND);
+        }
+        return exportPath;
+    }
+
+    private static String stripExportTimestamp(String archiveName) {
+        int underscore = archiveName.indexOf('_');
+        if (underscore <= 0 || underscore >= archiveName.length() - 1) {
+            return archiveName;
+        }
+        return archiveName.substring(underscore + 1);
     }
 
     public Path resolveStoredPath(String storagePath) {

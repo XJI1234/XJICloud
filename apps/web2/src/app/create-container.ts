@@ -9,6 +9,7 @@ import { createFetchJobEventAdapter } from '@/features/dataset-training/infrastr
 import { createXhrObjectStorage } from '@/features/dataset-training/infrastructure/adapters/xhr-object-storage.adapter'
 import { createJobWatchHub } from '@/features/dataset-training/application/job-watch-hub'
 import { createHttpModelAssetRepository } from '@/features/model-asset/infrastructure/repositories/http-model-asset.repository'
+import { createOpfsModelCache } from '@/features/model-asset/infrastructure/repositories/opfs-model-cache'
 import { createHttpViewerStorage } from '@/features/viewer/infrastructure/repositories/http-viewer-storage.repository'
 import { createPostMessageEditorBridge } from '@/features/editor/infrastructure/post-message-editor.bridge'
 
@@ -50,7 +51,7 @@ export function createWeb2Container(options: CreateContainerOptions = {}): Web2C
   })
   const jobWatch = createJobWatchHub({ jobs, events: jobEvents })
   workspaceReset.clearJobs = () => jobWatch.clear()
-  const models = createHttpModelAssetRepository(http)
+  const models = createHttpModelAssetRepository(http, createOpfsModelCache())
 
   const container: Web2Container = {
     auth: createHttpAuthRepository(http),

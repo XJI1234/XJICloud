@@ -3,14 +3,18 @@ import { err, ok } from '@/shared/result'
 import type { EditorBridgePort, EditorFrame } from '../domain/repositories/editor-bridge.port'
 import {
   DIRTY_QUERY_TIMEOUT_MS,
+  EXPORT_MAX_TIMEOUT_MS,
   EXPORT_PLY,
   EXPORT_TIMEOUT_MS,
   IMPORT_LOCAL,
   IMPORT_LOCAL_TIMEOUT_MS,
   IS_SCENE_DIRTY,
+  READY_MAX_ATTEMPTS,
+  READY_PING_TIMEOUT_MS,
   buildSuperSplatSrc,
   isDirtyResponse,
   isExportError,
+  isExportProgress,
   isExportResult,
   isImportLocalDone,
   isImportLocalError,
@@ -19,10 +23,28 @@ import {
 
 function resolveTargetOrigin(frame: EditorFrame, pageOrigin: string) {
   try {
-    return new URL(frame.src, pageOrigin).origin
+    const src = frame.src
+    if (!src || src === 'about:blank') {
+      return pageOrigin
+    }
+    const origin = new URL(src, pageOrigin).origin
+    return origin === 'null' ? pageOrigin : origin
   } catch {
     return pageOrigin
   }
+}
+
+function postToFrame(frame: EditorFrame, data: unknown, targetOrigin: string, transfer?: Transferable[]) {
+  const win = frame.contentWindow
+  if (!win) {
+    return false
+  }
+  if (transfer?.length) {
+    win.postMessage(data, targetOrigin, transfer)
+  } else {
+    win.postMessage(data, targetOrigin)
+  }
+  return true
 }
 
 export function createPostMessageEditorBridge(options?: {
@@ -39,12 +61,53 @@ export function createPostMessageEditorBridge(options?: {
       return buildSuperSplatSrc(params)
     },
 
+    async waitReady(frame) {
+      if (!frame.contentWindow) {
+        return err(new DomainError('EDITOR_NOT_READY'))
+      }
+
+      for (let attempt = 0; attempt < READY_MAX_ATTEMPTS; attempt++) {
+        const ready = await new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => {
+            cleanup()
+            resolve(false)
+          }, READY_PING_TIMEOUT_MS)
+
+          function cleanup() {
+            clearTimeout(timer)
+            removeListener('message', onMessage)
+          }
+
+          function onMessage(event: MessageEvent) {
+            if (!isTrustedIframeMessage(event, frame, pageOrigin) || !isDirtyResponse(event.data)) {
+              return
+            }
+            cleanup()
+            resolve(true)
+          }
+
+          addListener('message', onMessage)
+          try {
+            if (!postToFrame(frame, { type: IS_SCENE_DIRTY }, resolveTargetOrigin(frame, pageOrigin))) {
+              cleanup()
+              resolve(false)
+            }
+          } catch {
+            cleanup()
+            resolve(false)
+          }
+        })
+        if (ready) {
+          return ok(undefined)
+        }
+      }
+      return err(new DomainError('EDITOR_TIMEOUT'))
+    },
+
     isDirty(frame) {
-      const win = frame.contentWindow
-      if (!win) {
+      if (!frame.contentWindow) {
         return Promise.resolve(ok(false))
       }
-      const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
 
       return new Promise((resolve) => {
         const timer = setTimeout(() => {
@@ -66,16 +129,14 @@ export function createPostMessageEditorBridge(options?: {
         }
 
         addListener('message', onMessage)
-        win.postMessage({ type: IS_SCENE_DIRTY }, targetOrigin)
+        postToFrame(frame, { type: IS_SCENE_DIRTY }, resolveTargetOrigin(frame, pageOrigin))
       })
     },
 
     importLocal(frame, file) {
-      const win = frame.contentWindow
-      if (!win) {
+      if (!frame.contentWindow) {
         return Promise.resolve(err(new DomainError('EDITOR_NOT_READY')))
       }
-      const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
 
       return file.arrayBuffer().then((buffer) => {
         return new Promise((resolve) => {
@@ -105,31 +166,67 @@ export function createPostMessageEditorBridge(options?: {
           }
 
           addListener('message', onMessage)
-          win.postMessage({ type: IMPORT_LOCAL, fileName: file.name, buffer }, targetOrigin, [buffer])
+          postToFrame(frame, { type: IMPORT_LOCAL, fileName: file.name, buffer }, resolveTargetOrigin(frame, pageOrigin), [
+            buffer,
+          ])
         })
       })
     },
 
-    exportPly(frame, exportOptions) {
-      const win = frame.contentWindow
-      if (!win) {
-        return Promise.resolve(err(new DomainError('EDITOR_NOT_READY')))
+    async exportPly(frame, exportOptions) {
+      if (!frame.contentWindow) {
+        return err(new DomainError('EDITOR_NOT_READY'))
+      }
+      const [readyError] = await this.waitReady(frame)
+      if (readyError) {
+        return err(readyError)
       }
       const targetOrigin = resolveTargetOrigin(frame, pageOrigin)
 
       return new Promise((resolve) => {
-        const timer = setTimeout(() => {
+        let progressEvents = 0
+        let idleTimer: ReturnType<typeof setTimeout> | undefined
+        const maxTimer = setTimeout(() => {
+          finish()
+        }, EXPORT_MAX_TIMEOUT_MS)
+
+        function armIdle() {
+          if (progressEvents > 0) {
+            if (idleTimer !== undefined) {
+              clearTimeout(idleTimer)
+              idleTimer = undefined
+            }
+            return
+          }
+          if (idleTimer !== undefined) {
+            clearTimeout(idleTimer)
+          }
+          idleTimer = setTimeout(() => {
+            finish()
+          }, EXPORT_TIMEOUT_MS)
+        }
+
+        function finish() {
           cleanup()
           resolve(err(new DomainError('EDITOR_TIMEOUT')))
-        }, EXPORT_TIMEOUT_MS)
+        }
 
         function cleanup() {
-          clearTimeout(timer)
+          if (idleTimer !== undefined) {
+            clearTimeout(idleTimer)
+          }
+          clearTimeout(maxTimer)
           removeListener('message', onMessage)
         }
 
         function onMessage(event: MessageEvent) {
           if (!isTrustedIframeMessage(event, frame, pageOrigin)) {
+            return
+          }
+          if (isExportProgress(event.data)) {
+            progressEvents += 1
+            armIdle()
+            exportOptions?.onProgress?.(event.data.loaded)
             return
           }
           if (isExportResult(event.data)) {
@@ -149,7 +246,10 @@ export function createPostMessageEditorBridge(options?: {
         }
 
         addListener('message', onMessage)
-        win.postMessage(
+        exportOptions?.onProgress?.(0)
+        armIdle()
+        postToFrame(
+          frame,
           {
             type: EXPORT_PLY,
             compressed: exportOptions?.compressed ?? false,

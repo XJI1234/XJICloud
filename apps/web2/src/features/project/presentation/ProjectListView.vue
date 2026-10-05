@@ -3,7 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppButton from '@/presentation/components/AppButton.vue'
-import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
+import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
+import { useWaitSession } from '@/presentation/composables/useWaitSession'
 import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
 import { useTransferSpeed } from '@/presentation/composables/useTransferSpeed'
 import { formatDomainError } from '@/presentation/errors'
@@ -26,6 +27,8 @@ const uploadInputRef = ref<HTMLInputElement | null>(null)
 const pending = ref(false)
 const uploadProgress = ref(0)
 const { speedLabel, noteLoaded, resetSpeed } = useTransferSpeed()
+const wait = useWaitSession()
+const { waitView } = wait
 const editingProjectId = ref<string | null>(null)
 const editName = ref('')
 const editDescription = ref('')
@@ -91,19 +94,23 @@ async function handleUpload(event: Event) {
   pending.value = true
   uploadProgress.value = 0
   resetSpeed()
+  wait.showBusy(t('wait.uploading'), true)
   const [error] = await models.upload({
     projectId: activeProjectId.value,
     file,
     onProgress: ({ loaded, total }) => {
       uploadProgress.value = total > 0 ? Math.round((loaded / total) * 100) : 0
       noteLoaded(loaded)
+      wait.showProgress(t('wait.uploading'), uploadProgress.value, speedLabel.value, true)
     },
   })
   pending.value = false
   if (!error) {
     uploadProgress.value = 100
+    wait.showDone(t('wait.done'), 100, speedLabel.value)
   } else {
     resetSpeed()
+    wait.hide()
   }
   errorMessage.value = error ? formatDomainError(t, error) : ''
 }
@@ -169,7 +176,6 @@ async function saveEdit(projectId: string) {
             {{ pending ? t('common.uploading') : t('projects.uploadModel') }}
           </AppButton>
         </div>
-        <UploadProgressBar v-if="pending || uploadProgress > 0" :percent="uploadProgress" :speed="speedLabel" />
       </section>
 
       <section class="projects-create-card section-card">
@@ -217,6 +223,16 @@ async function saveEdit(projectId: string) {
       </section>
 
       <input ref="uploadInputRef" class="visually-hidden" type="file" accept=".ply,.spz" @change="handleUpload" />
+      <WaitOverlay
+        :visible="waitView.visible"
+        :phase="waitView.phase"
+        :title="waitView.title"
+        :percent="waitView.percent"
+        :speed="waitView.speed"
+        :complete="waitView.complete"
+        :await-confirm="waitView.awaitConfirm"
+        @dismiss="wait.hide()"
+      />
     </div>
   </div>
 </template>
