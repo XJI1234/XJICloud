@@ -2,7 +2,7 @@
 
 > 给开发者与 AI Agent 的 **当前用户前端知识库**。包级入门见 [apps/web2/README.md](../apps/web2/README.md)；改代码时的硬规则见 [apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。  
 > 全仓后端 / Worker / 部署仍以 [AGENT_CONTEXT.md](./AGENT_CONTEXT.md) 为准。工程规则、验证与 Code Review 以 [TEAM_ENGINEERING.md](./TEAM_ENGINEERING.md) 为准。  
-> **最后更新：** 2026-08-31
+> **最后更新：** 2026-10-09
 
 本文记录的是 **已经落地的** 结构，不是愿景。**`apps/web2` 是当前用户产品面**；`apps/web` 已弃用。同一套 `/api/v1` 后端。UI 为浅色壳 + 暗画布，不是旧版暗色 Twilight Amber。
 
@@ -190,14 +190,15 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 | 实体 | `viewer-config.entity`（仍包含标注/立方体类型，供配置解析；**当前产品页不提供绘制 UI**） |
 | 领域服务 | `parseViewerConfig` / 空配置 |
 | Port | `ViewerStoragePort`（列表、字节、config、export） |
-| UI | `LayerViewerView`、`NativeSplatViewport`、`useViewerStorage` |
+| UI | `LayerViewerView`、`Native3DGSViewer`、`useViewerStorage` |
 
-画布是 **web2 原生** Three + `@xjicloud/spark`（`SplatMesh` + `SparkRenderer` + `SparkControls`）。父组件下载 `File` 再传入，画布不 inject 存储。
+画布由固定 `@native3dgs/web@0.2.2-preview.3` 与官方 `/vue` composable 提供 WebGPU；SDK 仅在 presentation 引擎边界出现。`ViewerSession` 只管宿主加载 identity、取消、错误映射、相机命令与截图。demo（`:5186`，`demo/native3dgs`）与云页使用同一组件，不复制调试查看器。
 
-保留：打开工程模型、上传 PLY/SPZ、轨道/平移/缩放、重置视角、底栏相机读数、若存在则应用 `defaultView`。  
-不保留：涂抹、擦除、气泡、立方体、查看器内导出。高级编辑在 Editor BC。
+只读功能：本机 PLY/SPZ、选择工程模型、取消下载/解码、关闭、固定/自由浏览、适配/重置/Y翻转、缩放、本机 PNG 截图。不提供查看页上传/删除、标注/擦除/修改模型；资产管理和高级编辑仍由各自 BC 负责。云页保留 `?modelId=`，模型字节通过原有带 Bearer 的仓储与 OPFS 缓存取得 File；HTTP 下载新增可选 AbortSignal，旧调用保持兼容。候选失败/取消保留旧场景，新打开或卸载使旧事务失效。
 
-相机状态：`CloudLayout` **provide** `CAMERA_STATUS_KEY`，查看器 **inject** 后写入。子组件 provide 到不了父布局。
+SDK 已规范化为 RUB；不照搬旧 Spark 的根节点翻转，也不加 Canvas CSS 镜像。已有 viewer-config 只存 position/quaternion，无法确认坐标系与来源，新查看器自动取景并提示，不改 JSON 或把未知旧视角错误套上新场景。配置实体/解析仍保留供其他能力使用。
+
+运行要求：Node 24.14+，浏览器 HTTPS/localhost、安全存储和可用 WebGPU。支持 binary little-endian PLY 与基础 SPZ，ASCII PLY 是明确错误态。构建前校验并完整复制 SDK 资产/许可证；mjs 与 Worker 必须为 JavaScript MIME，wasm 为 application/wasm，不能 SPA fallback。云壳不强制跨源隔离，decoder auto 可回退单线程；独立 demo 的隔离头仅用于 demo，不影响 SuperSplat/地图。详见包 README。
 
 ### 6.6 Editor（高级编辑）
 
@@ -281,7 +282,7 @@ LoginView
 - **`apps/web` 已弃用。** 新功能只进 web2。旧包可作行为对照，不要双写。
 - API 契约、JWT、SSE、OSS 直传、本地盘模型：与旧版相同，见 AGENT_CONTEXT §3–§6。
 - SuperSplat 静态资源：`vendors/supersplat` → `apps/web2/public/supersplat`（旧版 web 仍可复制一份）。
-- Spark：`@xjicloud/spark` workspace 包。web2 查看器只使用渲染与 `SparkControls`，不把 Spark 当成领域 port。
+- Spark 共享包保留供既有调用方使用；当前 web2 查看器改为 Native3DGS SDK，不改 `packages/spark` 或 Rust。
 - 功能对齐靠 `parity.spec.ts` 的用例文件清单，不是靠复制 Vue。
 
 ---
@@ -297,7 +298,7 @@ LoginView
 7. 若新增用户能力，把用例路径加入 `parity.spec.ts`。
 8. 架构级变更同步本文日期与根 README / AGENT_CONTEXT 中的 web2 段落。
 
-**不要**为了「更 DDD」把 `NativeSplatViewport` 做成 Domain。WebGL 是 Presentation + 引擎适配，下载与配置才走 Viewer port。
+**不要**为了「更 DDD」把 `Native3DGSViewer` 做成 Domain。WebGPU 是 Presentation + 引擎适配，下载与配置才走 Viewer port。
 
 ---
 

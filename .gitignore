@@ -13,6 +13,9 @@ dist-ssr
 # Generated at web predev/prebuild from vendors/supersplat
 apps/web/public/supersplat
 apps/web2/public/supersplat
+# Generated from the pinned Native3DGS SDK
+apps/web2/public/gs-assets/
+apps/web2/demo/native3dgs/public/
 release
 *.local
 rust/target

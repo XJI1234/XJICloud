@@ -108,6 +108,9 @@ importers:
 
   apps/web2:
     dependencies:
+      '@native3dgs/web':
+        specifier: file:vendor/native3dgs-web-0.2.2-preview.3.tgz
+        version: file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz(vue@3.5.40(typescript@6.0.3))
       '@phosphor-icons/vue':
         specifier: ^2.2.1
         version: 2.2.1(vue@3.5.40(typescript@6.0.3))
@@ -157,6 +160,9 @@ importers:
       '@vue/tsconfig':
         specifier: ^0.9.1
         version: 0.9.1(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3))
+      '@webgpu/types':
+        specifier: 0.1.74
+        version: 0.1.74
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
@@ -456,6 +462,19 @@ packages:
     peerDependencies:
       '@emnapi/core': ^2.0.0-alpha.3
       '@emnapi/runtime': ^2.0.0-alpha.3
+
+  '@native3dgs/web@file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz':
+    resolution: {integrity: sha512-eLNY7svFdESryB7mF5onqlgs0Ul7iHWJzHOsX6GZN/a0TP6nehSRSfkOEs4TSEXehpfZ+TYPQxSEF4Sdh/RD/Q==, tarball: file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz}
+    version: 0.2.2-preview.3
+    engines: {node: '>=24.14.0'}
+    peerDependencies:
+      react: '>=19 <20'
+      vue: '>=3.5 <4'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      vue:
+        optional: true
 
   '@oxc-project/types@0.139.0':
     resolution: {integrity: sha512-r9gHphtCs+1M7J0pw6Sn/hh/Wpa/iQrOOkrNAlVLF/gHq+/CJmHIWKKUUhdWjcD6CIa8idarspCsASiXCXvFUw==}
@@ -828,8 +847,8 @@ packages:
       vue:
         optional: true
 
-  '@webgpu/types@0.1.71':
-    resolution: {integrity: sha512-mMy8/ODcKhab808co15eW+yN+HgXoQxRQHTiBV9Mrvl1r0ufnid7YOcI+gi4eUWSWl9ezD6TW2KXccrL8HCh2A==}
+  '@webgpu/types@0.1.74':
+    resolution: {integrity: sha512-lgiI4hbuLcI9unnm2cL/tvCaQU45dp0xcLWJh5uB/9MBGvIA4F8XIk7nSiBeg+K4xWGYwgZKn80LmERI5CxoTA==}
 
   '@zip.js/zip.js@2.18.2':
     resolution: {integrity: sha512-J1jwg0Kv5Aab50VlVZ6hp2rzGL/J0YLjBnkF6oJoIjmpxx9+tHgjRELGKryKnDZEcGXKjv7ibwxAziFiWHdR2A==}
@@ -1793,6 +1812,10 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
+  '@native3dgs/web@file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz(vue@3.5.40(typescript@6.0.3))':
+    optionalDependencies:
+      vue: 3.5.40(typescript@6.0.3)
+
   '@oxc-project/types@0.139.0': {}
 
   '@phosphor-icons/vue@2.2.1(vue@3.5.40(typescript@6.0.3))':
@@ -1957,7 +1980,7 @@ snapshots:
       '@tweenjs/tween.js': 23.1.3
       '@types/stats.js': 0.17.4
       '@types/webxr': 0.5.24
-      '@webgpu/types': 0.1.71
+      '@webgpu/types': 0.1.74
       fflate: 0.8.3
       meshoptimizer: 0.22.0
 
@@ -2097,7 +2120,7 @@ snapshots:
       typescript: 6.0.3
       vue: 3.5.40(typescript@6.0.3)
 
-  '@webgpu/types@0.1.71': {}
+  '@webgpu/types@0.1.74': {}
 
   '@zip.js/zip.js@2.18.2': {}
 

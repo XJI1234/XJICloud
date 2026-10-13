@@ -46,6 +46,37 @@ describe('http client', () => {
     ).toBe('UNKNOWN')
   })
 
+  it('cancels a download while preserving its bearer authorization', async () => {
+    const controller = new AbortController()
+    let authorization = ''
+    let requestSignal: AbortSignal | null | undefined
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      authorization = new Headers(init?.headers).get('Authorization') ?? ''
+      requestSignal = init?.signal
+      return new Response(new ReadableStream({
+        start(stream) { stream.enqueue(new Uint8Array([1, 2])); stream.enqueue(new Uint8Array([3, 4])); stream.close() },
+      }))
+    }
+    const http = createHttpClient({ fetchImpl, tokenProvider: { getToken: () => 'abc' }, unauthorized: { notifyUnauthorized: () => undefined } })
+    await expect(http.downloadBytes('/download', () => controller.abort(), controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(authorization).toBe('Bearer abc')
+    expect(requestSignal).toBe(controller.signal)
+  })
+
+  it('does not start a request when its download signal was already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    let calls = 0
+    const http = createHttpClient({ fetchImpl: async () => { calls++; return new Response('bytes') }, tokenProvider: { getToken: () => null }, unauthorized: { notifyUnauthorized: () => undefined } })
+    await expect(http.downloadBytes('/download', undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(calls).toBe(0)
+  })
+
+  it('still downloads bytes for old callers without a signal', async () => {
+    const http = createHttpClient({ fetchImpl: async () => new Response(new Uint8Array([1, 2, 3])), tokenProvider: { getToken: () => null }, unauthorized: { notifyUnauthorized: () => undefined } })
+    expect(new Uint8Array(await http.downloadBytes('/download'))).toEqual(new Uint8Array([1, 2, 3]))
+  })
+
   it('maps empty or invalid JSON to a network error without leaking parse text', async () => {
     const http = createHttpClient({
       fetchImpl: async () => new Response('', { status: 502, statusText: 'Bad Gateway' }),

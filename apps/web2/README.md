@@ -31,6 +31,8 @@ UI 主题：**浅色产品壳 + 暗色 3D 画布**（纸白 `--surface #f5f6f8`�
 
 ## 快速开始
 
+使用 **Node.js 24.14+、pnpm 9**（SDK 的运行时要求；不需要重新编译 WASM）。
+
 ```bash
 # 仓库根
 pnpm install
@@ -41,7 +43,24 @@ pnpm build
 
 后端需 `services/backend` 在 **8080**。验证码、登录、项目、模型都走代理。没有后端时页面能开，业务请求会 `ECONNREFUSED`。
 
-`predev` / `prebuild` 会把 `vendors/supersplat` 复制到 `apps/web2/public/supersplat`。
+`predev` / `prebuild` 只把 `vendors/supersplat` 复制到本包，不写旧 `apps/web`；同时校验固定 SDK 资产并生成 `public/gs-assets`。
+
+### 独立 Vue 查看 demo
+
+```bash
+# 仓库根，无需后端或登录
+pnpm --filter @xjicloud/web2 dev:viewer-demo    # http://localhost:5186
+pnpm --filter @xjicloud/web2 build:viewer-demo
+# 可选：在系统临时目录生成真实二进制 PLY/SPZ 小样本
+node apps/web2/scripts/create-viewer-test-models.mjs
+```
+
+入口 `demo/native3dgs` 与云平台复用同一 `Native3DGSViewer`。只提供打开/拖放、取消/关闭、固定/自由浏览、适配/重置/Y 翻转、缩放和本机 PNG 截图，不带模板的诊断面板。
+
+查看器使用 `@native3dgs/web@0.2.2-preview.3`；来源和校验信息见 [vendor/README.md](vendor/README.md)。支持二进制 Graphdeco PLY、基础 SPZ，不支持 ASCII PLY。云文件仍走带 Bearer 的仓储下载与 OPFS 缓存，不使用 SDK 的裸 URL 加载，不迁移存储。旧 viewer-config 未记录坐标系，新引擎不直接套用其相机，而自动取景并提示；不覆盖旧配置。
+
+部署需要 HTTPS（localhost 为开发例外）和可用 WebGPU。保留整个 `gs-assets/`，mjs/Worker 返回 JavaScript MIME、WASM 返回 `application/wasm`，缺文件应返回 404 而不是 SPA HTML。**不要给全站强加 COOP/COEP**：云页 auto 解码可回退单线程，避免影响地图和高级编辑。独立 demo 单独提供隔离头，不代表云页也使用多线程。资源不足/不支持能力会明确提示，不静默降质量。
+
 
 ---
 
@@ -53,7 +72,7 @@ pnpm build
 | `/app/home` | Project | 主页：最近工程、新建/打开 |
 | `/app/projects` | Project + ModelAsset | 工程列表、上传模型 |
 | `/app/upload` | Dataset-training | 图片数据集归档直传 + 训练任务 |
-| `/app/layer` | Viewer + ModelAsset | 原生 Spark 查看（轨道/平移/缩放，无涂抹编辑） |
+| `/app/layer` | Viewer + ModelAsset | Native3DGS WebGPU 只读查看，本机/工程模型、浏览与截图 |
 | `/app/supersplat` | Editor | SuperSplat iframe；无云端模型也可进，可打开本地 PLY/SPZ |
 | `/app/mission` | Mission-ops | 任务执行预览：本机 KML 单条 LineString 航线可解析并绘制；飞行命令与图传尚未接通，控件锁定，不得用于实飞 |
 | `/app/help` | Presentation | 帮助 |
@@ -119,7 +138,7 @@ Vitest 使用独立的 `vitest.config.ts`（不要并进 `vite.config.ts`，插�
 | 命令 | `pnpm dev:web-legacy` | `pnpm dev` |
 | 状态 | Pinia + `api/` | 容器 + 用例 + composable |
 | 主题 | Twilight Amber 暗色壳 | 浅色壳 + 暗画布 |
-| 查看器 | 厚 Spark 编辑视口 | `NativeSplatViewport`（查看） |
+| 查看器 | 厚 Spark 编辑视口 | `Native3DGSViewer`（WebGPU，只读查看） |
 | 高级编辑 | 无云端模型则拦截 | 空白 SuperSplat + 本地打开 |
 
 新功能只改 web2，**不要**顺手改 `apps/web`。

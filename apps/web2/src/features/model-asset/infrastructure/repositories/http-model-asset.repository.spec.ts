@@ -46,6 +46,45 @@ describe('http model asset cache', () => {
     expect(downloadBytes).toHaveBeenCalledTimes(1)
   })
 
+  it('forwards cancellation and does not cache a cancelled download', async () => {
+    const controller = new AbortController()
+    const cache = createMemoryModelCache()
+    const put = vi.spyOn(cache, 'put')
+    const downloadBytes = vi.fn(async (_url, _progress, signal) => {
+      expect(signal).toBe(controller.signal)
+      controller.abort()
+      return new Uint8Array([1, 2, 3]).buffer
+    })
+    const repo = createHttpModelAssetRepository({ downloadBytes } as unknown as HttpClient, cache)
+    const [error, bytes] = await repo.downloadBytes('m1', undefined, { signal: controller.signal })
+    expect(error?.code).toBe('OPERATION_CANCELLED')
+    expect(bytes).toBeNull()
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  it('does not return a cache result or start a network call after cancellation during cache lookup', async () => {
+    const controller = new AbortController()
+    const cache = createMemoryModelCache()
+    vi.spyOn(cache, 'list').mockImplementation(async () => { controller.abort(); return [] })
+    const downloadBytes = vi.fn()
+    const repo = createHttpModelAssetRepository({ downloadBytes } as unknown as HttpClient, cache)
+    const [error] = await repo.downloadBytes('m1', undefined, { signal: controller.signal })
+    expect(error?.code).toBe('OPERATION_CANCELLED')
+    expect(downloadBytes).not.toHaveBeenCalled()
+  })
+
+  it('also rejects cancellation in a cache-hit completion callback', async () => {
+    const payload = new Uint8Array([1, 2, 3]).buffer
+    const downloadBytes = vi.fn().mockResolvedValue(payload)
+    const repo = createHttpModelAssetRepository({ downloadBytes } as unknown as HttpClient, createMemoryModelCache())
+    await repo.downloadBytes('m1')
+    const controller = new AbortController()
+    const [error, bytes] = await repo.downloadBytes('m1', () => controller.abort(), { signal: controller.signal })
+    expect(error?.code).toBe('OPERATION_CANCELLED')
+    expect(bytes).toBeNull()
+    expect(downloadBytes).toHaveBeenCalledTimes(1)
+  })
+
   it('refetches when the revision no longer matches', async () => {
     const downloadBytes = vi.fn().mockResolvedValue(new Uint8Array([1]).buffer)
     const cache = createMemoryModelCache()

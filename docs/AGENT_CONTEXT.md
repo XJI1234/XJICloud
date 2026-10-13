@@ -3,7 +3,7 @@
 > 供 Cursor / 其他 AI Agent 快速理解本仓库的结构、已实现功能、扩展点与约束。  
 > 用户面向文档见 [../README.md](../README.md)；部署见 [Deploy.md](Deploy.md)。
 
-**最后更新：** 2026-09-02（**当前用户前端是 `apps/web2`**；`apps/web` 已弃用。见 [WEB2_FRONTEND.md](./WEB2_FRONTEND.md)）
+**最后更新：** 2026-10-09（**当前用户前端是 `apps/web2`**；查看器使用 Native3DGS WebGPU；`apps/web` 已弃用。见 [WEB2_FRONTEND.md](./WEB2_FRONTEND.md)）
 
 **Agent 硬门槛（先读再改）：** [TEAM_ENGINEERING.md](./TEAM_ENGINEERING.md) — 编程规则、强制功能验证、强制 Code Review。根目录 [AGENTS.md](../AGENTS.md) 是入口。未验证、未审查的生成代码视为未完成。
 
@@ -14,7 +14,7 @@
 **XJICloud** 是一套 **3D Gaussian Splatting（3DGS）建模解决方案云平台**：
 
 - 用户通过 Web 上传图片数据集 → 触发 GPU 算力容器训练（当前为 **mock 算法**）→ 下载产出模型（PLY）
-- 用户上传 / 管理 **PLY/SPZ** 模型，用 **Spark 2.0** 查看标注，用 **SuperSplat** iframe 做高级编辑
+- 用户上传 / 管理 **PLY/SPZ** 模型，用 **Native3DGS WebGPU SDK** 只读查看，用 **SuperSplat** iframe 做高级编辑
 - 管理员通过独立 **Vue Admin 面板** 配置 OSS、监控 Worker 与训练任务
 
 技术栈：**Vue 3.5 + Vite + pnpm workspace**（当前用户端为 `apps/web2`，前端 DDD，无 Pinia 作为业务源）；**Spring Boot 3.3 + Java 17**（后端）、**Redis**（任务队列）、**S3 兼容 OSS**（MinIO / 阿里云 OSS）、**Python GPU Worker 容器**（Alibaba Cloud Linux 3）、**Rust/WASM**（浏览器端 Spark）。
@@ -261,9 +261,11 @@ CREATE TABLE model_versions (
 - 在旧版 `apps/web` 的产品能力之上，用前端 DDD 重构：`features/{bc}/{domain,application,infrastructure,presentation}` + `app/create-container.ts` 组合根
 - BC：identity、project、dataset-training、model-asset、viewer、editor
 - **UI 主题：** 浅色产品壳（`--surface #f5f6f8`，强调色 `--accent #3d6b8a`，`system-ui`）+ 暗色 3D 画布。不是旧版 Twilight Amber 暗色壳。
-- `/app/layer` 为原生 Spark 查看；`/app/supersplat` 允许无云端模型进入并打开本地文件；`/app/settings` 管理 OPFS 模型缓存
+- `/app/layer` 为 Native3DGS WebGPU 只读查看；独立 Vue demo 位于 `apps/web2/demo/native3dgs`（`:5186`），与云页复用同一组件。固定 SDK `0.2.2-preview.3` 要求 Node 24.14+，资产按 manifest 校验后部署；`/app/supersplat` 允许无云端模型进入并打开本地文件；`/app/settings` 管理 OPFS 模型缓存
 - `GET /models/{id}/download` 的字节由 web2 `model-asset` 仓储经 OPFS 按 modelId + 修订（`updatedAt`+`sizeBytes`）缓存，查看器与高级编辑共用；覆盖导出/恢复会使该模型缓存失效
 - 测试：`pnpm test:web2`；构建：`pnpm build` / `pnpm build:web2`；开发：`pnpm dev`（指向 web2）
+- 查看器只负责本机/工程模型浏览、取消/关闭、固定/自由、适配/重置/Y 翻转、缩放/PNG 截图；不提供上传/删除/编辑。云模型仍由已有鉴权仓储下载为 File 并缓存，下载支持可选 AbortSignal。不使用 SDK 裸 URL 绕过用户 JWT；PLY/SPZ 不迁 OSS。
+- SDK 需要 HTTPS/localhost 与 WebGPU；整套 Worker/mjs/wasm/threaded/manifest/licenses 同版本部署。云壳不新增 COOP/COEP，auto 可回退单线程；旧默认视角因缺坐标元数据采用自动取景并提示，不覆盖配置。完整说明见 web2 README。
 
 ### 7.0.1 Sky Command 任务执行（独立本机程序）
 
