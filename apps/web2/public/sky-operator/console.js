@@ -7911,7 +7911,8 @@ ${failure3.message}` };
     return typeof nestedUrl === "string" && nestedUrl.trim().length > 0 ? nestedUrl : null;
   };
   async function ensurePlayback(view, signal) {
-    if (state.workspace === "monitor" || !view.playbackReady || view.streamDeviceId === null || actionRequests.pending(view.streamDeviceId, "stream-stop")) {
+    const isMonitorWorkspace = () => state.workspace === "monitor";
+    if (isMonitorWorkspace() || !view.playbackReady || view.streamDeviceId === null || actionRequests.pending(view.streamDeviceId, "stream-stop")) {
       if (desiredFlightPlayback !== "off") flightPlaybackEpoch += 1;
       desiredFlightPlayback = "off";
       flightPlaybackRequest = null;
@@ -7933,18 +7934,18 @@ ${failure3.message}` };
     signal ??= AbortSignal.timeout(5e3);
     try {
       const playbackResult = await safeRenderInvoke("video-playback", { deviceId: view.streamDeviceId }, signal);
-      if (playbackResult === null || epoch !== flightPlaybackEpoch || state.workspace === "monitor") return;
+      if (playbackResult === null || epoch !== flightPlaybackEpoch || isMonitorWorkspace()) return;
       const url = playbackUrl(playbackResult);
       if (url === null) return;
       attachVideo(url);
-      if (epoch !== flightPlaybackEpoch || state.workspace === "monitor") {
+      if (epoch !== flightPlaybackEpoch || isMonitorWorkspace()) {
         detachVideo();
         return;
       }
       if (flvPlayer === null || attachedUrl !== url) return;
       if (selectedPlaybackDeviceId !== view.streamDeviceId) {
         const selected = unwrap2(await safeRenderInvoke("stream-select", { deviceId: view.streamDeviceId }, signal));
-        if (!accepted(selected) || epoch !== flightPlaybackEpoch || state.workspace === "monitor") return;
+        if (!accepted(selected) || epoch !== flightPlaybackEpoch || isMonitorWorkspace()) return;
         selectedPlaybackDeviceId = view.streamDeviceId;
       }
       lastPlaybackIdentity = identity;
@@ -9928,10 +9929,6 @@ ${failure3.message}` };
         monitorRailDeviceId = deviceId;
         monitorRailKind = "direct";
         show(`${callSign(deviceId)}\uFF1A${detail}`);
-        try {
-          await render();
-        } catch {
-        }
         try {
           const result = await confirmMonitorFlight(deviceId, control.mode);
           const feedback = captureFeedback(`flight-${control.mode}`, deviceId, feedbackDeviceEpoch(view, deviceId), result);

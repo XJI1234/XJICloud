@@ -306,9 +306,11 @@ LoginView
 
 `mission-ops` 通过 `LocalBridgePort` 接到独立 Sky-Command 托盘进程（默认 `127.0.0.1:17890`）。网页仅处理状态、航线与本机 HTTP-FLV 显示，手机 MSDK Relay 和 RTMP 继续由本机程序提供。宿主必须校验浏览器 Origin；`skycommand://open` 只负责唤起已安装的本机程序。开发来源为 `localhost:5176`，部署需要 `SKYCOMMAND_CLOUD_ORIGIN` 与实际 HTTPS 站点完全一致；HTTPS 页面访问本机 HTTP 必须实机验证浏览器 Private Network Access 支持。返航沿用原网关的 `flight.request` → 用户确认 → `flight.confirm`；取消则调用 `flight.cancel`，不以网页布尔值替代 DJI 确认 ID。
 
-当前本地开发另由 Vite 自动启动 `apps/web2/scripts/sky-command-gateway.mjs`，使用 vendored SDK 0.2.4（确认降落仅在原始请求标志为 true 时下发）：控制接口仅监听 `127.0.0.1:8767/invoke`，手机 Relay 为 `8080`，RTMP 为 `19500`，HTTP-FLV 为 `18080`。Relay 与控制接口就绪后，在物理 WLAN 上每秒向 UDP `39082` 广播自动发现公告，并监听该端口的 `SKY_COMMAND_RELAY_DISCOVER_V1` 请求，向同子网手机单播回复原公告；Windows 入站规则只需允许对应程序的 LocalSubnet UDP 39082。手机在未 ACTIVE 时每秒请求，ACTIVE 后停止，仍保留 3 秒唯一候选观察和多电脑冲突检查。网关退出时停止发现来源。`serverId` 保存在系统临时目录的 `sky-command-web/discovery-server-id`，同目录存在时重启复用，`instanceId` 每次启动更新。广播不可用时保留手动连接入口；电脑与手机发现/会话已实机验证，飞行器业务仍需独立验收。
+当前本地开发另由 Vite 自动启动 `apps/web2/scripts/sky-command-gateway.mjs`，使用 vendored SDK 0.2.5（确认降落仅在原始请求标志为 true 时下发；Node WebSocket 收包逐条让出事件循环，避免航线上传进度与成功回执在 TCP 合包时触发 16 条入站队列溢出断连，队列上限保持不变）：控制接口仅监听 `127.0.0.1:8767/invoke`，手机 Relay 为 `8080`，RTMP 为 `19500`，HTTP-FLV 为 `18080`。Relay 与控制接口就绪后，在物理 WLAN 上每秒向 UDP `39082` 广播自动发现公告，并监听该端口的 `SKY_COMMAND_RELAY_DISCOVER_V1` 请求，向同子网手机单播回复原公告；Windows 入站规则只需允许对应程序的 LocalSubnet UDP 39082。手机在未 ACTIVE 时每秒请求，ACTIVE 后停止，仍保留 3 秒唯一候选观察和多电脑冲突检查。网关退出时停止发现来源。`serverId` 保存在系统临时目录的 `sky-command-web/discovery-server-id`，同目录存在时重启复用，`instanceId` 每次启动更新。广播不可用时保留手动连接入口；电脑与手机发现/会话已实机验证，飞行器业务仍需独立验收。
 
 手机还会记住上次 AUTO 合法连接的电脑 IPv4，在同 WLAN 子网内优先单播询问以减少校园网广播延迟；它只用于获取新公告，不直接重连旧 endpoint，仍保留 3 秒观察与多电脑冲突保护。首次配对、换子网或电脑 IP 改变时回退广播。
+
+开发网关的网卡枚举在独立 Worker 中执行，每次完成后间隔 1 秒刷新；图传地址、连接提示与发现广播共享最新快照。命令和状态处理线程不调用同步 `networkInterfaces()`，避免 Windows 网卡枚举阻塞飞控命令。首次枚举成功后才启动网关，读取失败时清空旧快照并记录错误，退出时终止 Worker。
 
 嵌入操作台的 `public/sky-operator/cesium` 与 `city-tiles` 静态资源随代码保存，保证 `index.html` 的相对地址在构建产物中可用；现有 prebuild 不会生成这两套资源。地图性能优化目前保存在 `public/sky-operator/console.js`，尚未同步到 Sky-Command 的地图 TS 源码。更新该嵌入包时应保留地图模块，并执行 operator-map 回归测试，避免整包重编译覆盖优化。
 

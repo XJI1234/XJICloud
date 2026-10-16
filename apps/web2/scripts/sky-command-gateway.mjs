@@ -1,9 +1,10 @@
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
-import { networkInterfaces, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DesktopApplication, DesktopUiGateway, createMediaPorts, createRelayDiscovery, loadOrCreateServerId } from '@xjicloud/sky-command-sdk/desktop'
+import { createNetworkMonitor } from './sky-command-network.mjs'
 
 const methods = {
   'state-snapshot': 'state.snapshot',
@@ -45,7 +46,7 @@ const methods = {
 function lanCards() {
   const virtual = /vmware|vmnet|vbox|virtualbox|vethernet|hyper-v|loopback|docker|wsl|tun|mihomo|clash|openvpn|nord|wireguard|hamachi|zerotier|radmin|\bvpn\b/i
   const cards = []
-  for (const [name, addresses] of Object.entries(networkInterfaces())) {
+  for (const [name, addresses] of Object.entries(networkMonitor.snapshot())) {
     if (virtual.test(name)) continue
     for (const address of addresses ?? []) {
       if (address.internal || (address.family !== 'IPv4' && address.family !== 4) || address.address.startsWith('192.168.56.')) continue
@@ -65,6 +66,9 @@ function decode(value) {
   return value
 }
 
+const networkMonitor = await createNetworkMonitor({
+  onError: () => console.error('[network] 网卡读取失败，等待后台刷新或重启服务'),
+})
 const preferred = lanCards()[0]
 if (preferred === undefined) {
   console.error('未检测到可用的局域网 IPv4。请连接 WLAN 后重开开发服务。')
@@ -179,6 +183,7 @@ await new Promise((resolve) => control.listen(8767, '127.0.0.1', resolve))
 let stopDiscovery = () => {}
 try {
   const discovery = createRelayDiscovery(loadOrCreateServerId(dataRoot), randomUUID(), 8080, {
+    interfaces: networkMonitor.snapshot,
     diagnostic: (code) => console.error(`[discovery] ${code}`),
   })
   stopDiscovery = discovery.stop
@@ -193,6 +198,7 @@ console.log(`Operator control http://127.0.0.1:8767/invoke`)
 
 async function stop() {
   stopDiscovery()
+  networkMonitor.close()
   control.close()
   await created.value.stop()
   await created.value.dispose()
