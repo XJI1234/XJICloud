@@ -24,7 +24,7 @@ function lanRelayHints(): string[] {
   for (const [name, addresses] of Object.entries(networkInterfaces())) {
     if (virtual.test(name)) continue
     for (const address of addresses ?? []) {
-      if (address.internal || (address.family !== 'IPv4' && address.family !== 4) || address.address.startsWith('192.168.56.')) continue
+      if (address.internal || address.family !== 'IPv4' || address.address.startsWith('192.168.56.')) continue
       const wifi = /wi-?fi|wlan|wireless|无线/i.test(name)
       hints.push({ url: `ws://${address.address}:8080/relay`, score: wifi ? 0 : 10 })
     }

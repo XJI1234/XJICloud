@@ -5894,6 +5894,9 @@
     if (name === "flight-takeoff" || name === "flight-land" || name === "flight-confirm-landing" || name === "flight-return-home" || name === "flight-stop-takeoff" || name === "flight-stop-auto-landing" || name === "flight-stop-go-home") {
       const linkIssue = msdkInvocationIssue(device);
       if (linkIssue !== null) return reject(linkIssue);
+      if (name === "flight-confirm-landing" && read(read(device, "connection"), "landingConfirmationNeeded") !== true) {
+        return reject("\u98DE\u63A7\u5F53\u524D\u672A\u8BF7\u6C42\u786E\u8BA4\u964D\u843D\uFF0C\u8BF7\u67E5\u770B\u5F53\u524D\u98DE\u884C\u72B6\u6001");
+      }
       return accept();
     }
     if (name === "mission-stage") {
@@ -6099,7 +6102,7 @@
     return text2(value) ?? EMPTY_STATUS;
   }
   var TAKEOFF_MODES = /* @__PURE__ */ new Set(["AUTO_TAKEOFF"]);
-  var LAND_MODES = /* @__PURE__ */ new Set(["AUTO_LANDING", "FORCE_LANDING"]);
+  var LAND_MODES = /* @__PURE__ */ new Set(["AUTO_LANDING", "FORCE_LANDING", "CONFIRM_LANDING"]);
   var HOME_MODES = /* @__PURE__ */ new Set(["GO_HOME", "AUTO_RETURN"]);
   var PHONE_MISSION = /* @__PURE__ */ new Set(["STARTING", "EXECUTING", "PAUSED"]);
   var DJI_MISSION = /* @__PURE__ */ new Set(["PREPARING", "RECOVERING", "ENTER_WAYLINE", "EXECUTING", "PAUSED", "RETURN_TO_START_POINT"]);
@@ -6121,7 +6124,7 @@
     if (flying === "grounded" && input.motorsOn === false) {
       return { label: "\u5730\u9762", detail: "" };
     }
-    if (input.landingConfirmationNeeded === true || mode === "CONFIRM_LANDING") {
+    if (input.landingConfirmationNeeded === true) {
       return { label: "\u7EE7\u7EED\u964D\u843D", detail: protection };
     }
     if (mode !== null && LAND_MODES.has(mode)) {
@@ -6184,7 +6187,7 @@
     const mode = input.flightMode;
     const flying = input.flying === "flying" || input.flying === "grounded" ? input.flying : null;
     const onGround = flying === "grounded" && input.motorsOn === false;
-    const confirmLanding = !onGround && (input.landingConfirmationNeeded === true || mode === "CONFIRM_LANDING");
+    const confirmLanding = !onGround && input.landingConfirmationNeeded === true;
     const returningHome = !onGround && !confirmLanding && (mode !== null && HOME_MODES.has(mode) || flying === "flying" && input.lowBatteryRthState === "COUNTING_DOWN");
     return freeze6({
       home: returningHome ? freeze6({ label: "\u505C\u6B62\u8FD4\u822A", mode: "stop-go-home" }) : freeze6({ label: "\u8FD4\u822A", mode: "return-home" }),
@@ -6284,6 +6287,7 @@
   var localReason = (code) => {
     if (code === "DEVICE_OFFLINE" || code === "RELAY_OFFLINE") return "\u624B\u673A\u4E2D\u7EE7\u79BB\u7EBF";
     if (code === "SDK_NOT_READY") return "\u624B\u673A\u7AEF MSDK \u5C1A\u672A\u5C31\u7EEA";
+    if (code === "LANDING_CONFIRMATION_NOT_REQUIRED") return "\u98DE\u63A7\u5F53\u524D\u672A\u8BF7\u6C42\u786E\u8BA4\u964D\u843D\uFF0C\u8BF7\u67E5\u770B\u5F53\u524D\u98DE\u884C\u72B6\u6001";
     if (code === "NOTHING_TO_FETCH") return "\u98DE\u673A\u4E0A\u6CA1\u6709\u7535\u8111\u7F3A\u5C11\u7684\u7167\u7247";
     if (code === "AIRLINK_OFFLINE") return "AirLink \u672A\u8FDE\u63A5";
     if (code === "AIRLINK_CONNECTION_UNKNOWN") return "AirLink \u72B6\u6001\u672A\u77E5";
@@ -6372,11 +6376,19 @@ ${failure3.message}` };
     if (code === "CAPTURED") return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess", ["\u8BF4\u660E\uFF1A\u5DF2\u62CD\u4E0B\u539F\u56FE\uFF0C\u7535\u8111\u5C1A\u672A\u6536\u9F50\u6587\u4EF6"]);
     if (code === "NOTHING_TO_FETCH") return { source: "relay", outcome: "completed", message: "\u98DE\u673A\u4E0A\u6CA1\u6709\u7535\u8111\u7F3A\u5C11\u7684\u7167\u7247" };
     const reason = text3(read2(inner, "reason")) ?? text3(read2(value, "reason"));
+    if (code === "PREFLIGHT_BLOCKED") {
+      const blockers = read2(inner, "blockers");
+      const reasons = Array.isArray(blockers) ? blockers.map((item) => localReason(text3(read2(item, "code")))) : [];
+      return { source: "desktop", outcome: "not-called", message: `\u672A\u8C03\u7528 DJI MSDK\uFF1A${reasons.length > 0 ? reasons.join("\uFF1B") : localReason(code)}` };
+    }
     if (code !== null && code !== "SUCCEEDED") return { source: "desktop", outcome: "not-called", message: `\u672A\u8C03\u7528 DJI MSDK\uFF1A${localReason(reason ?? code)}` };
     if (record2(inner)?.confirmation !== void 0) return { source: "desktop", outcome: "pending", message: `\u7B49\u5F85\u4EBA\u5DE5\u786E\u8BA4\uFF1A${flightLabel(confirmedAction)} \u5C1A\u672A\u8C03\u7528 DJI MSDK` };
     if (action === "mission-stage") return { source: "relay", outcome: "completed", message: "\u624B\u673A\u4E2D\u7EE7\u56DE\u8C03\uFF1A\u822A\u7EBF\u6587\u4EF6\u5DF2\u4F20\u8F93\u5E76\u6821\u9A8C\uFF08\u6B64\u6B65\u9AA4\u672A\u8C03\u7528 DJI MSDK\uFF09" };
     if (action.startsWith("pairing-") && read2(inner, "ok") === true) return { source: "relay", outcome: "completed", message: `\u624B\u673A\u5DF2\u5B8C\u6210${pairingLabel(action)}\u547D\u4EE4\uFF1B\u8BF7\u4EE5\u5BF9\u9891\u72B6\u6001\u4E3A\u51C6` };
-    if (code === "SUCCEEDED" && action.startsWith("flight-")) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
+    if (code === "SUCCEEDED" && action.startsWith("flight-")) {
+      const landing = confirmedAction === "land" || confirmedAction === "confirm-landing" || action === "flight-land" || action === "flight-confirm-landing";
+      return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess", landing ? ["\u8BF4\u660E\uFF1A\u964D\u843D\u63A5\u53E3\u8C03\u7528\u5DF2\u53D7\u7406\uFF1B\u662F\u5426\u6B63\u5728\u4E0B\u964D\u3001\u662F\u5426\u843D\u5730\u8BF7\u4EE5\u98DE\u63A7\u72B6\u6001\u4E3A\u51C6"] : []);
+    }
     if (code === "SUCCEEDED" && action.startsWith("mission-")) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
     if (code === "SUCCEEDED" && action.startsWith("stream-")) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
     if (code === "SUCCEEDED" && action === "photo-fetch") {
@@ -8642,7 +8654,7 @@ ${failure3.message}` };
       el("device-detail").innerHTML = html;
       lastDeviceDetailHtml = html;
     }
-    el("device-guide").textContent = `电脑和手机连接同一 Wi-Fi，打开手机中继并授予所需权限，手机会自动发现并连接电脑。需要手动连接时，长按手机页面标题打开调试入口，填写 ${view.relayHint}。已对频的飞机会在开机后自动连接；只有新增飞机或更换遥控器时，才在这里开始对频。自动连接模式下，电脑恢复后手机会重新发现并连接。`;
+    el("device-guide").textContent = `\u7535\u8111\u548C\u624B\u673A\u8FDE\u63A5\u540C\u4E00 Wi-Fi\uFF0C\u6253\u5F00\u624B\u673A\u4E2D\u7EE7\u5E76\u6388\u4E88\u6240\u9700\u6743\u9650\uFF0C\u624B\u673A\u4F1A\u81EA\u52A8\u53D1\u73B0\u5E76\u8FDE\u63A5\u7535\u8111\u3002\u9700\u8981\u624B\u52A8\u8FDE\u63A5\u65F6\uFF0C\u957F\u6309\u624B\u673A\u9875\u9762\u6807\u9898\u6253\u5F00\u8C03\u8BD5\u5165\u53E3\uFF0C\u586B\u5199 ${view.relayHint}\u3002\u5DF2\u5BF9\u9891\u7684\u98DE\u673A\u4F1A\u5728\u5F00\u673A\u540E\u81EA\u52A8\u8FDE\u63A5\uFF1B\u53EA\u6709\u65B0\u589E\u98DE\u673A\u6216\u66F4\u6362\u9065\u63A7\u5668\u65F6\uFF0C\u624D\u5728\u8FD9\u91CC\u5F00\u59CB\u5BF9\u9891\u3002\u81EA\u52A8\u8FDE\u63A5\u6A21\u5F0F\u4E0B\uFF0C\u7535\u8111\u6062\u590D\u540E\u624B\u673A\u4F1A\u91CD\u65B0\u53D1\u73B0\u5E76\u8FDE\u63A5\u3002`;
   }
   var routeMenuOpen = false;
   var setRouteMenuOpen = (open) => {
@@ -8993,7 +9005,7 @@ ${failure3.message}` };
     home.dataset.monitorHomeMode = direct.home.mode;
     land.dataset.monitorLandMode = direct.land.mode;
   };
-  function paintMonitorActionRail(rail, deviceId, title, progress) {
+  function paintMonitorActionRail(rail, deviceId, title, progress, doneLabel = "\u5DF2\u5B8C\u6210") {
     const head = document.createElement("div");
     head.className = "monitor-rail-head";
     const heading = document.createElement("strong");
@@ -9008,7 +9020,7 @@ ${failure3.message}` };
     const label = document.createElement("span");
     label.textContent = title;
     const value = document.createElement("small");
-    value.textContent = monitorRouteStepText[progress.state];
+    value.textContent = progress.state === "done" ? doneLabel : monitorRouteStepText[progress.state];
     row.append(label, value);
     body.append(row);
     if (progress.detail !== null) {
@@ -9061,7 +9073,7 @@ ${failure3.message}` };
     if (deviceId !== null && monitorRailKind === "direct") {
       const direct = monitorDirectProgress.get(deviceId);
       if (direct !== void 0) {
-        paintMonitorActionRail(rail, deviceId, direct.title, direct);
+        paintMonitorActionRail(rail, deviceId, direct.title, direct, "\u5DF2\u53D7\u7406");
         return;
       }
     }

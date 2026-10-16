@@ -43,12 +43,6 @@ const router = createRouter({
           component: () => import('@/features/mission-ops/presentation/TaskExecutionView.vue'),
           meta: { transition: 'app-fade' },
         },
-        {
-          path: 'routes',
-          name: 'route-planning',
-          component: () => import('@/features/mission-ops/presentation/TaskExecutionView.vue'),
-          meta: { transition: 'app-fade' },
-        },
         { path: 'sky-command', name: 'sky-command', component: () => import('@/features/sky-command/presentation/SkyCommandView.vue') },
         { path: 'help', name: 'help', component: () => import('@/presentation/views/HelpView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/features/model-asset/presentation/SettingsView.vue') },
