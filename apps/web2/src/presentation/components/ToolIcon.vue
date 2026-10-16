@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  PhAirplaneTilt as AirplaneTilt,
   PhCube as Cube,
   PhGlobe as Globe,
   PhHouse as House,
@@ -12,10 +13,11 @@ import {
 } from '@phosphor-icons/vue'
 
 const props = defineProps<{
-  name: 'home' | 'route' | 'mission' | 'upload' | 'view' | 'edit' | 'team' | 'language' | 'help'
+  name: 'home' | 'route' | 'mission' | 'upload' | 'view' | 'edit' | 'team' | 'language' | 'help' | 'aircraft'
 }>()
 
 const icons = {
+  aircraft: AirplaneTilt,
   home: House,
   route: MapTrifold,
   mission: PaperPlaneTilt,

@@ -12,9 +12,10 @@ import { createHttpModelAssetRepository } from '@/features/model-asset/infrastru
 import { createOpfsModelCache } from '@/features/model-asset/infrastructure/repositories/opfs-model-cache'
 import { createHttpViewerStorage } from '@/features/viewer/infrastructure/repositories/http-viewer-storage.repository'
 import { createPostMessageEditorBridge } from '@/features/editor/infrastructure/post-message-editor.bridge'
-import { createHttpLocalBridge } from '@/features/mission-ops/infrastructure/http-local-bridge.adapter'
+import { createSdkLocalBridge } from '@/features/mission-ops/infrastructure/sdk-local-bridge.adapter'
 import { createKmlRoutePreview } from '@/features/mission-ops/infrastructure/kml-route-preview.adapter'
 import { createHttpInstallerAsset } from '@/features/mission-ops/infrastructure/http-installer-asset.adapter'
+import { createSdkSkyCommand } from '@/features/sky-command/infrastructure/sdk-sky-command.adapter'
 
 export type CreateContainerOptions = {
   storage?: Storage
@@ -68,9 +69,10 @@ export function createWeb2Container(options: CreateContainerOptions = {}): Web2C
     models,
     viewerStorage: createHttpViewerStorage({ http, models }),
     editorBridge: createPostMessageEditorBridge(),
-    localBridge: createHttpLocalBridge(),
+    localBridge: createSdkLocalBridge(),
     routePreview: createKmlRoutePreview(),
     installerAsset: createHttpInstallerAsset(options.fetchImpl),
+    skyCommand: createSdkSkyCommand(),
     resetWorkspace() {
       workspace.setActiveProjectId(null)
       jobWatch.clear()

@@ -3,7 +3,7 @@ import { ok } from '@/shared/result'
 import type { AuthRepository } from '../../domain/repositories/auth.repository'
 import type { SessionStore } from '../../domain/repositories/session-store.port'
 import type { UserSession } from '../../domain/entities/user-session.entity'
-import { loginUseCase, registerUseCase, resolveAuthNavigation } from './auth.usecase'
+import { enterLocalDebugUseCase, loginUseCase, registerUseCase, resolveAuthNavigation } from './auth.usecase'
 
 function session(overrides: Partial<UserSession> = {}): UserSession {
   return {
@@ -78,6 +78,13 @@ describe('auth use cases', () => {
     })
     expect(error).toBeNull()
     expect(store.getToken()).toBeNull()
+  })
+
+  it('stores a local debug session without a captcha', () => {
+    const store = memorySession()
+    const value = enterLocalDebugUseCase(store, '  ')
+    expect(value.username).toBe('local')
+    expect(store.getToken()).toBe('local-debug')
   })
 
   it('maps route guards', () => {

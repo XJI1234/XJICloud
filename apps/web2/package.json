@@ -14,12 +14,14 @@
     "preview:viewer-demo": "vite preview --config vite.viewer-demo.config.ts",
     "preview": "vite preview",
     "test": "vitest run --config vitest.config.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sky-gateway": "node scripts/sky-command-gateway.mjs"
   },
   "dependencies": {
     "@native3dgs/web": "file:vendor/native3dgs-web-0.2.2-preview.3.tgz",
     "@phosphor-icons/vue": "^2.2.1",
     "@xjicloud/shared": "workspace:*",
+    "@xjicloud/sky-command-sdk": "file:vendor/xjicloud-sky-command-sdk-0.2.1.tgz",
     "@xjicloud/spark": "workspace:*",
     "cesium": "1.145.0",
     "flv.js": "^1.6.2",

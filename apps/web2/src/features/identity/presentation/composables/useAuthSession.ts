@@ -1,6 +1,7 @@
 import { inject } from 'vue'
 import { CONTAINER_KEY } from '@/shared/di'
 import {
+  enterLocalDebugUseCase,
   loginUseCase,
   logoutUseCase,
   probeNeedCaptchaUseCase,
@@ -16,6 +17,7 @@ export function useAuthSession() {
     session: () => session.read(),
     isAuthenticated: () => isAuthenticated(session.read()),
     login: (input: Parameters<typeof loginUseCase>[1]) => loginUseCase({ auth, session }, input),
+    enterLocal: (username: string) => enterLocalDebugUseCase(session, username),
     register: (input: Parameters<typeof registerUseCase>[1]) => registerUseCase({ auth, session }, input),
     logout: () => logoutUseCase({ session, onWorkspaceReset: resetWorkspace }),
     probeNeedCaptcha: (username: string) => probeNeedCaptchaUseCase({ auth }, username),

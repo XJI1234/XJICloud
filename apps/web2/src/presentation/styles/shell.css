@@ -510,6 +510,11 @@ a {
   display: none;
 }
 
+.cloud-shell--operator .cloud-header {
+  backdrop-filter: none;
+  background: var(--elevated);
+}
+
 .cloud-header {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
@@ -686,6 +691,7 @@ a {
 }
 
 .cloud-main--fill {
+  height: 100%;
   overflow: hidden;
 }
 

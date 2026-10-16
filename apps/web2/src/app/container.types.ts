@@ -12,6 +12,7 @@ import type { LocalBridgePort } from '@/features/mission-ops/domain/repositories
 import type { RoutePreviewPort } from '@/features/mission-ops/domain/repositories/route-preview.port'
 import type { InstallerAssetPort } from '@/features/mission-ops/domain/repositories/installer-asset.port'
 import type { JobWatchHub } from '@/features/dataset-training/application/job-watch-hub'
+import type { SkyCommandPort } from '@/features/sky-command/domain/repositories/sky-command.port'
 
 export type Web2Container = {
   auth: AuthRepository
@@ -28,5 +29,6 @@ export type Web2Container = {
   localBridge: LocalBridgePort
   routePreview: RoutePreviewPort
   installerAsset: InstallerAssetPort
+  skyCommand: SkyCommandPort
   resetWorkspace: () => void
 }

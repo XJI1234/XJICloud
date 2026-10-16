@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppSheet from '@/presentation/components/AppSheet.vue'
@@ -8,15 +8,12 @@ import ToolIcon from '@/presentation/components/ToolIcon.vue'
 import { useAppLocale } from '@/presentation/composables/useAppLocale'
 import { useAuthSession } from '@/features/identity/presentation/composables/useAuthSession'
 import { showComingSoon } from '@/presentation/coming-soon'
-import { CONTAINER_KEY } from '@/shared/di'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { currentLocale, setLocale } = useAppLocale()
 const auth = useAuthSession()
-const container = inject(CONTAINER_KEY)!
-const activeProjectId = ref(container.workspace.getActiveProjectId())
 
 const userModalVisible = ref(false)
 const langModalVisible = ref(false)
@@ -33,7 +30,7 @@ const navItems = computed(() => [
 ] as const)
 
 const toolItems = computed(() => [
-  { labelKey: 'tools.routePlanning', route: null, icon: 'route' as const },
+  { labelKey: 'tools.routePlanning', route: '/app/routes', icon: 'route' as const },
   { labelKey: 'tools.taskExecution', route: '/app/mission', icon: 'mission' as const },
   { labelKey: 'tools.dataUpload', route: '/app/upload', icon: 'upload' as const },
   { labelKey: 'tools.modelView', route: '/app/layer', icon: 'view' as const },
@@ -79,30 +76,24 @@ function onDocumentKeydown(event: KeyboardEvent) {
   }
 }
 
-let unsubscribeWorkspace: (() => void) | undefined
-
 onMounted(() => {
   session.value = auth.session()
-  activeProjectId.value = container.workspace.getActiveProjectId()
-  unsubscribeWorkspace = container.workspace.subscribe(() => {
-    activeProjectId.value = container.workspace.getActiveProjectId()
-  })
   document.addEventListener('keydown', onDocumentKeydown)
 })
 
 onBeforeUnmount(() => {
-  unsubscribeWorkspace?.()
   document.removeEventListener('keydown', onDocumentKeydown)
 })
 
 const fillMain = computed(
-  () => route.name === 'layer' || route.name === 'supersplat',
+  () => route.name === 'layer' || route.name === 'supersplat' || route.name === 'mission' || route.name === 'route-planning',
 )
-const isImmersive = computed(() => route.name === 'home' || !activeProjectId.value)
+const isImmersive = computed(() => route.name === 'home')
+const operatorPage = computed(() => route.name === 'mission' || route.name === 'route-planning')
 </script>
 
 <template>
-  <div class="cloud-shell" :class="{ 'cloud-shell--immersive': isImmersive }">
+  <div class="cloud-shell" :class="{ 'cloud-shell--immersive': isImmersive, 'cloud-shell--operator': operatorPage }">
     <header class="cloud-header">
       <div class="cloud-brand">
         <button class="cloud-brand-button" type="button" :title="t('nav.home')" @click="goHome">

@@ -36,6 +36,9 @@ export type DomainErrorCode =
   | 'SSE_CONNECT_FAILED'
   | 'OPERATION_CANCELLED'
   | 'NETWORK'
+  | 'SKY_OFFLINE'
+  | 'SKY_INVALID'
+  | 'SKY_COMMAND_FAILED'
   | 'UNKNOWN'
 
 export class DomainError extends Error {

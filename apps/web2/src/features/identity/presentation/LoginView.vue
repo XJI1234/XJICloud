@@ -25,6 +25,7 @@ const pending = ref(false)
 const showCaptcha = ref(false)
 const captcha = ref<CaptchaChallenge | null>(null)
 const captchaInput = ref('')
+const localDebug = import.meta.env.DEV
 const showPassword = ref(false)
 const curious = ref(false)
 const hiding = ref(false)
@@ -73,6 +74,11 @@ async function checkNeedCaptcha() {
 watch(mode, async (next) => {
   errorMessage.value = ''
   captchaInput.value = ''
+  if (localDebug) {
+    showCaptcha.value = false
+    captcha.value = null
+    return
+  }
   if (next === 'register') {
     await ensureCaptchaShown()
   } else {
@@ -107,6 +113,12 @@ async function submit() {
 
   pending.value = true
   try {
+    if (localDebug) {
+      auth.enterLocal(username.value)
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/app/home'
+      await router.push(redirect)
+      return
+    }
     if (mode.value === 'register') {
       const challenge = captcha.value
       if (!challenge) {
@@ -171,7 +183,7 @@ async function submit() {
       <div class="login-pane-inner">
         <div class="login-head">
           <h1 class="login-title">{{ mode === 'register' ? t('login.welcomeRegister') : t('login.welcomeBack') }}</h1>
-          <p class="login-subtitle">{{ mode === 'register' ? t('login.leadRegister') : t('login.leadLogin') }}</p>
+          <p class="login-subtitle">{{ localDebug ? t('login.localDebug') : (mode === 'register' ? t('login.leadRegister') : t('login.leadLogin')) }}</p>
         </div>
 
         <form

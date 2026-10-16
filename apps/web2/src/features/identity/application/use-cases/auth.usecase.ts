@@ -72,6 +72,20 @@ export async function probeNeedCaptchaUseCase(
   return deps.auth.needCaptcha(name)
 }
 
+export function enterLocalDebugUseCase(session: SessionStore, username: string): UserSession {
+  const name = username.trim() || 'local'
+  const value: UserSession = {
+    accessToken: 'local-debug',
+    tokenType: 'Bearer',
+    expiresInMs: 0,
+    userId: 'local-debug',
+    username: name,
+    displayName: name,
+  }
+  session.persist(value)
+  return value
+}
+
 export function resolveAuthNavigation(input: {
   isAuthenticated: boolean
   isPublicLogin: boolean
