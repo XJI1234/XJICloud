@@ -271,6 +271,8 @@ CREATE TABLE model_versions (
 
 `apps/web2/src/features/mission-ops` 的任务执行页借助独立 Sky-Command 托盘宿主 `127.0.0.1:17890` 操作原有 `DesktopUiGateway`，视频走本机 `127.0.0.1:18080` HTTP-FLV，手机 MSDK 的 WebSocket/RTMP 仍留在本机程序。默认网页来源 `localhost:5176`；部署来源由本机程序的 `SKYCOMMAND_CLOUD_ORIGIN` 指定。未对目标 Windows 浏览器/手机/飞行器做实机验证，公网 HTTPS → 本机 HTTP 的 PNA/混合内容需要额外验收；返航二次确认已接入原网关的请求/确认/取消链路，实机效果仍需验收。
 
+本地开发的 Vite 还会启动 `apps/web2/scripts/sky-command-gateway.mjs`（SDK 0.2.2），控制端口 `127.0.0.1:8767`，手机 Relay `8080`、RTMP `19500`、HTTP-FLV `18080`。网关就绪后在物理 WLAN 每秒广播 UDP `39082` 自动发现公告，关闭网关时停止；持久身份位于系统临时目录 `sky-command-web/discovery-server-id`（目录保留期间复用），进程实例 ID 每次启动重建。广播失败保留手动连接。此路径与上述独立托盘宿主部署路径应分别验证，手机/飞行器实机链路仍待验收。
+
 ## 7.1 已弃用：旧用户前端（`apps/web/`）
 
 包名 `@xjicloud/web`，端口 **5174**。Pinia + `src/api` 直连。仅作对照与历史构建：`pnpm dev:web-legacy` / `pnpm build:web-legacy`。

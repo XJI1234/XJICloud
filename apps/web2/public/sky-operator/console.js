@@ -8642,7 +8642,7 @@ ${failure3.message}` };
       el("device-detail").innerHTML = html;
       lastDeviceDetailHtml = html;
     }
-    el("device-guide").textContent = `\u7535\u8111\u548C\u624B\u673A\u8FDE\u540C\u4E00 Wi-Fi\u3002\u5728\u624B\u673A\u4E0A\u586B\u5199 ${view.relayHint}\uFF0C\u70B9\u4FDD\u5B58\u5E76\u542F\u52A8\u3002\u5DF2\u5BF9\u9891\u7684\u98DE\u673A\u4F1A\u5728\u5F00\u673A\u540E\u81EA\u52A8\u8FDE\u63A5\uFF1B\u53EA\u6709\u65B0\u589E\u98DE\u673A\u6216\u66F4\u6362\u9065\u63A7\u5668\u65F6\uFF0C\u624D\u5728\u8FD9\u91CC\u5F00\u59CB\u5BF9\u9891\u3002\u7535\u8111\u5173\u6389\u540E\uFF0C\u9700\u8981\u5728\u624B\u673A\u4E0A\u91CD\u65B0\u8FDE\u63A5\u3002`;
+    el("device-guide").textContent = `电脑和手机连接同一 Wi-Fi，打开手机中继并授予所需权限，手机会自动发现并连接电脑。需要手动连接时，长按手机页面标题打开调试入口，填写 ${view.relayHint}。已对频的飞机会在开机后自动连接；只有新增飞机或更换遥控器时，才在这里开始对频。自动连接模式下，电脑恢复后手机会重新发现并连接。`;
   }
   var routeMenuOpen = false;
   var setRouteMenuOpen = (open) => {

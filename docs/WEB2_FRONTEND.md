@@ -306,6 +306,8 @@ LoginView
 
 `mission-ops` 通过 `LocalBridgePort` 接到独立 Sky-Command 托盘进程（默认 `127.0.0.1:17890`）。网页仅处理状态、航线与本机 HTTP-FLV 显示，手机 MSDK Relay 和 RTMP 继续由本机程序提供。宿主必须校验浏览器 Origin；`skycommand://open` 只负责唤起已安装的本机程序。开发来源为 `localhost:5176`，部署需要 `SKYCOMMAND_CLOUD_ORIGIN` 与实际 HTTPS 站点完全一致；HTTPS 页面访问本机 HTTP 必须实机验证浏览器 Private Network Access 支持。返航沿用原网关的 `flight.request` → 用户确认 → `flight.confirm`；取消则调用 `flight.cancel`，不以网页布尔值替代 DJI 确认 ID。
 
+当前本地开发另由 Vite 自动启动 `apps/web2/scripts/sky-command-gateway.mjs`，使用 vendored SDK 0.2.2：控制接口仅监听 `127.0.0.1:8767/invoke`，手机 Relay 为 `8080`，RTMP 为 `19500`，HTTP-FLV 为 `18080`。Relay 与控制接口就绪后，在物理 WLAN 上每秒向 UDP `39082` 广播自动发现公告；网关退出时停止广播。`serverId` 保存在系统临时目录的 `sky-command-web/discovery-server-id`，同目录存在时重启复用，`instanceId` 每次启动更新。广播不可用时保留手动连接入口；尚未做手机与飞行器实机验收。
+
 ## 12. 已知产品事实（避免 Agent 回退）
 
 - **默认开发入口是 `apps/web2` :5176**（根目录 `pnpm dev`）。

@@ -1,8 +1,9 @@
 import { createServer } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { networkInterfaces, tmpdir } from 'node:os'
 import path from 'node:path'
-import { DesktopApplication, DesktopUiGateway, createMediaPorts } from '@xjicloud/sky-command-sdk/desktop'
+import { DesktopApplication, DesktopUiGateway, createMediaPorts, createRelayDiscovery, loadOrCreateServerId } from '@xjicloud/sky-command-sdk/desktop'
 
 const methods = {
   'state-snapshot': 'state.snapshot',
@@ -175,11 +176,23 @@ const control = createServer((request, response) => {
   })
 })
 await new Promise((resolve) => control.listen(8767, '127.0.0.1', resolve))
+let stopDiscovery = () => {}
+try {
+  const discovery = createRelayDiscovery(loadOrCreateServerId(dataRoot), randomUUID(), 8080, {
+    diagnostic: (code) => console.error(`[discovery] ${code}`),
+  })
+  stopDiscovery = discovery.stop
+  discovery.start()
+} catch (error) {
+  stopDiscovery()
+  console.error(`[discovery] 自动发现启动失败，仍可使用手动连接：${error instanceof Error ? error.message : String(error)}`)
+}
 console.log(`Phone relay ws://0.0.0.0:8080/relay`)
 console.log(`Video RTMP 19500, HTTP-FLV http://127.0.0.1:18080`)
 console.log(`Operator control http://127.0.0.1:8767/invoke`)
 
 async function stop() {
+  stopDiscovery()
   control.close()
   await created.value.stop()
   await created.value.dispose()
