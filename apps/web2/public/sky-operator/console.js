@@ -6107,6 +6107,13 @@
   var PHONE_MISSION = /* @__PURE__ */ new Set(["STARTING", "EXECUTING", "PAUSED"]);
   var DJI_MISSION = /* @__PURE__ */ new Set(["PREPARING", "RECOVERING", "ENTER_WAYLINE", "EXECUTING", "PAUSED", "RETURN_TO_START_POINT"]);
   var DJI_MISSION_IDLE = /* @__PURE__ */ new Set(["IDLE", "READY", "UPLOADING", "FINISHED", "INTERRUPTED", "DISCONNECTED", "NOT_SUPPORTED", "UNKNOWN"]);
+  function landingProtectionNotice(input) {
+    if (input.flightController !== "connected" || input.flying === "grounded" && input.motorsOn === false || input.landingConfirmationNeeded === true || input.landingProtectionState === "SAFE_TO_LAND") return null;
+    const current = input.landingProtectionState === "NOT_SAFE_TO_LAND";
+    const atMs = current ? input.telemetryReceivedAtMs : input.noticeAtMs;
+    if (atMs === null || !Number.isFinite(atMs) || input.nowMs < atMs || input.nowMs - atMs > 2e4) return null;
+    return current ? "\u98DE\u673A\u5224\u5B9A\u5F53\u524D\u4E0D\u9002\u5408\u964D\u843D\uFF0C\u8BF7\u68C0\u67E5\u4E0B\u65B9\u5730\u9762\u5E76\u7559\u610F\u98DE\u884C\u72B6\u6001\u3002" : "\u521A\u624D\u98DE\u673A\u66FE\u5224\u5B9A\u4E0D\u9002\u5408\u964D\u843D\uFF0C\u8BF7\u7559\u610F\u5F53\u524D\u98DE\u884C\u72B6\u6001\u3002";
+  }
   function monitorAircraftStatus(input) {
     if (input.flightController === "disconnected") return { label: "\u98DE\u63A7\u672A\u8FDE\u63A5", detail: "" };
     const mode = input.flightMode;
@@ -7586,30 +7593,111 @@ ${failure3.message}` };
   var videoPlayRetryTimer = null;
   var videoPlayEventsBoundTo = null;
   var playbackWatchTimer = null;
-  var lastLiveEdgeSeekAtMs = 0;
+  var lastLiveEdgeSeeks = /* @__PURE__ */ new WeakMap();
+  var flightPlaybackWasVisible = false;
   var phoneLinkProbes = /* @__PURE__ */ new Map();
   var phoneLinkProbeInFlightDeviceId = null;
   var pairingCommandInFlight = null;
   var NO_FRAME_MS = 25e3;
   var STALL_MS = 12e3;
-  var LIVE_EDGE_MAX_LAG_S = 8;
-  var LIVE_EDGE_KEEP_S = 0.5;
-  var PLAYBACK_WATCH_MS = 2e3;
-  var LIVE_EDGE_SEEK_COOLDOWN_MS = 2e3;
+  var LIVE_EDGE_MAX_LAG_S = 1;
+  var LIVE_EDGE_KEEP_S = 0.3;
+  var PLAYBACK_WATCH_MS = 250;
+  var LIVE_EDGE_SEEK_COOLDOWN_MS = 500;
   var LIVE_BACKWARD_MAX_S = 8;
   var LIVE_BACKWARD_KEEP_S = 3;
   var LIVE_PLAYER_CONFIG = {
-    enableStashBuffer: true,
-    stashInitialSize: 262144,
+    enableStashBuffer: false,
     lazyLoad: false,
     liveSync: true,
-    liveSyncMaxLatency: 1,
-    liveSyncTargetLatency: 0.5,
-    liveSyncPlaybackRate: 1.08,
+    liveSyncMaxLatency: 0.6,
+    liveSyncTargetLatency: LIVE_EDGE_KEEP_S,
+    liveSyncPlaybackRate: 1.15,
     autoCleanupSourceBuffer: true,
     autoCleanupMaxBackwardDuration: LIVE_BACKWARD_MAX_S,
     autoCleanupMinBackwardDuration: LIVE_BACKWARD_KEEP_S
   };
+  var playbackPageId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  var playbackGeneration = 0;
+  var playbackTraces = /* @__PURE__ */ new WeakMap();
+  var playbackDiagnosticHistory = [];
+  var playbackRequestUrl = (url) => {
+    const request = new URL(url);
+    request.searchParams.set("viewer", playbackPageId);
+    return request.href;
+  };
+  var tracePlayback = (video, event, reason = "", slot = null) => {
+    try {
+      let trace = playbackTraces.get(video);
+      if (event === "attach" || trace === void 0) {
+        trace = { generation: ++playbackGeneration, sampledAt: 0 };
+        playbackTraces.set(video, trace);
+      }
+      const now = Date.now();
+      if (event === "sample" && now - trace.sampledAt < 1e4) return;
+      if (event === "sample") trace.sampledAt = now;
+      const record3 = {
+        pageId: playbackPageId,
+        generation: trace.generation,
+        atMs: now,
+        event,
+        reason,
+        slot,
+        workspace: state.workspace,
+        hidden: document.hidden,
+        deviceId: slot === null ? state.streamDeviceId : monitorPlayers.get(slot)?.deviceId ?? null,
+        time: Number.isFinite(video.currentTime) ? video.currentTime : null,
+        bufferedEnd: video.buffered.length > 0 ? video.buffered.end(video.buffered.length - 1) : null,
+        frames: typeof video.getVideoPlaybackQuality === "function" ? video.getVideoPlaybackQuality().totalVideoFrames : null,
+        readyState: video.readyState,
+        paused: video.paused,
+        width: video.videoWidth,
+        height: video.videoHeight,
+        mediaError: video.error?.code ?? null,
+        ended: video.ended,
+        seeking: video.seeking
+      };
+      playbackDiagnosticHistory.push(record3);
+      if (playbackDiagnosticHistory.length > 128) playbackDiagnosticHistory.shift();
+      let mirror = document.getElementById("sky-playback-diagnostics");
+      if (mirror === null) {
+        mirror = document.createElement("script");
+        mirror.type = "application/json";
+        mirror.id = "sky-playback-diagnostics";
+        document.body.append(mirror);
+      }
+      mirror.textContent = JSON.stringify(playbackDiagnosticHistory);
+      void safeRenderInvoke("diagnostics-record", { action: "video-playback-diagnostic", reason: JSON.stringify(record3) });
+    } catch {
+    }
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (attachedUrl !== null) tracePlayback(el("video"), "visibility");
+    for (const [slot] of monitorPlayers) {
+      const video = monitorVideoElement(slot);
+      if (video !== null) tracePlayback(video, "visibility", "", slot);
+      if (!document.hidden) {
+        const lane = monitorPlayers.get(slot);
+        if (lane !== void 0) {
+          lane.progress.reset();
+          lane.lastPaintAtMs = Date.now();
+          lane.attachedAtMs = Date.now();
+          if (video !== null) {
+            lastLiveEdgeSeeks.delete(video);
+            chaseLiveEdge(video);
+            if (video.paused) void video.play().catch(() => void 0);
+          }
+        }
+      }
+    }
+    flightPlaybackWasVisible = false;
+    if (!document.hidden && attachedUrl !== null) {
+      const video = el("video");
+      lastLiveEdgeSeeks.delete(video);
+      chaseLiveEdge(video);
+      scheduleVideoPlay(video);
+    }
+  });
   var clearFlvRecoverTimer = () => {
     if (flvRecoverTimer === null) return;
     window.clearTimeout(flvRecoverTimer);
@@ -7625,7 +7713,7 @@ ${failure3.message}` };
     clearVideoPlayRetry();
     videoPlayRetryTimer = window.setTimeout(() => {
       videoPlayRetryTimer = null;
-      if (flvPlayer === null || attachedUrl === null) return;
+      if (document.hidden || flvPlayer === null || attachedUrl === null) return;
       if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
       void video.play().catch((error) => {
         const name = error instanceof Error ? error.name : "";
@@ -7637,11 +7725,16 @@ ${failure3.message}` };
     if (videoPlayEventsBoundTo === video) return;
     const hooked = video;
     const onReady = () => {
+      chaseLiveEdge(video);
       scheduleVideoPlay(video);
     };
     const onLiveEdge = () => {
       chaseLiveEdge(video);
     };
+    const onDiagnostic = (event) => {
+      tracePlayback(video, "media-event", event.type);
+    };
+    for (const event of ["pause", "waiting", "stalled", "ended", "playing", "error"]) video.addEventListener(event, onDiagnostic);
     for (const event of ["loadedmetadata", "loadeddata", "canplay", "playing"]) {
       video.addEventListener(event, onReady);
     }
@@ -7649,11 +7742,14 @@ ${failure3.message}` };
     videoPlayEventsBoundTo = video;
     hooked.__skyCommandPlayReady = onReady;
     hooked.__skyCommandLiveEdge = onLiveEdge;
+    hooked.__skyCommandDiagnostic = onDiagnostic;
   };
   var unbindVideoPlayEvents = (video) => {
     const hooked = video;
     const onReady = hooked.__skyCommandPlayReady;
     const onLiveEdge = hooked.__skyCommandLiveEdge;
+    const onDiagnostic = hooked.__skyCommandDiagnostic;
+    if (onDiagnostic !== void 0) for (const event of ["pause", "waiting", "stalled", "ended", "playing", "error"]) video.removeEventListener(event, onDiagnostic);
     if (onReady === void 0 && onLiveEdge === void 0) return;
     for (const event of ["loadedmetadata", "loadeddata", "canplay", "playing"]) {
       if (onReady !== void 0) video.removeEventListener(event, onReady);
@@ -7661,15 +7757,17 @@ ${failure3.message}` };
     if (onLiveEdge !== void 0) video.removeEventListener("timeupdate", onLiveEdge);
     delete hooked.__skyCommandPlayReady;
     delete hooked.__skyCommandLiveEdge;
+    delete hooked.__skyCommandDiagnostic;
     if (videoPlayEventsBoundTo === video) videoPlayEventsBoundTo = null;
   };
-  var detachVideo = () => {
+  var detachVideo = (reason = "source-change") => {
     detachingFlightVideo = true;
     try {
       stopPlaybackWatch();
       clearFlvRecoverTimer();
       clearVideoPlayRetry();
       const video = el("video");
+      if (attachedUrl !== null) tracePlayback(video, "detach", reason);
       unbindVideoPlayEvents(video);
       if (flvPlayer !== null) {
         try {
@@ -7697,7 +7795,8 @@ ${failure3.message}` };
       lastSeenCurrentTime = 0;
       flightPlaybackProgress.reset();
       firstPlaybackFrameReported = false;
-      lastLiveEdgeSeekAtMs = 0;
+      lastLiveEdgeSeeks.delete(video);
+      flightPlaybackWasVisible = false;
       selectedPlaybackDeviceId = null;
       video.playbackRate = 1;
       video.removeAttribute("src");
@@ -7730,6 +7829,7 @@ ${failure3.message}` };
   var startPlaybackWatch = (video) => {
     stopPlaybackWatch();
     playbackWatchTimer = window.setInterval(() => {
+      chaseLiveEdge(video);
       watchPlaybackStall(video);
       reportPlaybackHealth(video);
     }, PLAYBACK_WATCH_MS);
@@ -7740,7 +7840,7 @@ ${failure3.message}` };
     playbackWatchTimer = null;
   };
   var chaseLiveEdge = (video) => {
-    if (flvPlayer === null || attachedUrl === null || !isPainting(video) || video.seeking) return;
+    if (document.hidden || video.seeking || !Number.isFinite(video.currentTime)) return;
     try {
       if (video.buffered.length === 0) return;
       const end = video.buffered.end(video.buffered.length - 1);
@@ -7748,9 +7848,11 @@ ${failure3.message}` };
       const lag = end - video.currentTime;
       if (lag <= LIVE_EDGE_MAX_LAG_S) return;
       const now = Date.now();
-      if (now - lastLiveEdgeSeekAtMs < LIVE_EDGE_SEEK_COOLDOWN_MS) return;
-      lastLiveEdgeSeekAtMs = now;
-      video.currentTime = Math.max(0, end - LIVE_EDGE_KEEP_S);
+      const previous = lastLiveEdgeSeeks.get(video);
+      if (previous !== void 0 && now - previous < LIVE_EDGE_SEEK_COOLDOWN_MS) return;
+      const target = Math.max(video.buffered.start(video.buffered.length - 1), end - LIVE_EDGE_KEEP_S);
+      video.currentTime = target;
+      lastLiveEdgeSeeks.set(video, now);
     } catch {
     }
   };
@@ -7765,6 +7867,7 @@ ${failure3.message}` };
   };
   var recoverStuckFlv = (video, url, reason) => {
     if (flvRecoverTimer !== null) return;
+    tracePlayback(video, "recovery", reason);
     flvFatalStreak += 1;
     if (flvFatalStreak <= 3 && softReloadFlv(video)) {
       showPlaybackHealth(`${reason}\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D\u2026`);
@@ -7777,6 +7880,7 @@ ${failure3.message}` };
   var recordFirstPlaybackFrame = (video) => {
     if (firstPlaybackFrameReported || video.videoWidth <= 0 || video.videoHeight <= 0) return;
     firstPlaybackFrameReported = true;
+    tracePlayback(video, "first-frame");
     void safeRenderInvoke("diagnostics-record", {
       action: "video-first-frame-rendered",
       reason: `width=${video.videoWidth};height=${video.videoHeight}`
@@ -7797,9 +7901,20 @@ ${failure3.message}` };
   };
   var watchPlaybackStall = (video) => {
     if (attachedUrl === null || flvPlayer === null || flvRecoverTimer !== null) return;
+    tracePlayback(video, "sample");
     const now = Date.now();
+    if (document.hidden || state.workspace !== "flight") {
+      flightPlaybackWasVisible = false;
+      return;
+    }
+    if (!flightPlaybackWasVisible) {
+      flightPlaybackWasVisible = true;
+      flightPlaybackProgress.reset();
+      lastPaintAtMs = now;
+      attachedAtMs = now;
+    }
     notePaintProgress(video);
-    if (isPainting(video)) {
+    if (lastPaintAtMs > 0 && firstPlaybackFrameReported) {
       if (lastPaintAtMs > 0 && now - lastPaintAtMs > STALL_MS) {
         recoverStuckFlv(video, attachedUrl, "\u753B\u9762\u505C\u4F4F");
       }
@@ -7842,6 +7957,7 @@ ${failure3.message}` };
     clearFlvRecoverTimer();
     detachVideo();
     attachedUrl = url;
+    tracePlayback(video, "attach");
     attachedAtMs = Date.now();
     lastPaintAtMs = 0;
     lastSeenCurrentTime = 0;
@@ -7856,25 +7972,38 @@ ${failure3.message}` };
         return;
       }
       flvPlayer = import_mpegts.default.createPlayer(
-        { type: "flv", isLive: true, hasAudio: false, hasVideo: true, url },
-        // 小 stash 缓毛刺/网络抖动；过大则延迟明显。背压策略已在 HTTP-FLV 侧按关键frame 续写。
+        { type: "flv", isLive: true, hasAudio: false, hasVideo: true, url: playbackRequestUrl(url) },
+        // 不等待额外 stash，保留少量 MSE 缓冲吸收抖动；与监控页共享延迟预算。
         LIVE_PLAYER_CONFIG
       );
+      const player = flvPlayer;
       bindVideoPlayEvents(video);
       flvPlayer.on(import_mpegts.default.Events.MEDIA_INFO, (info) => {
+        if (flvPlayer !== player || detachingFlightVideo) return;
         scheduleVideoPlay(video);
         const record3 = info !== null && typeof info === "object" ? info : null;
         const width = typeof record3?.width === "number" ? record3.width : 0;
         const height = typeof record3?.height === "number" ? record3.height : 0;
         if (width > 0) showPlaybackHealth(`\u5DF2\u6536\u5230\u89C6\u9891\u4FE1\u606F\uFF08${width}\xD7${height}\uFF09\uFF0C\u6B63\u5728\u7B49\u5F85\u753B\u9762\u8FDE\u7EED\u64AD\u653E`);
       });
+      flvPlayer.on(import_mpegts.default.Events.LOADING_COMPLETE, () => {
+        if (flvPlayer !== player || detachingFlightVideo || state.workspace === "monitor") return;
+        tracePlayback(video, "loading-complete");
+        const retryUrl = attachedUrl;
+        if (retryUrl === null) return;
+        flvFatalStreak += 1;
+        detachVideo("transport-ended");
+        showPlaybackHealth("\u56FE\u4F20\u64AD\u653E\u8FDE\u63A5\u5DF2\u7ED3\u675F\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\u2026");
+        scheduleFlvReattach(retryUrl);
+      });
       flvPlayer.on(import_mpegts.default.Events.ERROR, (errorType, errorDetail) => {
-        if (detachingFlightVideo || state.workspace === "monitor") return;
+        if (flvPlayer !== player || detachingFlightVideo || state.workspace === "monitor") return;
         flvFatalStreak += 1;
         const retryUrl = attachedUrl;
+        tracePlayback(video, "error", `${errorType}:${errorDetail}`);
         console.warn("\u56FE\u4F20\u64AD\u653E\u8FDE\u63A5\u5F02\u5E38", errorType, errorDetail);
         if (retryUrl === null) return;
-        detachVideo();
+        detachVideo("media-error");
         showPlaybackHealth("\u56FE\u4F20\u64AD\u653E\u8FDE\u63A5\u5C1A\u672A\u5C31\u7EEA\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\u2026");
         scheduleFlvReattach(retryUrl);
       });
@@ -7883,6 +8012,7 @@ ${failure3.message}` };
       play();
       startPlaybackWatch(video);
     } catch {
+      tracePlayback(video, "error", "initialization");
       flvFatalStreak += 1;
       detachVideo();
       showPlaybackHealth("\u56FE\u4F20\u64AD\u653E\u5668\u521D\u59CB\u5316\u5931\u8D25\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8BD5\u2026");
@@ -8007,9 +8137,12 @@ ${failure3.message}` };
     const node = document.querySelector(`[data-monitor-video="${slot}"]`);
     return node instanceof HTMLVideoElement ? node : null;
   };
-  var releaseMonitorSlot = (slot, cooldownMs = 0) => {
+  var releaseMonitorSlot = (slot, cooldownMs = 0, reason = "source-change") => {
     const lane = monitorPlayers.get(slot);
     if (lane !== void 0) {
+      const video2 = monitorVideoElement(slot);
+      if (video2 !== null) tracePlayback(video2, "detach", reason, slot);
+      lane.unbindDiagnostics();
       monitorPlayers.delete(slot);
       if (lane.watchTimer !== null) window.clearInterval(lane.watchTimer);
       try {
@@ -8031,6 +8164,7 @@ ${failure3.message}` };
     }
     const video = monitorVideoElement(slot);
     if (video !== null) {
+      lastLiveEdgeSeeks.delete(video);
       video.removeAttribute("src");
       video.srcObject = null;
       try {
@@ -8047,16 +8181,26 @@ ${failure3.message}` };
     const existing = monitorPlayers.get(slot);
     if (existing !== void 0 && existing.deviceId === deviceId && existing.url === url) {
       const current = monitorVideoElement(slot);
-      if (current !== null && current.paused) void current.play().catch(() => void 0);
+      if (!document.hidden && current !== null && current.paused) {
+        chaseLiveEdge(current);
+        void current.play().catch(() => void 0);
+      }
       return;
     }
     releaseMonitorSlot(slot);
     const video = monitorVideoElement(slot);
     if (video === null || !url.includes(".flv") || !import_mpegts.default.isSupported()) return;
     const player = import_mpegts.default.createPlayer(
-      { type: "flv", isLive: true, hasAudio: false, hasVideo: true, url },
+      { type: "flv", isLive: true, hasAudio: false, hasVideo: true, url: playbackRequestUrl(url) },
       LIVE_PLAYER_CONFIG
     );
+    const diagnosticEvents = ["pause", "waiting", "stalled", "ended", "playing", "error"];
+    const onDiagnostic = (event) => {
+      if (monitorPlayers.get(slot) === lane) tracePlayback(video, "media-event", event.type, slot);
+    };
+    const onLiveEdge = () => {
+      if (monitorPlayers.get(slot) === lane) chaseLiveEdge(video);
+    };
     const lane = {
       deviceId,
       url,
@@ -8064,37 +8208,55 @@ ${failure3.message}` };
       attachedAtMs: Date.now(),
       lastPaintAtMs: 0,
       lastSeenCurrentTime: 0,
-      watchTimer: null
+      watchTimer: null,
+      progress: createPlaybackProgress(),
+      unbindDiagnostics: () => {
+        for (const event of diagnosticEvents) video.removeEventListener(event, onDiagnostic);
+        for (const event of ["timeupdate", "loadeddata", "canplay"]) video.removeEventListener(event, onLiveEdge);
+      }
     };
     monitorPlayers.set(slot, lane);
+    tracePlayback(video, "attach", "", slot);
+    for (const event of diagnosticEvents) video.addEventListener(event, onDiagnostic);
+    for (const event of ["timeupdate", "loadeddata", "canplay"]) video.addEventListener(event, onLiveEdge);
     video.muted = true;
     video.defaultMuted = true;
     video.volume = 0;
     video.setAttribute("playsinline", "");
     const play = () => {
+      if (document.hidden) return;
+      chaseLiveEdge(video);
       void video.play().catch(() => void 0);
     };
     player.on(import_mpegts.default.Events.MEDIA_INFO, () => {
-      play();
+      if (monitorPlayers.get(slot) === lane) play();
     });
-    player.on(import_mpegts.default.Events.ERROR, () => {
+    player.on(import_mpegts.default.Events.ERROR, (errorType, errorDetail) => {
       if (monitorPlayers.get(slot) !== lane) return;
-      releaseMonitorSlot(slot, 1500);
+      tracePlayback(video, "error", `${errorType}:${errorDetail}`, slot);
+      releaseMonitorSlot(slot, 1500, "media-error");
+    });
+    player.on(import_mpegts.default.Events.LOADING_COMPLETE, () => {
+      if (monitorPlayers.get(slot) !== lane) return;
+      tracePlayback(video, "loading-complete", "", slot);
+      releaseMonitorSlot(slot, 800, "transport-ended");
     });
     player.attachMediaElement(video);
     player.load();
     play();
     lane.watchTimer = window.setInterval(() => {
       if (monitorPlayers.get(slot) !== lane || state.workspace !== "monitor") return;
+      tracePlayback(video, "sample", "", slot);
+      if (document.hidden) return;
+      chaseLiveEdge(video);
       if (isPainting(video)) {
-        if (lane.lastPaintAtMs === 0 || Math.abs(video.currentTime - lane.lastSeenCurrentTime) >= 0.05) {
-          lane.lastPaintAtMs = Date.now();
-          lane.lastSeenCurrentTime = video.currentTime;
-        }
-        if (lane.lastPaintAtMs > 0 && Date.now() - lane.lastPaintAtMs > STALL_MS) releaseMonitorSlot(slot, 1e3);
+        if (lane.lastPaintAtMs === 0) tracePlayback(video, "first-frame", "", slot);
+        const frames = typeof video.getVideoPlaybackQuality === "function" ? video.getVideoPlaybackQuality().totalVideoFrames : null;
+        lane.lastPaintAtMs = lane.progress.observe(Date.now(), video.currentTime, frames);
+        if (lane.lastPaintAtMs > 0 && Date.now() - lane.lastPaintAtMs > STALL_MS) releaseMonitorSlot(slot, 1e3, "stall");
         return;
       }
-      if (Date.now() - lane.attachedAtMs > NO_FRAME_MS) releaseMonitorSlot(slot, 1e3);
+      if (Date.now() - lane.attachedAtMs > NO_FRAME_MS) releaseMonitorSlot(slot, 1e3, "no-first-frame");
     }, PLAYBACK_WATCH_MS);
   };
   async function ensureMonitorPlayback(view) {
@@ -9032,6 +9194,35 @@ ${failure3.message}` };
     }
     rail.append(head, body);
   }
+  function renderMonitorLandingNotices(view) {
+    const host = document.querySelector(".monitor-landing-notices");
+    if (!(host instanceof HTMLElement)) return;
+    const notices = monitorDevices(view).flatMap((device) => {
+      const deviceId = text4(read4(device, "deviceId"));
+      const connection = connectionOf(device);
+      const message = landingProtectionNotice({
+        ...monitorFactsOf(device),
+        telemetryReceivedAtMs: finiteNumber(read4(connection, "telemetryReceivedAtMs")),
+        noticeAtMs: finiteNumber(read4(connection, "landingProtectionNoticeAtMs")),
+        nowMs: Date.now()
+      });
+      return deviceId === null || message === null ? [] : [{ deviceId, name: callSign(deviceId), message }];
+    });
+    const signature = JSON.stringify(notices);
+    if (host.dataset.signature === signature) return;
+    host.dataset.signature = signature;
+    host.hidden = notices.length === 0;
+    host.replaceChildren(...notices.map((notice2) => {
+      const row = document.createElement("p");
+      row.className = "monitor-landing-notice";
+      const name = document.createElement("strong");
+      name.textContent = notice2.name;
+      const message = document.createElement("span");
+      message.textContent = notice2.message;
+      row.append(name, message);
+      return row;
+    }));
+  }
   function renderMonitorRail(view) {
     const rail = document.querySelector(".monitor-rail-panel");
     if (!(rail instanceof HTMLElement)) return;
@@ -9174,6 +9365,7 @@ ${failure3.message}` };
   };
   function renderMonitor(view) {
     const devices = monitorDevices(view);
+    renderMonitorLandingNotices(view);
     document.querySelectorAll("[data-monitor-slot]").forEach((slot) => {
       const index = Number(slot.dataset.monitorSlot);
       const device = Number.isInteger(index) ? devices[index] : void 0;

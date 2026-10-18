@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DesktopApplication, DesktopUiGateway, createMediaPorts, createRelayDiscovery, loadOrCreateServerId } from '@xjicloud/sky-command-sdk/desktop'
 import { createNetworkMonitor } from './sky-command-network.mjs'
+import { createPlaybackDiagnosticLog } from './sky-playback-diagnostics.mjs'
 
 const methods = {
   'state-snapshot': 'state.snapshot',
@@ -81,7 +82,11 @@ const photosRoot = path.join(dataRoot, 'photos')
 mkdirSync(httpFlvRoot, { recursive: true })
 mkdirSync(photosRoot, { recursive: true })
 
-const mediaPorts = createMediaPorts((event) => console.error(`[media] ${event.kind} ${event.detail}`))
+const playbackDiagnostics = createPlaybackDiagnosticLog(path.join(dataRoot, 'diagnostics'), () => console.error('[playback] 诊断日志写入失败'))
+const mediaPorts = createMediaPorts((event) => {
+  playbackDiagnostics.recordMedia(event)
+  console.error(`[media] ${event.kind} ${event.detail}`)
+})
 let nextConfirmationId = 0
 const created = DesktopApplication.create({
   network: { listenPort: 19500, relayPort: 8080, manualHost: preferred.ipv4 },
@@ -122,6 +127,48 @@ if (!started.ok) {
   process.exit(1)
 }
 
+// Preserve brief reports at the event source: the browser polls once a second.
+// This is display history only; raw DJI facts and command checks stay untouched.
+const landingProtectionNotices = new Map()
+function observeLandingProtection(snapshot) {
+  const seen = new Set()
+  const now = Date.now()
+  for (const device of snapshot?.workflow?.devices ?? []) {
+    const { deviceId, connectionEpoch, connection } = device
+    seen.add(deviceId)
+    const previous = landingProtectionNotices.get(deviceId)
+    if (previous?.connectionEpoch !== connectionEpoch) landingProtectionNotices.delete(deviceId)
+    if (connection?.flightController !== 'connected'
+      || (connection.flightState === 'grounded' && connection.motorsOn === false)
+      || connection.landingConfirmationNeeded === true
+      || connection.landingProtectionState === 'SAFE_TO_LAND') {
+      landingProtectionNotices.delete(deviceId)
+      continue
+    }
+    const atMs = connection.telemetryReceivedAtMs
+    if (connection.landingProtectionState === 'NOT_SAFE_TO_LAND' && Number.isFinite(atMs) && atMs <= now && now - atMs <= 20_000) {
+      landingProtectionNotices.set(deviceId, { connectionEpoch, atMs })
+    }
+  }
+  for (const [deviceId, notice] of landingProtectionNotices) {
+    if (!seen.has(deviceId) || now - notice.atMs > 20_000) landingProtectionNotices.delete(deviceId)
+  }
+}
+observeLandingProtection(created.value.snapshot())
+const stopLandingProtectionNotices = created.value.subscribe(observeLandingProtection)
+
+function withLandingProtectionNotices(snapshot) {
+  observeLandingProtection(snapshot)
+  const devices = snapshot?.workflow?.devices
+  if (!Array.isArray(devices)) return snapshot
+  return { ...snapshot, workflow: { ...snapshot.workflow, devices: devices.map((device) => {
+    const notice = landingProtectionNotices.get(device.deviceId)
+    return notice === undefined ? device : {
+      ...device, connection: { ...device.connection, landingProtectionNoticeAtMs: notice.atMs },
+    }
+  }) } }
+}
+
 const gateway = DesktopUiGateway.create({
   application: created.value,
   relayHint: () => lanCards().map((card) => `ws://${card.ipv4}:8080/relay`),
@@ -158,8 +205,10 @@ const control = createServer((request, response) => {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
         const name = typeof body.method === 'string' ? body.method : ''
         if (name === 'diagnostics-record') {
+          const isPlayback = body.input?.action === 'video-playback-diagnostic'
+          const recorded = isPlayback ? playbackDiagnostics.recordPlayback(body.input) : true
           response.writeHead(200, { 'content-type': 'application/json' })
-          response.end(JSON.stringify({ ok: true, value: { recorded: true } }))
+          response.end(JSON.stringify(recorded ? { ok: true, value: { queued: true } } : { ok: false, code: 'DIAGNOSTIC_REJECTED' }))
           return
         }
         const method = methods[name]
@@ -169,7 +218,8 @@ const control = createServer((request, response) => {
           return
         }
         const input = Object.hasOwn(body, 'input') ? decode(body.input) : undefined
-        const result = await gateway.invoke(method, input)
+        let result = await gateway.invoke(method, input)
+        if (method === 'state.snapshot' && result.ok) result = { ...result, value: withLandingProtectionNotices(result.value) }
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify(result))
       } catch {
@@ -197,11 +247,13 @@ console.log(`Video RTMP 19500, HTTP-FLV http://127.0.0.1:18080`)
 console.log(`Operator control http://127.0.0.1:8767/invoke`)
 
 async function stop() {
+  stopLandingProtectionNotices()
   stopDiscovery()
   networkMonitor.close()
   control.close()
   await created.value.stop()
   await created.value.dispose()
+  await playbackDiagnostics.flush()
   process.exit(0)
 }
 process.on('SIGINT', () => { void stop() })
