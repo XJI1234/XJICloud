@@ -12,6 +12,23 @@ const input = (change = {}) => ({ action: 'video-playback-diagnostic', reason: J
 }) })
 
 describe('local playback diagnostic log', () => {
+  it('keeps publisher lifecycle and backpressure evidence, and rejects uncontrolled new details', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'sky-playback-test-'))
+    const log = createPlaybackDiagnosticLog(directory)
+    try {
+      const events = [
+        { kind: 'rtmp-published', deviceId: 'phone-1', detail: 'RTMP publish started' },
+        { kind: 'http-flv-client-backpressure', deviceId: 'phone-1', detail: 'HTTP-FLV player queue reached the limit; skipped until the next keyframe' },
+        { kind: 'rtmp-unpublished', deviceId: 'phone-1', detail: 'RTMP publish ended' },
+      ]
+      for (const event of events) log.recordMedia(event)
+      for (const event of events) log.recordMedia({ ...event, detail: 'private-token path' })
+      await log.flush()
+      const records = (await readFile(path.join(directory, 'playback.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+      expect(records.map(({ kind, deviceId, detail }) => ({ kind, deviceId, detail }))).toEqual(events)
+    } finally { await log.flush(); await rm(directory, { recursive: true, force: true }) }
+  })
+
   it('retains evidence while discarding unknown fields, URLs, exceptions and malformed records', () => {
     const record = playbackDiagnostic(input({ url: 'http://secret.invalid/token', stack: 'private path', reason: 'http://secret.invalid/token' }))
     expect(record.reason).toBe('unclassified')

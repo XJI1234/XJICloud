@@ -5,6 +5,11 @@ const events = new Set(['attach', 'detach', 'first-frame', 'sample', 'visibility
 const reasons = new Set(['', 'source-change', 'media-error', 'transport-ended', 'initialization', 'stall', 'no-first-frame', 'pause', 'waiting', 'stalled', 'ended', 'playing', 'error', '画面停住', '长时间未出画'])
 const identifier = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : null
 const number = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER ? value : null
+const mediaMessages = new Map([
+  ['rtmp-published', 'RTMP publish started'],
+  ['rtmp-unpublished', 'RTMP publish ended'],
+  ['http-flv-client-backpressure', 'HTTP-FLV player queue reached the limit; skipped until the next keyframe'],
+])
 
 export function playbackDiagnostic(input) {
   if (input?.action !== 'video-playback-diagnostic' || typeof input.reason !== 'string' || input.reason.length > 4096) return null
@@ -54,7 +59,8 @@ export function createPlaybackDiagnosticLog(directory, onError = () => {}) {
   return {
     recordPlayback: input => { const value = playbackDiagnostic(input); return value !== null && record(value) },
     recordMedia: event => {
-      if (!['http-flv-viewer-open', 'http-flv-viewer-close', 'rtmp-video-gap'].includes(event.kind)) return
+      const fixed = mediaMessages.get(event.kind)
+      if (fixed !== undefined ? event.detail !== fixed : !['http-flv-viewer-open', 'http-flv-viewer-close', 'rtmp-video-gap'].includes(event.kind)) return
       // These adapter messages contain only controlled counters/reason enums.
       if (typeof event.detail !== 'string' || !/^[a-zA-Z0-9_;= .-]{1,512}$/.test(event.detail)) return
       record({ kind: event.kind, atMs: Date.now(), deviceId: identifier(event.deviceId), detail: event.detail })

@@ -306,7 +306,7 @@ LoginView
 
 图传端到端延迟验收上限为 1.5 秒，网页积压读数不能代替相机到显示的实测。飞行与监控页关闭额外接收 stash，共用 0.3 秒缓冲目标、1 秒积压追帧线及 250ms 前台检查；回到前台先追最新缓冲再恢复播放。播放延迟修复不得改变手机推流、飞控、任务或地图，详细契约见 Sky-Command `operator-console/CONTRACT.md`。
 
-图传排查沿用 Sky-Command 的 `operator-console/CONTRACT.md` 与 `electron-host/CONTRACT.md`：先更新契约再改实现。Web 桥保留最近 128 条脱敏播放诊断供只读检查；本机 `diagnostics-record` 对播放诊断真实异步记录，不能伪报成功。浏览器播放事件、HTTP-FLV 连接开闭与 RTMP 视频包间隔写入 `%TEMP%/sky-command-web/diagnostics/playback.ndjson`，单写入器最多保留 512 条等待记录与一批 512 条正在写入的记录；文件达到 8 MiB 后轮换，只保留当前与 `.previous` 两份。日志仅观察播放器，不改变飞控、任务、航线、照片或降落提示；更新嵌入包必须保留本节所述地图优化。
+图传排查沿用 Sky-Command 的 `operator-console/CONTRACT.md` 与 `electron-host/CONTRACT.md`：先更新契约再改实现。Web 桥保留最近 128 条脱敏播放诊断供只读检查；本机 `diagnostics-record` 对播放诊断真实异步记录，不能伪报成功。浏览器播放事件、HTTP-FLV 连接开闭、RTMP 视频包间隔以及发布开始/结束、观看者背压事件写入 `%TEMP%/sky-command-web/diagnostics/playback.ndjson`，避免只能看见观看连接中断而丢失上游终态；新增发布/背压事件只接受生产适配器的固定文案，不接收任意异常、URL 或路径。单写入器最多保留 512 条等待记录与一批 512 条正在写入的记录；文件达到 8 MiB 后轮换，只保留当前与 `.previous` 两份。日志仅观察播放器，不改变飞控、任务、航线、照片或降落提示；更新嵌入包必须保留本节所述地图优化。
 
 `mission-ops` 通过 `LocalBridgePort` 接到独立 Sky-Command 托盘进程（默认 `127.0.0.1:17890`）。网页仅处理状态、航线与本机 HTTP-FLV 显示，手机 MSDK Relay 和 RTMP 继续由本机程序提供。宿主必须校验浏览器 Origin；`skycommand://open` 只负责唤起已安装的本机程序。开发来源为 `localhost:5176`，部署需要 `SKYCOMMAND_CLOUD_ORIGIN` 与实际 HTTPS 站点完全一致；HTTPS 页面访问本机 HTTP 必须实机验证浏览器 Private Network Access 支持。返航沿用原网关的 `flight.request` → 用户确认 → `flight.confirm`；取消则调用 `flight.cancel`，不以网页布尔值替代 DJI 确认 ID。
 
