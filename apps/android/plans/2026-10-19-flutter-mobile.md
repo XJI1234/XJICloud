@@ -32,7 +32,7 @@
 | P3 上传训练 | 6 | 图片上传、暂停恢复、任务观看 | 真实 OSS + mock Worker 流、complete 不确定分支 |
 | P4 完整体验 | 7–8 | 云模型打开、最终 UI/生命周期/异常闭环 | 真机 E2E、审查、profile 数据与明确未覆盖项 |
 
-当前执行范围为 P1（Task 2–3），依据用户的真机浏览结果与继续实施指令；进度分别见 [P0 验证记录](../docs/verification/p0.md) 和后续 P1 记录。自动化、用户报告与 Agent 现场真机验收分开标记；Task 1 完整设备矩阵保留未通过项，Task 4–8 尚未执行。每个任务通过后记录命令、设备/样本、结果、Review；只有无 High/Critical 才可标完成。当前 checkout 直接维护，提交按任务分开，不夹带他人变更。
+2026-10-20 用户已连接 TB710FU 真机，并明确授权继续 Task 4–8 及直接设备测试。Task 2–3 已完成；当前从 Task 4 继续，补测 Task 1 尚未观察的原生矩阵。进度见 [P0](../docs/verification/p0.md)、[P1](../docs/verification/p1.md) 与 [真机矩阵](../docs/verification/android-device-matrix.md)。自动化、用户报告与 Agent 现场真机验收分开标记；未完成的任务不能视为已交付。每个任务通过后记录命令、设备/样本、结果、Review；只有无 High/Critical 才可标完成。当前 checkout 直接维护，提交按任务分开，不夹带他人变更。
 
 ## Task 1：可构建基线与原生渲染纵向验证
 
@@ -119,10 +119,10 @@ test('Result keeps failure distinct from an empty list', () {
 - `ProjectRepository.list()` → `Future<Result<List<Project>>>`；create(name,description)、update(id,name,description) → `Future<Result<Project>>`；delete(id) → `Future<Result<void>>`。
 - Workspace 保存 userId 下 activeProjectId 和最多 5 项 recent；`openProject` 先验证拥有/可用列表，删除成功后清理 workspace。主页只消费组合后的只读 VM。
 
-- [ ] **1. 先写领域/用例失败测试。** 最近去重/移首/截断5项、跨账号隔离、删除当前工程清 active、删除失败不清本地状态；断网空列表与失败不同。UI 测试 Phone 详情跳转与 Pad 同一选择分栏。
-- [ ] **2. 实现 CRUD 与 workspace。** 对接实际 GET/POST/PATCH/DELETE，不虚构单工程 GET。已有完整列表用于定位工程，刷新确认可用；无效本地最近 ID 移除或标不可用。传输固定原 projectId，不因 workspace 改变迁移归属。
-- [ ] **3. 实现主页/详情与全部状态。** 名称/描述编辑，确认删除；模型/任务区由后续 BC controller 组合，尚未实现时开发分支不发布可点击空入口。200% 字号/Pad 窄窗保留选择。
-- [ ] **4. 验证与 Review。** analyze/test/build；真实创建→编辑→设当前→最近→切账号→删除→重启检查；关注陈旧请求、越权错误显示与用户草稿。提交建议 `feat(android): add project workspace and responsive management`。
+- [x] **1. 先写领域/用例失败测试。** 最近去重/移首/截断5项、跨账号隔离、删除当前工程清 active、删除失败不清本地状态；断网空列表与失败不同。UI 测试 Phone 详情跳转与 Pad 同一选择分栏。
+- [x] **2. 实现 CRUD 与 workspace。** 对接实际 GET/POST/PATCH/DELETE，不虚构单工程 GET。已有完整列表用于定位工程，刷新确认可用；无效本地最近 ID 移除或标不可用。传输固定原 projectId，不因 workspace 改变迁移归属。
+- [x] **3. 实现主页/详情与全部状态。** 名称/描述编辑，确认删除；模型/任务区由后续 BC controller 组合，尚未实现时开发分支不发布可点击空入口。200% 字号/Pad 窄窗保留选择。
+- [x] **4. 验证与 Review。** analyze/test/build；真实创建→编辑→设当前→最近→切账号→删除→重启检查；关注陈旧请求、越权错误显示与用户草稿。提交建议 `feat(android): add project workspace and responsive management`。
 
 ## Task 5：Model-asset 上传、下载与缓存
 

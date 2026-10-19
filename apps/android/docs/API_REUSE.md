@@ -42,6 +42,10 @@
 | Model | DELETE `/models/{modelId}` | 删除云端资产；成功后失效该账号缓存 |
 | Viewer | GET `/models/{modelId}/viewer-config` | 可读取配置元数据；不套用坐标来源不明的默认相机，不写回 |
 
+2026-10-20 部署服务实测差异：模型有效分片上传后首次 `complete` 返回成功且模型出现在列表，但重复同一 `complete` 返回 404“模型不存在”；GET 会话仍显示 receivedBytes=sizeBytes。因此下文的模型 complete 幂等描述仅对应源码意图，不能作为当前部署服务的可靠保证。客户端不能因完成响应丢失就自动新建上传或无限重试；应刷新目标工程模型并呈现待核对状态，不凭文件名/大小自动选中可能重复的模型。后端修复不在本轮 Android 范围。
+
+同一实测进一步确认：首次 complete 响应 ID 与随后列表中的实际持久化 ID 不同；响应 ID 的 download/viewer-config 均 404，列表 ID 的 Bearer 下载成功，SHA-256 与上传原件一致。源码 `ModelService` 手动指定 UUID 后忽略 `repository.save` 返回实体，而实体 ID 使用 `@GeneratedValue(UUID)`；这是源码层面的可疑根因，未在服务端修改或部署验证。客户端完成后必须刷新列表，不能把 complete 响应对象直接当作已确认的列表资产或用于自动打开；身份不明确时由用户明确选择列表行。
+
 现有 multipart 模型上传、download-token、export、versions/restore 保留在服务端但首版不依赖；普通查看走 Bearer 下载，无需借 SuperSplat token URL 绕过仓储。
 
 ## 3. DTO 与状态
