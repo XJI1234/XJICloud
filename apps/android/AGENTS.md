@@ -2,6 +2,8 @@
 
 先读根目录 AGENTS、`docs/TEAM_ENGINEERING.md`、`docs/AGENT_CONTEXT.md`，再读本目录 README 与设计文档。当前已建立可构建 P0 工程与原生桥，尚未通过真机验收；计划中的后续业务目录或 API 不能当作已实现。
 
+用户已要求将 P0 工程迁回当前仓库，后续直接在本 checkout 的 `apps/android` 继续维护；不要默认另建独立工作区。
+
 - 只改 `apps/android`；变更已落地的跨端架构时再同步根知识库。不为移动端重构 web2，不修改 `apps/web`、`packages/spark`、`rust/`。
 - Flutter 的业务 Domain 为纯 Dart：禁止 Flutter、Dio、平台通道、文件系统、DTO。Application 只依赖 Domain 和 port；Infrastructure 实现 port 并映射外部错误。
 - Presentation 仅调 controller/use case，不直接访问 HTTP、DTO、mapper 或平台通道。仓库装配仅在 `lib/app/create_container.dart`。
