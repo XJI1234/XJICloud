@@ -1,8 +1,8 @@
 # XJICloud 移动客户端
 
-状态：**P1 登录注册、加密会话与账号页已完成构建、模拟器/API 验证及审查**。2026-10-19。P0 原生桥已由用户手动确认可浏览模型，完整真机矩阵仍待联合调试。证据见 [P0](docs/verification/p0.md) 与 [P1 验证记录](docs/verification/p1.md)。
+状态：2026-10-20，登录会话、工程管理、模型分片/缓存、图片前台上传/任务管理及正式原生 Viewer 已落地，正在完成 Phone/Pad 收口和最终验收。分阶段证据见 [真机矩阵](docs/verification/android-device-matrix.md) 与 [用户路径](docs/verification/mobile-journey.md)。部署 Worker 尚未完成测试任务，完整训练/产物下载 E2E 未通过。
 
-目录名沿用需求 `apps/android`，iOS 平台尚未创建。当前普通入口提供登录、注册、验证码、账号、语言、帮助/许可证和退出；共享四目的地壳已验证，工程、上传训练及正式查看器业务将在后续阶段接入，不提供假入口。
+目录名沿用需求 `apps/android`，iOS 平台尚未创建。普通入口提供主页、工程管理、模型查看、我的四个底栏入口与中央上传；图片训练与模型分片是独立流程。正式 Viewer 可打开本机 PLY/SPZ 或工程模型，训练产物保持独立身份，不伪装为工程模型。
 
 工程已从独立工作区迁回当前仓库，后续直接在本目录维护。无需进入 `.codex/worktrees`。
 
@@ -56,3 +56,5 @@ flutter build apk --debug --target-platform android-arm64 -t lib/main_probe.dart
 ## 实施门槛
 
 先验证原生渲染桥，再扩展业务界面。开发期 x86_64 模拟器只承担 Flutter UI 与 API 测试；SDK 渲染必须用 Android 10+、arm64、Vulkan 1.1 真机验收。未来 iOS 需 macOS/Xcode 和独立的 iOS 渲染实现；本包 Android AAR 不能直接用于 iOS。
+
+固定 SDK decoder 仅支持 4KB 内存页；16KB 页环境明确拒绝，不宣称 Play 发行就绪。SDK 0.2.2 没有公开背景色设置，真机原生画布实际为白色，Flutter 工具浮层为暗色；这是相对于暗画布设计的已记录偏差，不能通过给不透明 Surface 背后着色修正。截图、持续后台上传、真实训练算法与生产签名发行仍属后续专项。

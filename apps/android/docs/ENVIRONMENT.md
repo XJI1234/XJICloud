@@ -1,6 +1,6 @@
 # Windows Flutter / Android 环境记录
 
-检查日期：2026-10-19（Asia/Shanghai）。本页记录当前开发机的实际结果；旧文档中的 D 盘 SDK、用户 28049 和 Flutter 3.38.9 属于另一台机器，不能作为本机验证证据。机器路径只用于诊断，不写入可提交的 Gradle 配置。
+初次检查：2026-10-19，设备验证更新：2026-10-20（Asia/Shanghai）。本页记录当前开发机的实际结果；旧文档中的 D 盘 SDK、用户 28049 和 Flutter 3.38.9 属于另一台机器，不能作为本机验证证据。机器路径只用于诊断，不写入可提交的 Gradle 配置。
 
 ## 1. 当前基线
 
@@ -63,6 +63,6 @@ flutter devices
 
 ## 5. 设备验证进展
 
-初次 P0 交付时没有 Android 10+、arm64、Vulkan 1.1 真机。随后用户手动安装 APK 并确认模型浏览正常。2026-10-20 用户连接设备并授权继续剩余阶段及现场测试：本机 PLY/SPZ、相机、旋转/锁屏/前后台、20 次开关，以及工程管理、模型分片/缓存、图片上传/任务取消删除已开始逐项验收，结果见 [真机矩阵](verification/android-device-matrix.md)。模拟器证据仍只涵盖 Flutter UI、通道与明确拒绝不支持架构，不外推为 GPU/Surface、内存和热态验收。
+初次 P0 交付时没有 Android 10+、arm64、Vulkan 1.1 真机。随后用户手动安装 APK 并确认模型浏览正常。2026-10-20 用户连接设备并授权继续剩余阶段及现场测试：本机 PLY/SPZ、相机/双指、旋转/锁屏、正式 Viewer 20 次开关、10 分钟 profile，以及工程管理、模型分片/缓存、图片上传/任务取消删除均已分项记录，结果见 [真机矩阵](verification/android-device-matrix.md)。模拟器证据仍只涵盖 Flutter UI、通道与明确拒绝不支持架构，不外推为 GPU/Surface、内存和热态验收。
 
 设备只有 4KB 页；固定 SDK decoder ELF 不符合 16KB 对齐，宿主明确拒绝该环境。当前设备不能证明跨 GPU 或 16KB 加载兼容。按 [原生接入验收矩阵](NATIVE3DGS.md) 继续记录尚未观察的项目。Windows 不承担 iOS 构建/签名验证；不修改 web2、backend、admin、Spark 或 Rust。

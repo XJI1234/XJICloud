@@ -166,11 +166,13 @@ test('archive rejects more than four-digit image capacity', () {
 });
 ```
 
-- [ ] **1. 先写失败测试。** 1/9999/10000图边界、MIME/HEIC/空图、同名排序、manifest v1、manifest URL 去重；第N张失败不得 complete；签名403需重提；后台当前PUT未知项重传；complete超时GET若QUEUED不重发；create超时不自动新建；SSE半帧/UTF8/CRLF/多行/重复连接/401、GET与订阅间漏终态由定期查询补齐、迟到快照不覆盖新事件、终态事件后GET完整产物/错误、CANCELLED→RUNNING/COMPLETED校正。
-- [ ] **2. 实现逻辑归档和上传。** 默认顺序传图（限制内存），逐字节总进度；manifest 只传一次，全部成功才 complete。最多按 1/2/4 秒退避重试可重放 PUT，401/403不无限重试；非幂等 POST 必须查询再协调。源图不 ZIP、不自动转码。
-- [ ] **3. 实现暂停恢复与用户提示。** paused/hidden 取消当前发送，resumed 先查 job；来源/URL有效才同 job 继续，冷启动/过期走取消旧任务与重新提交确认。会话到期取消任务协调、清token，不能将旧回调写到新账号。系统文件选择的 inactive 不直接取消流程。
-- [ ] **4. 实现任务 watcher/操作与 UI。** 前台立即GET并启SSE，健康流仍15秒GET校正，失败5秒可取消轮询；会话代际/观察序号屏蔽迟到结果。COMPLETED/FAILED事件后GET完整JobResponse成功才停止；CANCELLED停SSE但前台有订阅者时保留15秒GET，允许Worker回写后恢复观察；离页/后台停止，重进必查。多个页面共享一job watcher，取消/终态删除按真实policy。产物下载URL失效展示当前服务端限制，训练产物不伪装ModelAsset。
+- [x] **1. 先写失败测试。** 1/9999/10000图边界、MIME/HEIC/空图、同名排序、manifest v1、manifest URL 去重；第N张失败不得 complete；签名403需重提；后台当前PUT未知项重传；complete超时GET若QUEUED不重发；create超时不自动新建；SSE半帧/UTF8/CRLF/多行/重复连接/401、GET与订阅间漏终态由定期查询补齐、迟到快照不覆盖新事件、终态事件后GET完整产物/错误、CANCELLED→RUNNING/COMPLETED校正。
+- [x] **2. 实现逻辑归档和上传。** 默认顺序传图（限制内存），逐字节总进度；manifest 只传一次，全部成功才 complete。最多按 1/2/4 秒退避重试可重放 PUT，401/403不无限重试；非幂等 POST 必须查询再协调。源图不 ZIP、不自动转码。
+- [x] **3. 实现暂停恢复与用户提示。** paused/hidden 取消当前发送，resumed 先查 job；来源/URL有效才同 job 继续，冷启动/过期走取消旧任务与重新提交确认。会话到期取消任务协调、清token，不能将旧回调写到新账号。系统文件选择的 inactive 不直接取消流程。
+- [x] **4. 实现任务 watcher/操作与 UI。** 前台立即GET并启SSE，健康流仍15秒GET校正，失败5秒可取消轮询；会话代际/观察序号屏蔽迟到结果。COMPLETED/FAILED事件后GET完整JobResponse成功才停止；CANCELLED停SSE但前台有订阅者时保留15秒GET，允许Worker回写后恢复观察；离页/后台停止，重进必查。多个页面共享一job watcher，取消/终态删除按真实policy。产物下载URL失效展示当前服务端限制，训练产物不伪装ModelAsset。
 - [ ] **5. 实际联调与 Review。** 接真实后端/Redis/OSS/mock Worker，走选图→上传→入队→进度→完成→产物下载；后台/断网/权限失效/complete丢响应/取消均记录。跑analyze/test/build，审查OSS不带JWT、无签名日志、无重复任务。提交建议 `feat(android): add foreground dataset training workflow`。
+
+客户端实现与审查已完成：`efa1ee5` / `0ad6edb`，182 Flutter / 5 JVM 测试、analyze、arm64 构建通过。真机目录/多选、OSS 上传入队、后台/冷启动协调、取消与记录删除已通过。部署 Worker 持续 QUEUED，完整训练/产物下载 E2E 尚未观察，故第 5 项保持未全量验收；继续正式 Viewer，不修改 Worker 或模拟完成。见 [真机矩阵](../docs/verification/android-device-matrix.md)。
 
 ## Task 7：把云/本机模型接入正式 Viewer
 
@@ -186,10 +188,12 @@ test('archive rejects more than four-digit image capacity', () {
 - `ViewerEnginePort` 负责能力、open/cancel/close/相机和映射状态；不能暴露 SDK class/Uri/PlatformException 给 Application。
 - ViewerSession 管宿主 operation token 与资源 lease，下载/解码/上传/首帧分别显示，activeRequestId 匹配才切换活动场景。
 
-- [ ] **1. 先写事务失败测试。** A→B失败保留A；B→C迟到B不覆盖C；关闭/登出使迟到下载失效并释放lease；未知旧config用fit不写回；无项目也可打开本机；不支持平台给明确结果。
-- [ ] **2. 实现云/本机统一入口。** 指定工程模型先仓储鉴权下载，再本地Uri；从工程模型行进入Viewer携modelId/source，未登录路由保护，不存带token深链。每个会话一个active模型，无Web高级编辑。
-- [ ] **3. 完成手势/工具与全屏。** 固定/自由、适配/重置/Y翻转、缩放、取消/关闭；Phone工具Sheet，Pad浮层；隐藏Tab暂停Surface，重排不重复engine。先不显示未验证截图按钮。
-- [ ] **4. 真机验证与 Review。** debug + profile完整生命周期矩阵，连续20次打开/关闭、服务端更新缓存失效、旋转/切Tab/锁屏、绘制浮层与手势。analyze/test/build，记录设备/样本/实际帧间隔/内存，提交建议 `feat(android): connect cloud assets to native viewer`。
+- [x] **1. 先写事务失败测试。** A→B失败保留A；B→C迟到B不覆盖C；关闭/登出使迟到下载失效并释放lease；未知旧config用fit不写回；无项目也可打开本机；不支持平台给明确结果。
+- [x] **2. 实现云/本机统一入口。** 指定工程模型先仓储鉴权下载，再本地Uri；从工程模型行进入Viewer携modelId/source，未登录路由保护，不存带token深链。每个会话一个active模型，无Web高级编辑。
+- [x] **3. 完成手势/工具与全屏。** 固定/自由、适配/重置/Y翻转、缩放、取消/关闭；Phone工具Sheet，Pad浮层；隐藏Tab暂停Surface，重排不重复engine。先不显示未验证截图按钮。
+- [x] **4. 真机验证与 Review。** debug + profile完整生命周期矩阵，连续20次打开/关闭、服务端更新缓存失效、旋转/切Tab/锁屏、绘制浮层与手势。analyze/test/build，记录设备/样本/实际帧间隔/内存，提交建议 `feat(android): connect cloud assets to native viewer`。
+
+实现 `028efc3`、取消守卫/集成清理修复 `f5548a9`，独立复审通过。真机云修订/租约、PLY/SPZ、双指、旋转/锁屏、20 次普通 profile 开关与 10 分钟呈现/内存/温度记录见 [设备矩阵](../docs/verification/android-device-matrix.md)。纯事务回归不冒充硬件竞态 E2E。固定 SDK 无背景 API，白画布为明确规格偏差；内存变化不排除泄漏，跨 GPU/16KB/低内存故障注入未覆盖。
 
 ## Task 8：Phone/Pad 收口与交付审查
 

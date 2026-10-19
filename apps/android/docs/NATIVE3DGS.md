@@ -1,6 +1,6 @@
 # Native3DGS Android SDK 0.2.2 接入规格
 
-2026-10-19。已检查发布 ZIP、manifest、AAR Manifest 和 `javap` 公开接口；真实 AAR 已由本地 Flutter 插件消费并通过 arm64 APK 构建。Flutter 内嵌视图和能力握手已在 x86_64 模拟器验证，真机渲染仍未验收。证据见 [P0 验证记录](verification/p0.md)。
+2026-10-20。已检查发布 ZIP、manifest、AAR Manifest 和 `javap` 公开接口；真实 AAR 已由本地 Flutter 插件消费并通过 arm64 APK 构建。PLY/SPZ、正式 Viewer 云/本机入口及生命周期已在 arm64 真机分项验证；完整结果、profile 证据与未覆盖项见 [真机矩阵](verification/android-device-matrix.md)。不将单设备结果外推到全 GPU/16KB 页。
 
 ## 1. 固定来源与核验
 
@@ -56,6 +56,8 @@ val requestId = engine.open(localContentUri) // suspend，在宿主 coroutine �
 - SDK 规范为 RUB；不照搬旧 Spark 翻转，不加 CSS/视图镜像。翻转由绝对布尔 `flipAxes(x,y,z)` 控制，不改变拖动方向。
 
 相机 API 已核验：`orbit`、`pan`、`dolly`、`look`、`fly`、`fit`、`reset`、`fixedMode`、`freeMode`、`flipAxes`。AAR 还暴露 `setQuality` 与 `drainFrameSamples`，首版用户页不暴露调优/诊断面板。
+
+0.2.2 公开接口没有背景色/clear-color 设置；实际不透明原生画布为白色，背后 Flutter 颜色不会改变它。保留固定版本和 vendor 边界，明确记录与暗画布设计的差异；满足暗画布需要另行升级 SDK 并重新验收。SDK 仅报告 Loading/Uploading/Ready，UI 显示“GPU 上传 / 等待首帧”，不伪造独立上传完成事件。
 
 ## 4. 文件、缓存与权限
 

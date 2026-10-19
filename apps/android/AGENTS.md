@@ -1,6 +1,6 @@
 # 移动客户端维护规则
 
-先读根目录 AGENTS、`docs/TEAM_ENGINEERING.md`、`docs/AGENT_CONTEXT.md`，再读本目录 README 与设计文档。P0 原生桥及 P1 共享主题/自适应壳、Identity/账号页已落地，证据见 `docs/verification/`；完整真机矩阵仍待联合调试。普通入口为 P1，独立原生探针为 `lib/main_probe.dart`。计划中的工程、上传训练和正式查看器业务不能当作已实现。
+先读根目录 AGENTS、`docs/TEAM_ENGINEERING.md`、`docs/AGENT_CONTEXT.md`，再读本目录 README 与设计文档。Identity、Project、Model-asset、Dataset-training、Viewer 五个 BC 已落地；普通入口提供四 Tab 与中央上传，独立探针仍为 `lib/main_probe.dart`。真机与阶段审查证据见 `docs/verification/`；部署 Worker 完成/产物 E2E、跨 GPU 和 16KB 页不属于已通过项，不能把计划勾选当作完整验收。
 
 用户已要求将 P0 工程迁回当前仓库，后续直接在本 checkout 的 `apps/android` 继续维护；不要默认另建独立工作区。
 
@@ -11,7 +11,7 @@
 - 原生 SDK 不属于 Domain；Kotlin Surface/引擎生命周期位于本地 Flutter 插件，Dart bridge 位于 Viewer Infrastructure，原生视图 Widget 位于插件视图边界。
 - 图片数据集走 OSS；工程 PLY/SPZ 走后端本地盘。用户 Bearer 不能发送给 OSS 或写入查看器 URL、日志。
 - 不臆造 refresh token、图片 URL 补签、用户训练重试、云端全局模型列表等接口。
-- 浅色壳、强调色 `#3d6b8a`、暗 3D 画布；Phone/Pad 都保留四底栏入口和中央上传。禁止新增占位按钮。
+- 浅色壳、强调色 `#3d6b8a`、暗工具浮层；设计要求暗 3D 画布，但固定 SDK 0.2.2 没有背景配置，实际白画布为明确偏差，禁止声称暗画布通过或修改 vendor 掩盖。Phone/Pad 都保留四底栏入口和中央上传，禁止新增占位按钮。
 - Android 渲染发布仅 arm64；模拟器测试必须明确标注渲染未覆盖，禁止用 mock 冒充 SDK 测试。
 - 每阶段实际运行 `flutter analyze`、`flutter test`、`flutter build apk --debug --target-platform android-arm64`；本地插件另跑 Kotlin/仪器测试。UI 必须走用户操作路径或明确记录未做设备 E2E。
 - Flutter 工程创建时提交 `pubspec.lock`；忽略 `.dart_tool/`、`build/`、`local.properties`、签名文件。不得把机器绝对路径写入工程配置。
