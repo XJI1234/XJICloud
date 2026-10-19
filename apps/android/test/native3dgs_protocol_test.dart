@@ -92,4 +92,25 @@ void main() {
     expect(controller.state.sceneCount, 100);
     expect(controller.state.activeRequestId, 19);
   });
+  test('state error provenance and raw number survive the bridge', () {
+    events.add({...state(0), 'error': 4, 'errorOrigin': 'State'});
+    expect(controller.state.error, 4);
+    expect(controller.state.errorOrigin, 'State');
+  });
+  test('command error provenance survives result and state mapping', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('native3dgs/methods'),
+          (_) async => {
+            'ok': false,
+            'error': 5,
+            'errorOrigin': 'Command',
+            'message': 'safe diagnostic',
+          },
+        );
+    final result = await controller.camera('fit');
+    expect(result.error, 5);
+    expect(result.errorOrigin, 'Command');
+    expect(controller.state.errorOrigin, 'Command');
+  });
 }

@@ -80,6 +80,7 @@ class Native3dgsController {
         uri: data?['uri'] as String?,
         supported: data?['supported'] as bool?,
         error: (data?['error'] as num?)?.toInt() ?? 0,
+        errorOrigin: data?['errorOrigin'] as String?,
       );
       if (!result.ok) {
         _publish(
@@ -87,6 +88,7 @@ class Native3dgsController {
             'Failed',
             message: result.message,
             error: result.error,
+            errorOrigin: result.errorOrigin,
           ),
         );
       }
@@ -114,6 +116,7 @@ class Native3dgsController {
           supported: result.supported,
           message: result.message,
           error: result.error,
+          errorOrigin: result.errorOrigin,
         ),
       );
     }

@@ -12,10 +12,13 @@ import org.native3dgs.sdk.EngineException
 internal class SdkEngine(context: Context, scope: CoroutineScope) : EnginePort {
     private val appContext = context.applicationContext
     private val engine = try { Native3dgsEngine(appContext) }
-        catch (error: EngineException) { throw EngineFailure(error.code, error) }
+        // The fixed AAR throws EngineException(5) here only when create returned 0;
+        // its polling job starts after that check, so no live engine was returned.
+        catch (error: EngineException) { throw EngineInitializationFailure(error.code, error) }
     private val leases = mutableMapOf<Long, InputLease>()
-    private inline fun <T> sdk(block: () -> T): T = try { block() }
-        catch (error: EngineException) { throw EngineFailure(error.code, error) }
+    private inline fun <T> sdk(origin: ErrorOrigin = ErrorOrigin.Command, block: () -> T): T = try { block() }
+        catch (error: EngineException) { throw EngineFailure(error.code, error,
+            if (origin == ErrorOrigin.State) stateErrorOrigin(error.code) else origin) }
     private fun releaseExcept(request: Long? = null) = synchronized(leases) {
         val old = leases.keys.filter { it != request }
         old.forEach { leases.remove(it)?.release() }
@@ -24,12 +27,13 @@ internal class SdkEngine(context: Context, scope: CoroutineScope) : EnginePort {
         if (s.phase.name == "Ready" || s.phase.name == "Failed") releaseExcept(s.activeRequestId)
         RenderState(s.phase.name, s.requestId,
         s.activeRequestId, s.sceneCount, s.surfaceGeneration, s.error,
-        if (s.error == 0) null else sdkFailureMessage(s.error))
+        if (s.error == 0) null else sdkFailureMessage(s.error, stateErrorOrigin(s.error)),
+        if (s.error == 0) null else stateErrorOrigin(s.error))
     }.stateIn(scope, SharingStarted.WhileSubscribed(), RenderState())
     override suspend fun open(uri: String): Long {
         val lease = InputLease.acquire(appContext, Uri.parse(uri))
         try {
-            val request = sdk { engine.open(lease.uri) }
+            val request = sdk(ErrorOrigin.State) { engine.open(lease.uri) }
             synchronized(leases) { leases[request] = lease }
             return request
         } catch (error: Exception) { lease.release(); throw error }

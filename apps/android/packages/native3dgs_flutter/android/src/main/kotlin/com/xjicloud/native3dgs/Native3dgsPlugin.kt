@@ -30,13 +30,21 @@ class Native3dgsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activit
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
             require(call.argument<Int>("protocolVersion") == 1) { "Protocol mismatch" }
-            val view = views[call.argument<Int>("viewId")] ?: error("Unknown view")
+            val viewId = requireNotNull(call.argument<Int>("viewId"))
+            val view = views[viewId]
+            if (call.method == "dispose" && view == null) {
+                require(!call.argument<String>("sessionId").isNullOrBlank()) { "Missing session" }
+                result.success(mapOf("ok" to true))
+                return
+            }
+            requireNotNull(view) { "Unknown view" }
             require(view.sessionId == call.argument<String>("sessionId")) { "Session mismatch" }
             val operation = call.argument<Number>("operationId")!!.toLong()
             if (call.method == "initialize") {
                 result.success(mapOf("ok" to true, "supported" to (view.capability.supported && view.session != null),
                     "error" to view.initializationError,
-                    "message" to if (view.capability.supported && view.session == null) "引擎初始化失败，请退出后重试。" else view.capability.message))
+                    "errorOrigin" to if (view.initializationError == 0) null else ErrorOrigin.Command.name,
+                    "message" to (view.initializationMessage ?: view.capability.message)))
                 return
             }
             if (call.method == "dispose") { view.dispose(); result.success(mapOf("ok" to true)); return }
@@ -80,7 +88,8 @@ class Native3dgsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activit
         } catch (error: Exception) {
             android.util.Log.e("Native3dgs", "Bridge operation failed: ${error.javaClass.name}")
             result.success(mapOf("ok" to false, "error" to ((error as? EngineFailure)?.code ?: 0),
-                "message" to if (error is EngineFailure) sdkFailureMessage(error.code)
+                "errorOrigin" to (error as? EngineFailure)?.origin?.name,
+                "message" to if (error is EngineFailure) sdkFailureMessage(error.code, error.origin)
                     else "操作失败 (${error.javaClass.simpleName})，请检查设备或重新打开查看器。"))
         }
     }

@@ -101,6 +101,18 @@ class EngineSessionTest {
         assertFalse(session.state.value.render.message!!.contains("content://"))
         session.shutdown(); runCurrent()
     }
+    @Test fun stateFailureRetainsItsOriginAndNewOpenClearsIt() = runTest {
+        val session = EngineSession(FakeEngine(), this, StandardTestDispatcher(testScheduler))
+        session.failure(EngineFailure(5, IllegalStateException("content://private/model"), ErrorOrigin.State))
+        assertEquals(5, session.state.value.render.error)
+        assertEquals(ErrorOrigin.State, session.state.value.render.errorOrigin)
+        assertFalse(session.state.value.render.message!!.contains("内存"))
+        assertFalse(session.state.value.render.message!!.contains("content://"))
+        session.open(1, "content://next")
+        assertEquals(0, session.state.value.render.error)
+        assertNull(session.state.value.render.errorOrigin)
+        session.shutdown(); runCurrent()
+    }
     @Test fun explicitCancellationFailureIsReportedToCaller() = runTest {
         val engine = FakeEngine().apply { cancelFails = true }
         val session = EngineSession(engine, this, StandardTestDispatcher(testScheduler))

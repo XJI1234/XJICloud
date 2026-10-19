@@ -8,16 +8,19 @@ class Native3dgsState {
     this.error = 0,
     this.message,
     this.supported,
+    this.errorOrigin,
   });
   final String phase;
   final int requestId, activeRequestId, sceneCount, surfaceGeneration, error;
   final String? message;
   final bool? supported;
+  final String? errorOrigin;
   Native3dgsState withPhase(
     String phase, {
     String? message,
     int error = 0,
     int? requestId,
+    String? errorOrigin,
   }) => Native3dgsState(
     phase: phase,
     requestId: requestId ?? this.requestId,
@@ -27,6 +30,7 @@ class Native3dgsState {
     error: error,
     message: message,
     supported: supported,
+    errorOrigin: errorOrigin,
   );
   factory Native3dgsState.fromMap(Map<Object?, Object?> data) =>
       Native3dgsState(
@@ -38,6 +42,7 @@ class Native3dgsState {
         error: (data['error'] as num?)?.toInt() ?? 0,
         message: data['message'] as String?,
         supported: data['supported'] as bool?,
+        errorOrigin: data['errorOrigin'] as String?,
       );
 }
 
@@ -49,10 +54,12 @@ class Native3dgsResult {
     this.uri,
     this.supported,
     this.error = 0,
+    this.errorOrigin,
   });
   final bool ok;
   final String? message, uri;
   final int? requestId;
   final bool? supported;
   final int error;
+  final String? errorOrigin;
 }

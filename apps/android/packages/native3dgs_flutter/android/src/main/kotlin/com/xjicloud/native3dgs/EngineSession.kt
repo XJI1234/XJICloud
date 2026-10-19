@@ -5,15 +5,31 @@ import kotlinx.coroutines.flow.*
 
 data class RenderState(val phase: String = "Empty", val requestId: Long = 0,
     val activeRequestId: Long = 0, val sceneCount: Long = 0,
-    val surfaceGeneration: Long = 0, val error: Int = 0, val message: String? = null)
+    val surfaceGeneration: Long = 0, val error: Int = 0, val message: String? = null,
+    val errorOrigin: ErrorOrigin? = null)
 data class SessionState(val operationId: Long = 0, val render: RenderState = RenderState())
-class EngineFailure(val code: Int, cause: Throwable) : Exception("SDK error $code", cause)
-fun sdkFailureMessage(code: Int): String = when (code) {
-    5, 10 -> "模型超出设备内存或资源限制 (SDK $code)，请关闭后尝试更小模型。"
+enum class ErrorOrigin { Command, State, Decoder }
+fun stateErrorOrigin(code: Int): ErrorOrigin = if (code in setOf(8, 10, 12, 13, 14, 15, 16))
+    ErrorOrigin.Decoder else ErrorOrigin.State
+open class EngineFailure(val code: Int, cause: Throwable, val origin: ErrorOrigin = ErrorOrigin.Command) : Exception("SDK error $code", cause)
+class EngineInitializationFailure(code: Int, cause: Throwable) : EngineFailure(code, cause)
+fun sdkFailureMessage(code: Int, origin: ErrorOrigin = ErrorOrigin.Command): String {
+    // SDK0.2.2 merges private decodeError and native snapshot.error. Overlapping
+    // state values cannot establish a cause; C-result codes apply only to commands.
+    if (origin == ErrorOrigin.State) return "渲染或解码状态异常 (SDK 状态 $code)，请取消或关闭模型后重试。"
+    if (origin == ErrorOrigin.Decoder) return when (code) {
+        10 -> "模型超出解码资源限制 (SDK 解码 $code)，请尝试更小模型。"
+        15 -> "隔离解码进程已退出 (SDK 解码 $code)，请关闭后重新选择模型。"
+        12 -> "解码已取消 (SDK 解码 $code)，可重新选择模型。"
+        13 -> "解码超时 (SDK 解码 $code)，请关闭后尝试更小模型。"
+        else -> "模型解码失败 (SDK 解码 $code)，请重新选择有效模型或关闭后重试。"
+    }
+    return when (code) {
+    5 -> "模型超出设备内存或资源限制 (SDK $code)，请关闭后尝试更小模型。"
     4 -> "模型版本或设备能力不受支持 (SDK $code)，请更换模型或设备。"
     3 -> "无法读取模型 (SDK $code)，请重新选择文件并检查读取授权。"
-    15 -> "隔离解码进程已退出 (SDK $code)，请关闭后重新选择模型。"
     else -> "模型或 GPU 操作失败 (SDK $code)，可取消或关闭后重试。"
+    }
 }
 interface EnginePort {
     val state: StateFlow<RenderState>
@@ -89,7 +105,8 @@ class EngineSession(private val engine: EnginePort, private val scope: Coroutine
         require(id > operation) { "Stale operation" }
         cancelCurrent()
         operation = id; cancelled = false
-        mutable.value = SessionState(id, mutable.value.render.copy(phase = "Loading", requestId = 0, error = 0, message = null))
+        mutable.value = SessionState(id, mutable.value.render.copy(phase = "Loading", requestId = 0,
+            error = 0, errorOrigin = null, message = null))
         openJob = scope.launch {
             try {
                 val nativeRequest = engine.open(uri)
@@ -137,7 +154,8 @@ class EngineSession(private val engine: EnginePort, private val scope: Coroutine
         // Numeric SDK errors remain in state; exception class is diagnostic without URI disclosure.
         mutable.value = SessionState(operation, mutable.value.render.copy(phase = "Failed",
             error = (error as? EngineFailure)?.code ?: mutable.value.render.error,
-            message = if (error is EngineFailure) sdkFailureMessage(error.code)
+            errorOrigin = (error as? EngineFailure)?.origin ?: mutable.value.render.errorOrigin,
+            message = if (error is EngineFailure) sdkFailureMessage(error.code, error.origin)
                 else "原生操作失败 (${error.javaClass.simpleName})，请关闭后重试。"))
         System.err.println("Native3dgs operation failed: ${error.javaClass.name}")
     }

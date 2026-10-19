@@ -22,6 +22,8 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
     val capability: Capability
     val session: EngineSession?
     val initializationError: Int
+    val initializationMessage: String?
+    private val reservation: EngineAdmission.Reservation?
     private val view: View
     private val channel = EventChannel(messenger, "native3dgs/events/$viewId")
     private var collector: Job? = null
@@ -34,21 +36,30 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
     private lateinit var input: FrameInput
     private val choreographer = Choreographer.getInstance()
     private val frame = Choreographer.FrameCallback { input.flush() }
-    companion object { private val engineInUse = java.util.concurrent.atomic.AtomicBoolean(false) }
+    companion object { private val admission = EngineAdmission() }
     init {
         val vulkan = context.packageManager.systemAvailableFeatures
             .firstOrNull { it.name == PackageManager.FEATURE_VULKAN_HARDWARE_VERSION }?.version ?: 0
         val checked = Capability.check(Build.VERSION.SDK_INT, Build.SUPPORTED_ABIS.toList(), vulkan,
             android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE))
-        capability = if (checked.supported && !engineInUse.compareAndSet(false, true))
-            Capability(false, "上一引擎仍在使用或关闭中，请等待；若持续失败请重启应用。") else checked
+        reservation = if (checked.supported) admission.reserve() else null
+        capability = if (checked.supported && reservation == null)
+            Capability(false, admission.blockedMessage()) else checked
         // Keep unsupported hosts entirely outside SdkEngine construction / JNI loading.
         var constructionError: Throwable? = null
         session = if (capability.supported) try { EngineSession(SdkEngine(context, scope), scope) }
             catch (error: Exception) { constructionError = error; null }
             catch (error: LinkageError) { constructionError = error; null }
         else null
+        if (session != null) reservation?.constructed()
+        else if (constructionError != null) reservation?.initializationFailed(
+            knownNoEngine = constructionError is EngineInitializationFailure)
         initializationError = (constructionError as? EngineFailure)?.code ?: 0
+        initializationMessage = when {
+            constructionError is EngineInitializationFailure -> "引擎初始化失败 (SDK $initializationError)，请退出查看器后重试。"
+            constructionError != null -> "引擎初始化状态无法确认，请重启应用。"
+            else -> null
+        }
         input = FrameInput({ choreographer.postFrameCallback(frame) },
             { choreographer.removeFrameCallback(frame) }) { name, values ->
             try { command(name, values) } catch (error: Exception) { session?.failure(error) }
@@ -86,7 +97,7 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
             gravity = Gravity.CENTER
             text = constructionError?.let {
                 android.util.Log.e("Native3dgs", "Engine construction failed: ${it.javaClass.name}")
-                "原生引擎初始化失败 (${it.javaClass.simpleName})。"
+                initializationMessage
             } ?: capability.message
         }
         channel.setStreamHandler(this)
@@ -129,6 +140,7 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
                     "operationId" to state.operationId, "requestId" to s.requestId,
                     "activeRequestId" to s.activeRequestId, "phase" to s.phase,
                     "sceneCount" to s.sceneCount, "error" to s.error,
+                    "errorOrigin" to s.errorOrigin?.name,
                     "surfaceGeneration" to s.surfaceGeneration, "message" to s.message))
             }
         }
@@ -143,10 +155,11 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
         channel.setStreamHandler(null)
         app.unregisterActivityLifecycleCallbacks(this)
         (view as? SurfaceView)?.holder?.removeCallback(this)
+        if (session != null) reservation?.beginClosing()
         val closing = session?.shutdown()
         if (closing == null) scope.cancel()
         else closing.invokeOnCompletion {
-            if (session.state.value.render.phase == "Stopped") engineInUse.set(false)
+            reservation?.closeCompleted(session.state.value.render.phase == "Stopped")
             scope.cancel()
         }
     }

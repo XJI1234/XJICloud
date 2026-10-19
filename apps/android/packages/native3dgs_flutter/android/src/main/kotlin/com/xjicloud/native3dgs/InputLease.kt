@@ -18,7 +18,8 @@ internal class InputLease(val uri: Uri, private val copy: File? = null) {
         }
     }
     companion object {
-        suspend fun acquire(context: Context, uri: Uri): InputLease = withContext(Dispatchers.IO) {
+        suspend fun acquire(context: Context, uri: Uri): InputLease = acquireWithHandoff(
+            Dispatchers.IO, InputLease::release) {
             require(uri.scheme == "content")
             val resolver = context.contentResolver
             val seekable = resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
@@ -28,7 +29,7 @@ internal class InputLease(val uri: Uri, private val copy: File? = null) {
                     false
                 }
             } ?: throw java.io.IOException("Document is not readable")
-            if (seekable) return@withContext InputLease(uri)
+            if (seekable) return@acquireWithHandoff InputLease(uri)
             val directory = File(context.cacheDir, "native3dgs-input").apply {
                 check(isDirectory || mkdirs()) { "Cannot create private input cache" }
             }
