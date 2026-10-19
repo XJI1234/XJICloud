@@ -571,10 +571,10 @@ curl http://10.0.1.20:8080/actuator/health
 
 ```bash
 sudo mkdir -p /var/www/xjicloud/admin /var/www/xjicloud/supersplat
-sudo cp -r apps/web/dist/* /var/www/xjicloud/
+sudo cp -r apps/web2/dist/* /var/www/xjicloud/
 sudo cp -r apps/admin/dist/* /var/www/xjicloud/admin/
-# SuperSplat 随 web 构建进入 dist/supersplat；或从 public 复制：
-# sudo cp -r apps/web/public/supersplat/* /var/www/xjicloud/supersplat/
+# SuperSplat 和 gs-assets 随 web2 构建进入 dist，必须完整部署。
+# sudo cp -r apps/web2/public/supersplat/* /var/www/xjicloud/supersplat/
 
 # 使用「分机版」Nginx 配置
 sudo cp deploy/nginx-frontend.conf.example /etc/nginx/conf.d/xjicloud.conf
@@ -595,6 +595,47 @@ sudo certbot --nginx -d cloud.example.com
 
 - 用户前端：`https://cloud.example.com/`
 - 管理面板：`https://cloud.example.com/admin/`
+
+#### 5.3.1 Native3DGS 查看器资源与本地联调
+
+使用 Node.js 24.14+、pnpm 9 执行 `pnpm install --frozen-lockfile` 和 `pnpm build:web2`。
+将整个 `apps/web2/dist/` 部署到对应 Nginx `root`，包括 `gs-assets/` 的 Worker、
+基础及 `threaded/` 解码器、manifest 和许可证；不能只上传 JS/CSS。
+
+`deploy/nginx-frontend.conf.example`（分机）、`deploy/nginx.conf.example`（同机）及
+`deploy/k8s/frontend/nginx.conf` 已提供 `location ^~ /gs-assets/`：
+`.js/.mjs` 返回 `application/javascript`，`.wasm` 返回 `application/wasm`，缺失资源返回
+404，避免落入 SPA 的 `index.html`。修改线上配置后先执行 `nginx -t`，成功后再 reload。
+
+浏览器必须通过 HTTPS（或开发用 localhost）访问，并具备 WebGPU 和浏览器本地存储能力。
+公网 IP 的普通 HTTP 页面不满足 WebGPU 安全上下文要求。
+不要给整个云站点增加 COOP/COEP；云页的 `decoder: auto` 可回退单线程，独立 demo 的隔离头仅用于 demo。
+
+部署后在运维机器检查（替换域名）：
+
+```bash
+curl -I https://cloud.example.com/gs-assets/decoder.worker.js
+curl -I https://cloud.example.com/gs-assets/decoder.mjs
+curl -I https://cloud.example.com/gs-assets/threaded/decoder.mjs
+curl -I https://cloud.example.com/gs-assets/decoder.wasm
+curl -I https://cloud.example.com/gs-assets/threaded/decoder.wasm
+curl -I https://cloud.example.com/gs-assets/not-present.mjs
+```
+
+前五项应为 200 且 MIME 正确，最后一项必须为 404。
+`nginx -t` 和这些请求仍需在实际服务器执行，本地 Vite 构建不能代替线上验证。
+现有 K8s 前端 Dockerfile 仍引用旧 `apps/web` 和 Node 20，不作为本分支已验收的镜像构建入口；
+此处配置适用于已正确部署 `apps/web2/dist` 的静态站点。
+
+本地 dev 如需连接远程后端，在 `apps/web2/.env.development.local` 写入：
+
+```dotenv
+DEV_API_PROXY_TARGET=http://your-backend-host
+```
+
+然后在仓库根目录运行 `pnpm dev`，访问 `http://localhost:5176`。
+远程目标可以包含显式端口（例如 `http://your-backend-host:8080`）；浏览器仍请求本地同源 `/api`，
+由 Vite 转发。未设置时保持 `http://127.0.0.1:8080`。该 `.local` 文件不提交，修改后需要重启 dev。
 
 ---
 
