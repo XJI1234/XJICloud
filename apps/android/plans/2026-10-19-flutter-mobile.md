@@ -6,15 +6,15 @@
 
 **Architecture:** 五个 BC 使用 Domain / Application / Infrastructure / Presentation 四层，唯一组合根负责装配。原生渲染由本地 Flutter 插件封装 Kotlin AAR 与 SurfaceView，网络与文件缓存由业务仓储管理；iOS 以后替换平台实现。
 
-**Tech Stack:** Flutter 3.38.9、Dart 3.10.8、JDK 21、Android API 29+；Native3DGS AAR 0.2.2 / arm64 / Vulkan 1.1；Flutter SDK controller、go_router、dio、secure storage、系统文件选择、path_provider。
+**Tech Stack:** 本机 Flutter 3.47.7、Dart 3.13.5、JDK 21、Android API 29+；Native3DGS AAR 0.2.2 / arm64 / Vulkan 1.1；Flutter SDK controller。go_router、dio、secure storage、系统文件选择、path_provider 按后续阶段需要引入。
 
-**Spec:** [架构](../docs/ARCHITECTURE.md)、[UI](../docs/MOBILE_UI.md)、[API](../docs/API_REUSE.md)、[原生桥](../docs/NATIVE3DGS.md)、[环境证据](../docs/ENVIRONMENT.md)。全部为本次方案，尚未经产品设计评审，不代表已批准开发或已执行以下任务。
+**Spec:** [架构](../docs/ARCHITECTURE.md)、[UI](../docs/MOBILE_UI.md)、[API](../docs/API_REUSE.md)、[原生桥](../docs/NATIVE3DGS.md)、[环境证据](../docs/ENVIRONMENT.md)。2026-10-19 用户要求按计划实施，随后确认本轮先完成可构建 P0，无真机；后续阶段仍以真机验收为进入条件。
 
 ## Global Constraints
 
 - 产品代码仅在 `apps/android`；不修改现有 backend/web2/admin/Spark/Rust。根知识库只在架构真正落地时同步事实。
-- Flutter 3.38.9 / Dart 3.10.8 为当前已检测开发基线；Android minSdk 29；发布 arm64-v8a；Vulkan 1.1。
-- 消费 SDK 使用 JDK 21、Java/Kotlin target 21；Flutter 生成基线 Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20 / compileSdk 36 / targetSdk 36 / NDK 28.2.13676358。AAR 消费兼容必须实际构建，SDK 源码编译 NDK 27 不与此混淆。
+- 本机保留已安装 Flutter 3.47.7 / Dart 3.13.5；原 3.38.9 基线来自另一台机器，不执行全局降级。Android minSdk 29；发布 arm64-v8a；Vulkan 1.1。
+- 消费 SDK 使用 JDK 21、Java/Kotlin target 21；本机 Flutter 模板 Gradle 9.3.1 / AGP 9.1.0 / Kotlin 2.4.0 / compileSdk 36 / targetSdk 36 / NDK 28.2.13676358。AAR 消费兼容必须实际构建，SDK 源码编译 NDK 27 不与此混淆。
 - SDK 固定 0.2.2 与 [NATIVE3DGS.md](../docs/NATIVE3DGS.md) 中的 ZIP/AAR hash；许可证随包保留。
 - UI 浅色壳 + 暗画布、accent `#3d6b8a`；Phone/Pad 四 Tab + 中央上传按钮，断点 600/840dp。
 - 不做航线、高级编辑、搜索索引、双屏、占位功能；截图在 PixelCopy 验证后单独开放。
@@ -32,7 +32,7 @@
 | P3 上传训练 | 6 | 图片上传、暂停恢复、任务观看 | 真实 OSS + mock Worker 流、complete 不确定分支 |
 | P4 完整体验 | 7–8 | 云模型打开、最终 UI/生命周期/异常闭环 | 真机 E2E、审查、profile 数据与明确未覆盖项 |
 
-当前任务仅完成环境准备与方案文件。以下 checkbox 全部保持未执行。每个任务通过后记录命令、设备/样本、结果、Review；只有无 High/Critical 才可标完成。提交建议按任务分开，执行前核对工作区，不夹带他人变更。
+当前执行范围为可构建 P0；进度与证据见 [P0 验证记录](../docs/verification/p0.md)。自动化通过与真机验收分开标记；缺少真机时 Task 1 和 P0 不标整体完成，Task 2–8 保持未执行。每个任务通过后记录命令、设备/样本、结果、Review；只有无 High/Critical 才可标完成。提交建议按任务分开，执行前核对工作区，不夹带他人变更。
 
 ## Task 1：可构建基线与原生渲染纵向验证
 
@@ -51,12 +51,12 @@
 - native 接收 `content://` URI，返回 operationId/requestId；状态含 activeRequestId、phase、error、surfaceGeneration，失败保留上一个可用场景。
 - 插件不依赖 domain、HTTP 或工程 ID；Task 7 再提供业务 port adapter。
 
-- [ ] **1. 建 Flutter 工程。** 在 repo 根执行 `flutter create --platforms=android --org com.xjicloud --project-name xjicloud_mobile apps/android`，保留已有文档；对比 create diff，不覆盖 AGENTS/README。生成后显式 minSdk=29、Java/Kotlin=21，提交 Flutter lockfile；插件为本地 path dependency，预览阶段 applicationId 为 `com.xjicloud.mobile`（最终发布标识在发布阶段核定）。
-- [ ] **2. 固定 SDK 消费。** 下载脚本验证 ZIP + manifest 每一文件 + AAR hash 后才落 vendor；插件通过单一 AAR 依赖加入，显式 coroutines-android 1.9.0。确认 AAR 自动合并非导出的 decoder Service，APK 中每个 .so 只有一份，检查 arm64 和 16KB 页兼容性，不用重复拷 lib/。
-- [ ] **3. 先写桥接失败测试。** 覆盖 disposed 忽略事件、旧 operationId 不覆盖新请求、重复 surfaceDestroyed 不重复 detach、open coroutine 取消与 requestId 取消的不同路径。运行 Dart 测试及 Kotlin test，应先因未实现而失败；不以 mock 测试声称引擎真实成功。
-- [ ] **4. 实现最小引擎页与宿主。** 仅本机打开/取消/关闭、orbit/pinch/fit；Hybrid Composition + SurfaceView，创建有效 Surface 才 attach，使用返回 generation resize/detach；后台 coroutine closeAndWait，热输入不跨 Dart 逐事件往返。例序严格采用 NATIVE3DGS §3，不自行发明 SDK 方法。
+- [x] **1. 建 Flutter 工程。** 在 repo 根执行 `flutter create --platforms=android --org com.xjicloud --project-name xjicloud_mobile apps/android`，保留已有文档；对比 create diff，不覆盖 AGENTS/README。生成后显式 minSdk=29、Java/Kotlin=21，提交 Flutter lockfile；插件为本地 path dependency，预览阶段 applicationId 为 `com.xjicloud.mobile`（最终发布标识在发布阶段核定）。
+- [x] **2. 固定 SDK 消费。** 下载脚本验证 ZIP + manifest 每一文件 + AAR hash 后才落 vendor；插件通过单一 AAR 依赖加入，显式 coroutines-android 1.9.0。确认 AAR 自动合并非导出的 decoder Service，APK 中每个 .so 只有一份，检查 arm64 和 16KB 页兼容性，不用重复拷 lib/。
+- [x] **3. 先写桥接失败测试。** 覆盖 disposed 忽略事件、旧 operationId 不覆盖新请求、重复 surfaceDestroyed 不重复 detach、open coroutine 取消与 requestId 取消的不同路径。运行 Dart 测试及 Kotlin test，应先因未实现而失败；不以 mock 测试声称引擎真实成功。
+- [x] **4. 实现最小引擎页与宿主。** 仅本机打开/取消/关闭、orbit/pinch/fit；Hybrid Composition + SurfaceView，创建有效 Surface 才 attach，使用返回 generation resize/detach；后台 coroutine closeAndWait，热输入不跨 Dart 逐事件往返。例序严格采用 NATIVE3DGS §3，不自行发明 SDK 方法。
 - [ ] **5. 构建并真机走路径。** `flutter analyze`、`flutter test`、`flutter build apk --debug --target-platform android-arm64`；`flutter run -d <arm64-device-id>` 打开有效 PLY/SPZ、取消第二模型、旋转/锁屏/切前后台/连续退出。再用 profile 模式查看触控与浮层合成。不兼容或无真机则记录 P0 未通过，不用模拟器/假数据替代。
-- [ ] **6. Review 并保存证据。** 检查无主线程 wait、FD/Surface/collector 泄漏、原始异常和旧事务污染；提交建议 `feat(android): establish Flutter native viewer bridge`。测试页留为开发入口，P4 不暴露到正式导航。
+- [x] **6. Review 并保存证据。** 检查无主线程 wait、FD/Surface/collector 泄漏、原始异常和旧事务污染；提交建议 `feat(android): establish Flutter native viewer bridge`。测试页留为开发入口，P4 不暴露到正式导航。
 
 ## Task 2：共享内核、主题与自适应底栏
 

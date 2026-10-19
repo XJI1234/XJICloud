@@ -1,6 +1,6 @@
 # 产品范围与 Flutter DDD 架构
 
-2026-10-19，设计草案；仅环境调整已执行。依据：根工程手册、web2 AGENTS/WEB2_FRONTEND、现有 Controller/DTO、发布 SDK 实物。
+2026-10-19。P0 Flutter 开发工程与本地原生插件已开始落地，证据见 [P0 验证记录](verification/p0.md)；下述五个业务 BC 与正式产品导航仍为后续设计，尚未实现。依据：根工程手册、web2 AGENTS/WEB2_FRONTEND、现有 Controller/DTO、发布 SDK 实物。
 
 ## 1. 复用什么
 

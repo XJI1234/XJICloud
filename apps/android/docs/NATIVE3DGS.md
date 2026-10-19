@@ -1,6 +1,6 @@
 # Native3DGS Android SDK 0.2.2 接入规格
 
-2026-10-19。已检查发布 ZIP、manifest、AAR Manifest 和 `javap` 公开接口；真实 AAR + 官方 Kotlin consumer 已在临时 Flutter 工程通过 arm64 APK 构建。尚未完成 Flutter 内嵌或真机渲染验证。
+2026-10-19。已检查发布 ZIP、manifest、AAR Manifest 和 `javap` 公开接口；真实 AAR 已由本地 Flutter 插件消费并通过 arm64 APK 构建。Flutter 内嵌视图和能力握手已在 x86_64 模拟器验证，真机渲染仍未验收。证据见 [P0 验证记录](verification/p0.md)。
 
 ## 1. 固定来源与核验
 
@@ -10,10 +10,11 @@
 - 包 `manifest.json`：version=0.2.2，ABI=arm64-v8a，C API=2，NDK=27.2.12479018；**51 个清单文件校验全部通过**。此为下载内容一致性核验，不是独立签名背书。
 - SDK guide：Android 10/API 29+，Vulkan 1.1，单模型 PLY/SPZ、SH 0–3；技术预览。30 FPS、跨 GPU、低内存、画质和热态不可当作已验收。
 - AAR 已含 `jni/arm64-v8a/libgs_android_decoder.so` 与 `libc++_shared.so`，Manifest 带非导出的私有进程 `:native3dgs_decoder` Service。**使用 AAR 时不要再打包 ZIP 的 lib/ 副本**，不通过 pickFirst 盲目掩盖 C++ runtime 冲突。
+- 本轮用 NDK `llvm-readelf -l` 检查实际 AAR：`libc++_shared.so` 的 LOAD 对齐为 `0x4000`，但 `libgs_android_decoder.so` 为 `0x1000`，**不满足 16KB ELF 对齐**。固定版本不修改二进制；宿主对 16KB 页环境在创建引擎前返回不支持。ZIP 对齐检查不能替代 ELF/设备验证；兼容该环境需要上游 SDK 修复后单独升级验收。
 - AAR Kotlin consumer 示例使用 JDK/JVM 21、coroutines-android 1.9.0。生产工程显式使用 Java/Kotlin JVM target 21、minSdk 29；保留 Flutter 工程自身的 AGP/Gradle 基线后验证消费兼容性，不把 SDK 源码构建依赖强套给预编译 AAR。
-- Flutter 3.38.9 默认 NDK 为 28.2.13676358；消费预编译 AAR 不自动要求重编为 NDK 27。只有重建 SDK/C ABI 时才按 SDK manifest 固定 NDK 27.2 与 CMake 3.22.1。
+- 本机 Flutter 3.47.7 工程使用 NDK 28.2.13676358；消费预编译 AAR 不自动要求重编为 NDK 27。只有重建 SDK/C ABI 时才按 SDK manifest 固定 NDK 27.2 与 CMake 3.22.1。
 
-后续在 `apps/android/vendor/native3dgs/0.2.2/` 保存 AAR、manifest、原文档与 licenses；脚本固定上述 URL/hash 并逐清单验证。当前包仅下载到机器临时目录，尚未提交二进制。发行时保留上游/三方许可证和 NOTICE，并核对 SDK 本体的分发许可来源。
+`apps/android/vendor/native3dgs/0.2.2/` 已保存 AAR、manifest、原文档与 licenses；`scripts/fetch-native3dgs.ps1` 固定上述 URL/hash 并逐清单验证。发行时保留上游/三方许可证和 NOTICE，并核对 SDK 本体的分发许可来源。
 
 ## 2. 本地 Flutter 插件边界
 
@@ -51,7 +52,7 @@ val requestId = engine.open(localContentUri) // suspend，在宿主 coroutine �
 - 每个 Surface 的 attach 返回新代际；resize/detach 使用该代际，尺寸用实际像素。旧代际/重复 detach 会报错，不能吞错后宣称成功。
 - 暂停/隐藏 Tab 解除 Surface 并停止输入；恢复后在有效 surfaceCreated 重新 attach/resize。Activity 销毁、切账号、退出 Viewer：停止命令、取消 open/collector，再异步 closeAndWait，不阻塞 UI 线程。
 - 销毁期间不能创建无限 engine 实例以绕过驱动停滞；设置宿主 closing 状态，超时展示诊断且保留资源关闭任务，停止新命令。进程内泄漏/崩溃必须记录并修正。
-- SDK phase：Empty/Loading/Uploading/Ready/Recovering/Failed/Stopping/Stopped。保存原始 error 数值用于脱敏诊断；OOM/不支持/Vulkan 设备丢失/解码失败映射到可操作文案。
+- SDK phase：Empty/Loading/Uploading/Ready/Recovering/Failed/Stopping/Stopped。保存原始 error 数值与 errorOrigin 用于脱敏诊断；区分同步命令、状态、可确认的 decoder 错误。0.2.2 状态通道混合原生与解码错误的数字命名空间，无法确认来源时使用通用重试指引，不将重叠数值误判为 OOM/读取失败等具体原因。
 - SDK 规范为 RUB；不照搬旧 Spark 翻转，不加 CSS/视图镜像。翻转由绝对布尔 `flipAxes(x,y,z)` 控制，不改变拖动方向。
 
 相机 API 已核验：`orbit`、`pan`、`dolly`、`look`、`fly`、`fit`、`reset`、`fixedMode`、`freeMode`、`flipAxes`。AAR 还暴露 `setQuality` 与 `drainFrameSamples`，首版用户页不暴露调优/诊断面板。

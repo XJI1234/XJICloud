@@ -1,74 +1,68 @@
 # Windows Flutter / Android 环境记录
 
-检查日期：2026-10-19（Asia/Shanghai）。这是本机实测记录，路径仅作记录，不应复制进可提交的 local.properties/Gradle 配置。
+检查日期：2026-10-19（Asia/Shanghai）。本页记录当前开发机的实际结果；旧文档中的 D 盘 SDK、用户 28049 和 Flutter 3.38.9 属于另一台机器，不能作为本机验证证据。机器路径只用于诊断，不写入可提交的 Gradle 配置。
 
-## 1. 检测基线
+## 1. 当前基线
 
-| 组件 | 检测结果 |
+| 组件 | 本机检测结果 |
 |---|---|
-| OS | Windows 11 x64 |
-| Flutter | stable 3.38.9，revision `67323de285`；`D:\flutterSDK\flutter` |
-| Dart | 3.10.8 |
-| Flutter 镜像 | 已有 `https://storage.flutter-io.cn`、`https://pub.flutter-io.cn`，保留 |
-| Android Studio JBR | JDK 21.0.9；`C:\Program Files\Android\Android Studio\jbr` |
-| 系统 Java | 原有 Oracle JDK 25.0.2，未改全局 JAVA_HOME；Flutter 单独固定 JBR 21 |
-| SDK | `C:\Users\28049\AppData\Local\Android\Sdk` |
-| Platforms | android-35、36、36.1 |
-| Build Tools | 34.0.0、35.0.0、36.1.0；实际构建可能按 AGP 自动补齐需要版本 |
-| NDK | 25.1.8937393、28.2.13676358；AAR消费不需现在重建SDK源码 |
-| Command-line tools | 20.0，已归入标准 SDK 目录 |
-| Gradle 模板 | Gradle 8.14、AGP 8.11.1、Kotlin 2.2.20 |
-| Emulator | 36.4.10.0；AEHD 2.2 可用 |
-| AVD | Medium_Tablet / API35 / x86_64 / 2560×1600 / density320 / 2GB RAM |
-| arm64 真机 | 本次未连接 |
+| OS | Windows 11 x64，10.0.26200.6584 |
+| Flutter | stable 3.47.7，revision `abaf9c5237` |
+| Dart | 3.13.5 |
+| Flutter SDK | `C:\Users\21544\flutter\flutter` |
+| Flutter 使用的 Java | Android Studio JBR 21.0.10 |
+| 系统 Java | Eclipse Adoptium JDK 21.0.11；保留原 JAVA_HOME |
+| Android SDK | `C:\Users\21544\AppData\Local\Android\Sdk` |
+| 工程模板 | AGP 9.1.0 / Kotlin 2.4.0 / Gradle 9.3.1 |
+| Android 目标 | minSdk 29，compileSdk/targetSdk 36；引擎发布仅 arm64-v8a |
+| Flutter 默认 NDK | 28.2.13676358；消费预编译 AAR，不重编 SDK |
+| Emulator | 36.5.10.0；`-accel-check` 确认 WHPX 可用 |
+| AVD | 新建 XJICloud_API35，google_apis / x86_64，1080×2400，density 420，2GB RAM |
+| 真机 | 未连接；用户确认本轮仅完成可构建 P0 |
 
-保留现有 Flutter 版本，未执行 flutter upgrade。未来升级应单独验证插件/AGP/SDK兼容，不能在环境检查中顺带升级全部依赖。
+保留现有 Flutter，不执行 upgrade/downgrade。旧计划的 3.38.9 基线已由本机基线替换，兼容性以本轮实际构建为准。SDK AAR 仍固定 0.2.2 与原 SHA-256，不随 Flutter 调整。
 
-## 2. 已执行的修复
+## 2. 本轮环境调整
 
-1. 初始 doctor 报 cmdline-tools 缺失：原工具放在 `D:\cmdline-tools`。复制其 bin/lib/NOTICE/source.properties 到标准 SDK 的 `cmdline-tools\20.0`，保留原目录。
-2. `flutter config --android-sdk <本机SDK> --jdk-dir <Android Studio jbr>`，避免 Flutter/Gradle 使用系统 JDK25。此为用户级 Flutter 配置；新开编辑器可能需要重启读取。
-3. 设置用户级 `ANDROID_HOME` 为同一 SDK。未全局重排 PATH：原 `D:\platform-tools` adb 为36.0.0，标准 SDK 的为37.0.0；推荐用标准 SDK 的 platform-tools，外部 sdkmanager 使用显式 `--sdk_root`。
-4. 运行 sdkmanager licenses，接受工具列出的 SDK 许可；复查 doctor 确认 `All Android licenses accepted`。
-5. 构建发现 Gradle ZIP 截断：缓存 `gradle-8.14-all.zip` 仅6,109,202字节，无法解压。原文件改名为 `.corrupt-20261019` 保留；从官方源重新下载224,116,304字节完整包，校验官方 SHA-256 后替换单一缓存ZIP，没有删除整个Gradle缓存。
+1. 用户 PATH 添加 Flutter bin 和标准 SDK platform-tools；保留其他开发工具。已打开的编辑器/终端需重新启动，或在当前终端刷新 PATH。
+2. `flutter config --android-sdk <本机 SDK> --jdk-dir <Android Studio jbr>` 固定 Flutter 的 JDK 21，不修改全局 JAVA_HOME。
+3. 接受 SDK 工具列出的许可。复查 doctor 的 Android toolchain 通过，显示 `All Android licenses accepted`。
+4. 原 command-line tools 11.0 无法理解现有 SDK XML4；安装 cmdline-tools/latest（23.0），保留 11.0。23.0 的 sdkmanager 是 Android CLI 兼容入口，包名建议使用 `platforms/android-36`、`ndk/28.2.13676358` 等斜杠形式。
+5. 补齐工程所需 platform 36 和 NDK 28.2.13676358；不删除已有 NDK、Gradle 缓存或系统镜像。Gradle 使用同版本官方 -bin 分发包。
+6. 既有 API34/36.1 镜像缺少 system.img，不能启动；另安装完整 API35 google_apis x86_64 镜像并新建 XJICloud_API35，冷启动确认 sys.boot_completed=1，页大小4096。保留原镜像目录。
 
-Gradle 8.14 all ZIP SHA-256：`efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1`。
+本机还存在其他 adb；本次设备操作统一使用标准 SDK 的 platform-tools/adb.exe，不删除其他软件附带的 adb。
 
-## 3. 实际验证与边界
+## 3. 验证证据
 
-环境探针放在 `%TEMP%\xjicloud_flutter_environment_probe_20261019`，不是正式客户端，不复制其计数器页面进产品；本仓库尚无 pubspec.yaml。
-
-| 执行 | 实际结果 |
+| 检查 | 结果 |
 |---|---|
-| `flutter --version` | Flutter 3.38.9 / Dart 3.10.8 |
-| `flutter doctor -v` | Android toolchain 通过，JDK21、cmdline-tools、许可证均正常；仍有 Chrome 未安装提示 |
-| `flutter emulators` / emulator `-accel-check` | 识别 Medium_Tablet；AEHD2.2 可用 |
-| 临时工程 `flutter pub get` | 依赖解析/下载通过 |
-| 临时工程 `flutter analyze` | No issues found |
-| 临时工程 `flutter test` | 默认计数器 Widget 测试1项通过；仅证明测试运行环境，不是产品测试 |
-| 临时工程 `flutter build apk --debug --target-platform android-arm64` | Gradle缓存修复后构建成功 |
-| `flutter run -d emulator-5554 --no-resident` | x86_64 Tablet 安装启动成功，Flutter JNI 与 Impeller OpenGLES 初始化；不含3DGS运行 |
-| 模拟器实际操作 | 启动→点击 Increment→UI语义树计数从0变1；完成后卸载探针并关闭本次启动的AVD |
-| 临时工程加入真实AAR与Kotlin consumer再构建 | Java/Kotlin target21、minSdk29、coroutines1.9.0；arm64 debug APK成功，验证Flutter基线可编译消费SDK，未调用引擎运行 |
+| `flutter doctor -v` | Flutter 与 Android toolchain 通过；Chrome 缺失与部分网络探测超时仍存在 |
+| `emulator -accel-check` | WHPX 可用 |
+| `adb devices -l` | 无真机 |
+| Native3DGS 发布依赖 | 下载脚本校验 ZIP、manifest 每个文件、AAR；见原生规格 |
+| 产品自动化、APK、模拟器 | 结果统一记录在 [P0 验证记录](verification/p0.md) |
 
-探针启动模拟器用于验证后，卸载探针并关闭本次启动的模拟器。SDK 包检查记录见 [NATIVE3DGS.md](NATIVE3DGS.md)。Native3DGS 的真实 Vulkan、触控/Surface内嵌、内存/热态、16KB页兼容均未设备验证；不能由Flutter计数器启动成功推导。
+Chrome 属于 Flutter Web 检查项，本轮 Android 目标不依赖 Chrome。网络 doctor 的 GitHub/Maven 首页探测超时不等同于构建依赖不可达；实际依赖获取和构建结果另行记录，不把 doctor 表述为全绿。
 
-Chrome 缺失属于 Flutter Web 检查项；当前目标Android不依赖Chrome，已有Edge，无需为消除提示改全局浏览器配置。Windows不能完成iOS构建/签名/模拟器验证；后续需macOS与Xcode。
+## 4. 开发命令
 
-## 4. 后续开发命令
-
-在正式 Flutter 工程创建后于 `apps/android` 使用：
+在 apps/android 中执行（首次打开新终端后应能找到 flutter）：
 
 ```powershell
 flutter doctor -v
+powershell -ExecutionPolicy Bypass -File scripts/fetch-native3dgs.ps1
 flutter pub get
 flutter analyze
 flutter test
 flutter build apk --debug --target-platform android-arm64
 flutter devices
-flutter run -d <arm64-device-id>
 ```
 
-未接真机时可 `flutter emulators --launch Medium_Tablet` 测壳与API；不要在x86_64上强行加载arm64 AAR。真机连接后先用 `adb devices -l` 检查授权，再核对 Android版本/ABI/Vulkan。Flutter build命令的实际SDK路径由本机配置生成，禁止提交绝对路径/签名材料。
+插件 Kotlin 测试、设备测试命令与记录见 [P0 验证记录](verification/p0.md)。local.properties、.dart_tool、build 和签名材料必须保持忽略。
 
-普通Flutter工程支持不代表后端已联调：正式用户流需后端、Redis、OSS、Worker可达。当前未做移动客户端业务E2E，也未做浏览器E2E；本次不修改web2，因此未运行pnpm test:web2。
+## 5. 未通过的设备门槛
+
+本轮没有 Android 10+、arm64、Vulkan 1.1 真机。模拟器只能验证 Flutter UI、通道与明确拒绝不支持架构；不能证明 SDK 首帧、PLY/SPZ 解码、手势/浮层合成、Surface 恢复、内存和热态性能通过。
+
+连接真机后按 [原生接入验收矩阵](NATIVE3DGS.md) 补测，P0 设备门槛通过前不进入 P1。Windows 不承担 iOS 构建/签名验证；未做移动业务流程或浏览器 E2E，本轮不修改 web2、backend、admin、Spark 或 Rust。
