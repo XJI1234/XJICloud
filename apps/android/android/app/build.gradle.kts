@@ -40,21 +40,32 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
+            // AGP merges this set with build types by union, not replacement.
             abiFilters.clear()
-            abiFilters.addAll(targetAbis)
         }
     }
 
     buildTypes {
-        release {
-            // Native3DGS production rendering is supported only on arm64.
+        configureEach {
             ndk {
                 abiFilters.clear()
-                abiFilters.add("arm64-v8a")
+                abiFilters.addAll(if (name == "debug") targetAbis else listOf("arm64-v8a"))
             }
+        }
+        release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+// Check the actual executing Flutter compile task, so debug x64 remains valid.
+// Filtering an x64-only release/profile to arm64 would omit its Flutter engine.
+tasks.withType<com.flutter.gradle.tasks.FlutterTask>().configureEach {
+    doFirst {
+        if (this@configureEach.buildMode != "debug" && "arm64-v8a" !in targetAbis) {
+            throw GradleException("Release/profile require --target-platform android-arm64 (or a list including it).")
         }
     }
 }
