@@ -56,7 +56,11 @@ class _CachePageState extends State<CachePage> {
                                 onPressed: c.cacheBusy || entry.inUse
                                     ? null
                                     : () => c.evictCache(entry),
-                                child: Text(l.cacheRemove),
+                                child: Text(
+                                  l.cacheRemove,
+                                  semanticsLabel:
+                                      '${l.cacheRemove}: ${entry.fileName}',
+                                ),
                               ),
                             ],
                           ),

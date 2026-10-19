@@ -110,25 +110,32 @@ class _ModelListState extends State<ModelList> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      model.fileName,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      '${model.format} · ${model.sizeBytes} B · v${model.version}',
-                    ),
-                    Text(
-                      '${l.modelCreated}: ${DateFormat.yMd(l.localeName).add_Hms().format(model.createdAt.toLocal())}',
-                    ),
-                    Text(
-                      '${l.modelUpdated}: ${DateFormat.yMd(l.localeName).add_Hms().format(model.updatedAt.toLocal())}',
-                    ),
-                    SelectableText(model.id),
-                    if (c.cached(model)) Text(l.modelCached),
-                    if (c.downloading(model.id))
-                      Text(
-                        '${c.downloadProgress[model.id] ?? 0} / ${model.sizeBytes} B',
+                    MergeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            model.fileName,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Text(
+                            '${model.format} · ${model.sizeBytes} B · v${model.version}',
+                          ),
+                          Text(
+                            '${l.modelCreated}: ${DateFormat.yMd(l.localeName).add_Hms().format(model.createdAt.toLocal())}',
+                          ),
+                          Text(
+                            '${l.modelUpdated}: ${DateFormat.yMd(l.localeName).add_Hms().format(model.updatedAt.toLocal())}',
+                          ),
+                          SelectableText(model.id),
+                          if (c.cached(model)) Text(l.modelCached),
+                          if (c.downloading(model.id))
+                            Text(
+                              '${c.downloadProgress[model.id] ?? 0} / ${model.sizeBytes} B',
+                            ),
+                        ],
                       ),
+                    ),
                     Wrap(
                       spacing: 12,
                       runSpacing: 8,
@@ -136,17 +143,29 @@ class _ModelListState extends State<ModelList> {
                         if (widget.onView != null)
                           OutlinedButton(
                             onPressed: () => widget.onView!(model),
-                            child: Text(l.viewerOpen),
+                            child: Text(
+                              l.viewerOpen,
+                              semanticsLabel:
+                                  '${l.viewerOpen}: ${model.fileName}',
+                            ),
                           ),
                         if (c.downloading(model.id))
                           TextButton(
                             onPressed: () => c.cancelDownload(model.id),
-                            child: Text(l.cancelDownload),
+                            child: Text(
+                              l.cancelDownload,
+                              semanticsLabel:
+                                  '${l.cancelDownload}: ${model.fileName}',
+                            ),
                           )
                         else
                           OutlinedButton(
                             onPressed: () => c.download(model),
-                            child: Text(l.modelDownload),
+                            child: Text(
+                              l.modelDownload,
+                              semanticsLabel:
+                                  '${l.modelDownload}: ${model.fileName}',
+                            ),
                           ),
                         TextButton(
                           onPressed: c.deleting(model.id)
@@ -162,7 +181,11 @@ class _ModelListState extends State<ModelList> {
                                     await c.delete(model);
                                   }
                                 },
-                          child: Text(l.deleteModel),
+                          child: Text(
+                            l.deleteModel,
+                            semanticsLabel:
+                                '${l.deleteModel}: ${model.fileName}',
+                          ),
                         ),
                         if (c.checkpoint case final state?
                             when state.projectId == project &&
@@ -184,7 +207,11 @@ class _ModelListState extends State<ModelList> {
                                       await c.reconcile(model.id);
                                     }
                                   },
-                            child: Text(l.reconcileModel),
+                            child: Text(
+                              l.reconcileModel,
+                              semanticsLabel:
+                                  '${l.reconcileModel}: ${model.fileName} (${model.id})',
+                            ),
                           ),
                       ],
                     ),

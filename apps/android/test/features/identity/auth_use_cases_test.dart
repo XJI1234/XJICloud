@@ -36,8 +36,9 @@ class FakeAuth implements AuthRepository {
     required String captchaCode,
   }) => login(username: username, password: password);
   @override
-  Future<Result<CaptchaChallenge>> getCaptcha() async =>
-      Success(CaptchaChallenge(key: 'key${++captchaRequests}', imageBytes: [1]));
+  Future<Result<CaptchaChallenge>> getCaptcha() async => Success(
+    CaptchaChallenge(key: 'key${++captchaRequests}', imageBytes: [1]),
+  );
   @override
   Future<Result<bool>> needCaptcha(String username) async =>
       const Success(false);

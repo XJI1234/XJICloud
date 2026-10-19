@@ -176,8 +176,18 @@ void main() {
         );
       }
 
-      await controller.open(const LocalModelSource());
-      await until(() => controller.session.phase == ViewerPhase.ready);
+      Future<void> openMeasured(int cycle) async {
+        final watch = Stopwatch()..start();
+        await controller.open(const LocalModelSource());
+        await until(() => controller.session.phase == ViewerPhase.ready);
+        watch.stop();
+        debugPrint(
+          'Task8 native load: points=4096 cycle=$cycle '
+          'openToObservedReadyMs=${watch.elapsedMilliseconds}',
+        );
+      }
+
+      await openMeasured(0);
       final original = controller.session.active;
       selected = badUri;
       await controller.open(const LocalModelSource());
@@ -199,8 +209,7 @@ void main() {
       for (var i = 0; i < 20; i++) {
         await controller.close();
         expect(controller.session.active, isNull);
-        await controller.open(const LocalModelSource());
-        await until(() => controller.session.phase == ViewerPhase.ready);
+        await openMeasured(i + 1);
       }
       await identity.invalidate();
       controller.synchronize();
