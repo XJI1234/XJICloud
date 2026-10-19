@@ -28,6 +28,7 @@ void main() {
 
   testWidgets(
     'real project edit, cloud native view, cache, logout and account isolation',
+    // Diagnose the real save; retain every original success assertion below.
     (tester) async {
       for (final value in [
         username,
@@ -54,14 +55,23 @@ void main() {
         ProductApp(container: container, initialLocation: '/account'),
       );
       try {
-        Future<void> until(bool Function() ready, {int seconds = 60}) async {
+        Future<void> until(
+          bool Function() ready, {
+          int seconds = 60,
+          String phase = 'journey-state',
+          VoidCallback? onTimeout,
+        }) async {
           for (var i = 0; i < seconds * 4 && !ready(); i++) {
             await tester.pump(const Duration(milliseconds: 250));
           }
+          if (!ready()) onTimeout?.call();
           expect(
             ready(),
             isTrue,
-            reason: 'Real mobile journey state timed out; inspect API, fixture and device.',
+            reason:
+                'Real mobile journey state timed out: phase=$phase '
+                'workspaceBusy=${workspace.busy} '
+                'workspaceError=${workspace.error?.code}; inspect API, fixture and device.',
           );
           await tester.pumpAndSettle();
         }
@@ -168,12 +178,49 @@ void main() {
           find.byKey(const Key('project-name-input')),
           '$name edited',
         );
-        await tap(find.byKey(const Key('save-project')));
-        await until(
-          () =>
-              workspace.projectById(ownedId)?.name == '$name edited' &&
-              !workspace.busy,
-        );
+        bool editInputMatches() {
+          final input = find.byKey(const Key('project-name-input'));
+          return input.evaluate().length == 1 &&
+              tester.widget<TextFormField>(input).controller?.text ==
+                  '$name edited';
+        }
+
+        bool? editSaveEnabled() {
+          final save = find.byKey(const Key('save-project'));
+          return save.evaluate().length == 1
+              ? tester.widget<FilledButton>(save).onPressed != null
+              : null;
+        }
+
+        void editDiagnostics(String phase) {
+          debugPrint(
+            'Task8 phase=$phase workspaceBusy=${workspace.busy} '
+            'workspaceError=${workspace.error?.code} '
+            'generationMatches=${workspace.userGeneration == container.sessions.generation} '
+            'expectedNameMatches=${workspace.projectById(ownedId)?.name == '$name edited'} '
+            'editorPresent=${find.byKey(const Key('project-name-input')).evaluate().isNotEmpty} '
+            'inputMatches=${editInputMatches()} saveEnabled=${editSaveEnabled()}',
+          );
+        }
+
+        void editChanged() => editDiagnostics('project-edit-controller-change');
+        editDiagnostics('project-edit-before-save');
+        expect(editInputMatches(), isTrue);
+        expect(editSaveEnabled(), isTrue);
+        workspace.addListener(editChanged);
+        try {
+          await tap(find.byKey(const Key('save-project')));
+          editDiagnostics('project-edit-after-tap');
+          await until(
+            () =>
+                workspace.projectById(ownedId)?.name == '$name edited' &&
+                !workspace.busy,
+            phase: 'project-edit-saved',
+            onTimeout: () => editDiagnostics('project-edit-timeout'),
+          );
+        } finally {
+          workspace.removeListener(editChanged);
+        }
         expect(find.text('$name edited'), findsWidgets);
 
         // Return via the actual tab, then choose the account-owned fixture.
