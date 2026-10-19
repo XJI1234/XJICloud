@@ -3,6 +3,7 @@ import { err, ok, type Result } from '@/shared/result'
 import type { HttpClient } from '@/shared/infrastructure/http-client'
 import { mapHttpError } from '@/shared/infrastructure/http-client'
 import type { ModelAssetRepository } from '@/features/model-asset/domain/repositories/model-asset.repository'
+import type { ModelCacheRevision } from '@/features/model-asset/domain/entities/model-asset.entity'
 import type { ViewerConfig, ViewerModelSummary } from '../../domain/entities/viewer-config.entity'
 import type { ViewerStoragePort } from '../../domain/repositories/viewer-storage.port'
 import { parseViewerConfig } from '../../domain/services/viewer-config.service'
@@ -12,17 +13,17 @@ type ViewerConfigPayloadDto = {
   updatedAt?: string
 }
 
-const modelMetaCache = new Map<string, { fileName: string }>()
-
-export function rememberViewerModelMeta(modelId: string, fileName: string) {
-  modelMetaCache.set(modelId, { fileName })
-}
-
 export function createHttpViewerStorage(deps: {
   http: HttpClient
   models: ModelAssetRepository
 }): ViewerStoragePort {
+  const modelMetaCache = new Map<string, { fileName: string; revision?: ModelCacheRevision }>()
+  function rememberModelMeta(modelId: string, fileName: string): Result<void> {
+    modelMetaCache.set(modelId, { ...modelMetaCache.get(modelId), fileName })
+    return ok(undefined)
+  }
   return {
+    rememberModelMeta,
     async listModels(projectId): Promise<Result<ViewerModelSummary[]>> {
       const [error, models] = await deps.models.list(projectId)
       if (error || !models) {
@@ -30,7 +31,10 @@ export function createHttpViewerStorage(deps: {
       }
       return ok(
         models.map((model) => {
-          rememberViewerModelMeta(model.id, model.fileName)
+          modelMetaCache.set(model.id, {
+            fileName: model.fileName,
+            revision: { fileName: model.fileName, sizeBytes: model.sizeBytes, updatedAt: model.updatedAt },
+          })
           return {
             id: model.id,
             fileName: model.fileName,
@@ -43,21 +47,23 @@ export function createHttpViewerStorage(deps: {
       )
     },
 
-    async loadModelBytes(modelId, onProgress) {
-      const [error, buffer] = await deps.models.downloadBytes(modelId, onProgress)
+    async loadModelBytes(modelId, onProgress, options) {
+      const meta = modelMetaCache.get(modelId)
+      const [error, buffer] = await deps.models.downloadBytes(modelId, onProgress,
+        meta?.revision ? { ...options, revision: meta.revision } : options)
       if (error || !buffer) {
         return err(error ?? new DomainError('UNKNOWN'))
       }
-      const fileName = modelMetaCache.get(modelId)?.fileName ?? 'model.spz'
+      const fileName = meta?.fileName ?? 'model.spz'
       return ok({
         file: new File([buffer], fileName),
         modelId,
       })
     },
 
-    async loadViewerConfig(modelId) {
+    async loadViewerConfig(modelId, options) {
       try {
-        const payload = await deps.http.request<ViewerConfigPayloadDto>(`/api/v1/models/${modelId}/viewer-config`)
+        const payload = await deps.http.request<ViewerConfigPayloadDto>(`/api/v1/models/${modelId}/viewer-config`, { signal: options?.signal })
         const raw = payload.jsonPayload ? (JSON.parse(payload.jsonPayload) as unknown) : {}
         return ok(parseViewerConfig(raw))
       } catch (error) {

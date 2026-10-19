@@ -2,7 +2,7 @@
   "extends": "@vue/tsconfig/tsconfig.dom.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-    "types": ["vite/client", "vite-plugin-glsl/ext"],
+    "types": ["vite/client", "vite-plugin-glsl/ext", "@webgpu/types"],
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {

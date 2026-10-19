@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '@/shared/result'
+import { DomainError } from '@/shared/domain-error'
 import { mapHttpError, type HttpClient } from '@/shared/infrastructure/http-client'
 import type {
   CachedModelFile,
@@ -163,9 +164,12 @@ export function createHttpModelAssetRepository(
     async downloadBytes(modelId, onProgress, options): Promise<Result<ArrayBuffer>> {
       const cacheKey = liveModelCacheKey(modelId)
       try {
+        options?.signal?.throwIfAborted()
         const cached = await readCached(cache, cacheKey, options?.revision)
+        options?.signal?.throwIfAborted()
         if (cached) {
           onProgress?.(cached.byteLength, cached.byteLength)
+          options?.signal?.throwIfAborted()
           return ok(cached)
         }
         const params = new URLSearchParams()
@@ -174,7 +178,8 @@ export function createHttpModelAssetRepository(
         }
         params.set('_', String(Date.now()))
         const query = params.toString()
-        const buffer = await http.downloadBytes(`/api/v1/models/${modelId}/download?${query}`, onProgress)
+        const buffer = await http.downloadBytes(`/api/v1/models/${modelId}/download?${query}`, onProgress, options?.signal)
+        options?.signal?.throwIfAborted()
         await writeCached(
           cache,
           {
@@ -187,9 +192,10 @@ export function createHttpModelAssetRepository(
           },
           buffer,
         )
+        options?.signal?.throwIfAborted()
         return ok(buffer)
       } catch (error) {
-        return err(mapHttpError(error))
+        return err(options?.signal?.aborted ? new DomainError('OPERATION_CANCELLED') : mapHttpError(error))
       }
     },
     async downloadVersionBytes(modelId, versionId, onProgress, options): Promise<Result<ArrayBuffer>> {

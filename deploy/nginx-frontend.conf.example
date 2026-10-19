@@ -1,6 +1,6 @@
 # 前端专用 Nginx（前端与后端分机部署）
 # 静态资源来自：
-#   apps/web/dist   → /var/www/xjicloud/
+#   apps/web2/dist  → /var/www/xjicloud/
 #   apps/admin/dist → /var/www/xjicloud/admin/
 # 安装：/etc/nginx/conf.d/xjicloud-frontend.conf
 #
@@ -20,6 +20,19 @@ server {
 
     location / {
         try_files $uri $uri/ /index.html;
+    }
+
+    # Native3DGS: module MIME and real 404s; do not add site-wide COOP/COEP.
+    # Deploy the complete apps/web2/dist/gs-assets/ directory with this site.
+    location ^~ /gs-assets/ {
+        types {
+            application/javascript js mjs;
+            application/wasm wasm;
+            application/json json;
+            text/plain txt;
+        }
+        default_type application/octet-stream;
+        try_files $uri =404;
     }
 
     location /admin/ {

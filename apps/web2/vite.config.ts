@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import MagicString from 'magic-string'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import glsl from 'vite-plugin-glsl'
 
@@ -36,7 +36,7 @@ function fixWasmDataUrl(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: '/',
   clearScreen: false,
   plugins: [
@@ -69,11 +69,11 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: loadEnv(mode, appDir, 'DEV_API_PROXY_TARGET').DEV_API_PROXY_TARGET || 'http://127.0.0.1:8080',
         changeOrigin: true,
         timeout: 0,
         proxyTimeout: 0,
       },
     },
   },
-})
+}))
