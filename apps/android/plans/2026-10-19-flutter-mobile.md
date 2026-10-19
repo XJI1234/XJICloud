@@ -136,10 +136,10 @@ test('Result keeps failure distinct from an empty list', () {
 - 仓储：list(projectId)、createUploadSession、getUploadSession、putChunk、completeUpload、abortUpload、downloadToFile、delete；typed Result 与可取消/进度参数。
 - `LocalModelRef` 描述内部资源标识、fileName/size，URI/路径通过 infra 解析。缓存 key=userId/modelId/updatedAt/sizeBytes，lease 防清理正在使用的文件。
 
-- [ ] **1. 写失败测试。** PLY/SPZ 与2GB边界、0字节、chunk Content-Range 尾块、服务端 receivedBytes 优先、重传范围、来源变化、complete 幂等；缓存修订/用户不命中、下载取消不提交 `.part`、磁盘满、活动 lease 不可清理。
-- [ ] **2. 实现本地文件与流。** 系统 SAF，无真实路径/不可 seek 时临时副本；记录授权/指纹，丢失授权可重选且身份校验。文件流读写，不全量跨 Dart/Kotlin；分片用服务端 chunkSizeBytes，恢复先 GET。
-- [ ] **3. 实现 API/缓存/管理 UI。** Bearer 下载到私有缓存后原子提交；回前台列表刷新检查修订；删除云模型成功后失效缓存，清缓存只作用当前账号并显示释放字节。“我的”增加实际缓存页面。
-- [ ] **4. 验证与 Review。** 实际上传/暂停/续传/complete丢响应/删除、下载取消、切账号、缓存命中/失效；analyze/test/build，审查文件路径/lease/取消竞争。提交建议 `feat(android): add resumable model assets and private cache`。
+- [x] **1. 写失败测试。** PLY/SPZ 与2GB边界、0字节、chunk Content-Range 尾块、服务端 receivedBytes 优先、重传范围、来源变化、complete 幂等；缓存修订/用户不命中、下载取消不提交 `.part`、磁盘满、活动 lease 不可清理。
+- [x] **2. 实现本地文件与流。** 系统 SAF，无真实路径/不可 seek 时临时副本；记录授权/指纹，丢失授权可重选且身份校验。文件流读写，不全量跨 Dart/Kotlin；分片用服务端 chunkSizeBytes，恢复先 GET。
+- [x] **3. 实现 API/缓存/管理 UI。** Bearer 下载到私有缓存后原子提交；回前台列表刷新检查修订；删除云模型成功后失效缓存，清缓存只作用当前账号并显示释放字节。“我的”增加实际缓存页面。
+- [x] **4. 验证与 Review。** 实际上传/暂停/续传/complete丢响应/删除、下载取消、切账号、缓存命中/失效；analyze/test/build，审查文件路径/lease/取消竞争。提交建议 `feat(android): add resumable model assets and private cache`。
 
 ## Task 6：Dataset-training 与前台恢复
 
