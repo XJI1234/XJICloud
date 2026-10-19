@@ -27,6 +27,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final form = GlobalKey<FormState>();
+  final confirmationFocus = FocusNode(), captchaFocus = FocusNode();
   final username = TextEditingController(),
       password = TextEditingController(),
       confirmation = TextEditingController(),
@@ -61,6 +62,8 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     debounce?.cancel();
+    confirmationFocus.dispose();
+    captchaFocus.dispose();
     c.removeListener(_changed);
     for (final field in [username, password, confirmation, displayName, code]) {
       field.clear();
@@ -211,7 +214,15 @@ class _LoginPageState extends State<LoginPage> {
                                     c.registration || c.captchaRequired
                                     ? TextInputAction.next
                                     : TextInputAction.done,
-                                onFieldSubmitted: (_) => _submit(),
+                                onFieldSubmitted: (_) {
+                                  if (c.registration) {
+                                    confirmationFocus.requestFocus();
+                                  } else if (c.captchaRequired) {
+                                    captchaFocus.requestFocus();
+                                  } else {
+                                    _submit();
+                                  }
+                                },
                                 decoration: InputDecoration(
                                   labelText: l.password,
                                   suffixIcon: IconButton(
@@ -238,6 +249,7 @@ class _LoginPageState extends State<LoginPage> {
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   key: const Key('confirm-password'),
+                                  focusNode: confirmationFocus,
                                   controller: confirmation,
                                   enabled: !c.submitting,
                                   obscureText: obscure,
@@ -270,6 +282,7 @@ class _LoginPageState extends State<LoginPage> {
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   key: const Key('captcha-code'),
+                                  focusNode: captchaFocus,
                                   controller: code,
                                   enabled: !c.submitting,
                                   autocorrect: false,
