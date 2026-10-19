@@ -18,7 +18,7 @@
 | Flutter 默认 NDK | 28.2.13676358；消费预编译 AAR，不重编 SDK |
 | Emulator | 36.5.10.0；`-accel-check` 确认 WHPX 可用 |
 | AVD | 新建 XJICloud_API35，google_apis / x86_64，1080×2400，density 420，2GB RAM |
-| 真机 | 尚未接入 Agent；用户已手动安装 P0 APK，报告可浏览模型，并授权 P1 构建后联合调试 |
+| 真机 | 2026-10-20 接入 Lenovo TB710FU，Android 16、arm64、4096-byte 页；Adreno 750，Vulkan 1.3 系统声明；实际矩阵见下文 |
 
 保留现有 Flutter，不执行 upgrade/downgrade。旧计划的 3.38.9 基线已由本机基线替换，兼容性以本轮实际构建为准。SDK AAR 仍固定 0.2.2 与原 SHA-256，不随 Flutter 调整。
 
@@ -39,7 +39,7 @@
 |---|---|
 | `flutter doctor -v` | Flutter 与 Android toolchain 通过；Chrome 缺失与部分网络探测超时仍存在 |
 | `emulator -accel-check` | WHPX 可用 |
-| `adb devices -l` | 无真机 |
+| `adb devices -l` | 初次 P0 时无真机；2026-10-20 已授权 USB 设备联调 |
 | Native3DGS 发布依赖 | 下载脚本校验 ZIP、manifest 每个文件、AAR；见原生规格 |
 | 产品自动化、APK、模拟器 | 结果统一记录在 [P0 验证记录](verification/p0.md) |
 
@@ -63,6 +63,6 @@ flutter devices
 
 ## 5. 设备验证进展
 
-初次 P0 交付时没有 Android 10+、arm64、Vulkan 1.1 真机。随后用户手动安装 APK 并确认模型浏览正常，已授权进入 P1；当前尚未将设备接入 Agent。模拟器证据仍只涵盖 Flutter UI、通道与明确拒绝不支持架构，不外推为 GPU/Surface、内存和热态验收。
+初次 P0 交付时没有 Android 10+、arm64、Vulkan 1.1 真机。随后用户手动安装 APK 并确认模型浏览正常。2026-10-20 用户连接设备并授权继续剩余阶段及现场测试：本机 PLY/SPZ、相机、旋转/锁屏/前后台、20 次开关，以及工程管理、模型分片/缓存、图片上传/任务取消删除已开始逐项验收，结果见 [真机矩阵](verification/android-device-matrix.md)。模拟器证据仍只涵盖 Flutter UI、通道与明确拒绝不支持架构，不外推为 GPU/Surface、内存和热态验收。
 
-P1 构建后连接真机，按 [原生接入验收矩阵](NATIVE3DGS.md) 补测尚未观察的项目。Windows 不承担 iOS 构建/签名验证；不修改 web2、backend、admin、Spark 或 Rust。
+设备只有 4KB 页；固定 SDK decoder ELF 不符合 16KB 对齐，宿主明确拒绝该环境。当前设备不能证明跨 GPU 或 16KB 加载兼容。按 [原生接入验收矩阵](NATIVE3DGS.md) 继续记录尚未观察的项目。Windows 不承担 iOS 构建/签名验证；不修改 web2、backend、admin、Spark 或 Rust。
