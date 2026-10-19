@@ -412,4 +412,147 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get sourceBusy =>
       'The system file picker is still open. Finish or cancel the previous selection.';
+
+  @override
+  String get chooseImages => 'Choose images';
+
+  @override
+  String get chooseImageFolder => 'Choose image folder';
+
+  @override
+  String get datasetPolicy =>
+      'Choose 1–9999 JPG, PNG or WebP images. Originals upload sequentially without compression or conversion. Uploads pause in the background.';
+
+  @override
+  String get datasetName => 'Training job name';
+
+  @override
+  String get datasetPreview => 'Archive preview';
+
+  @override
+  String get datasetImageCount => 'Image count';
+
+  @override
+  String get datasetTotalBytes => 'Total upload bytes';
+
+  @override
+  String get datasetPaused =>
+      'Local upload paused. The server job status is shown separately.';
+
+  @override
+  String get datasetResume => 'Check job and continue';
+
+  @override
+  String get datasetRestart => 'Cancel old job and resubmit';
+
+  @override
+  String get datasetRestartMessage =>
+      'Upload URLs cannot be renewed. The app will check and cancel the old uploading job, then create a new job and reupload these sources. Re-select images if the sources are unavailable.';
+
+  @override
+  String get datasetRestartRequired =>
+      'Upload URLs are unavailable after restart or expiry. Check the job first; if it is still uploading, confirm cancellation before submitting again.';
+
+  @override
+  String get datasetCreateUncertain =>
+      'The create response is uncertain. No retry was made. Refresh jobs and check ID, name and creation time, then explicitly identify this job.';
+
+  @override
+  String get datasetValidation =>
+      'Choose 1–9999 nonempty JPG, PNG or WebP images with matching names and MIME types. HEIC is unsupported.';
+
+  @override
+  String get datasetDiscard => 'Cancel upload and clear sources';
+
+  @override
+  String get datasetDiscardMessage =>
+      'Stop local sends, check and cancel this server job, and clear unsubmitted sources. Identify the job first if creation is uncertain.';
+
+  @override
+  String get datasetLeave => 'Pause and leave';
+
+  @override
+  String get datasetLeaveMessage =>
+      'Sources and confirmed objects remain. Nothing uploads in the background. Returning checks the job before resuming.';
+
+  @override
+  String get datasetConfirmCandidate => 'Identify as this created job';
+
+  @override
+  String get datasetCandidateMessage =>
+      'Check the job ID, name and creation time. This links the record; it cannot infer uploaded objects or recover missing URLs.';
+
+  @override
+  String get datasetNoCandidate => 'I checked; this job was not created';
+
+  @override
+  String get datasetNoCandidateMessage =>
+      'Continue only after checking the complete job list and confirming creation failed. This clears the create intent and retains sources for a manual new submission.';
+
+  @override
+  String get datasetCompleteRetry => 'Request queueing after checking';
+
+  @override
+  String get datasetCompleteMessage =>
+      'Completion is not idempotent. Retry only when every image and manifest is acknowledged and a fresh query still shows UPLOADING. The app never retries automatically.';
+
+  @override
+  String get trainingJobs => 'Training jobs';
+
+  @override
+  String get noTrainingJobs => 'No training jobs in this project';
+
+  @override
+  String get jobId => 'Job ID';
+
+  @override
+  String get jobCancel => 'Cancel job';
+
+  @override
+  String get jobCancelMessage =>
+      'Cancellation may not stop the worker immediately. The job can still complete; this page keeps reconciling its actual status.';
+
+  @override
+  String get jobDelete => 'Delete job record';
+
+  @override
+  String get jobDeleteMessage =>
+      'Delete this terminal job record and its local download?';
+
+  @override
+  String get jobStateError => 'The job state changed. Refresh the job.';
+
+  @override
+  String get outputDownload => 'Download training output';
+
+  @override
+  String get outputDownloaded => 'Training output downloaded privately';
+
+  @override
+  String get outputUnavailable => 'The server has not provided an output URL';
+
+  @override
+  String get outputUrlExpired =>
+      'The output URL expired. The server may keep returning the stored expired URL; querying again cannot guarantee renewal. Contact the server maintainer.';
+
+  @override
+  String get jobPending => 'Pending';
+
+  @override
+  String get jobUploading => 'Uploading';
+
+  @override
+  String get jobQueued => 'Queued';
+
+  @override
+  String get jobRunning => 'Running';
+
+  @override
+  String get jobCompleted => 'Completed';
+
+  @override
+  String get jobFailed => 'Failed';
+
+  @override
+  String get jobCancelled => 'Cancelled';
 }

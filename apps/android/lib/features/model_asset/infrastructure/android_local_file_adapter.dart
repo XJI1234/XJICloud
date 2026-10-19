@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../../../shared/infrastructure/platform_file_snapshots.dart';
+
 import '../../../shared/domain/result.dart';
 import '../../../shared/domain/domain_error.dart';
 import '../../../shared/domain/cancellation.dart';
@@ -9,18 +11,14 @@ import '../domain/local_file_port.dart';
 
 /// Narrow platform seam. SAF URIs never escape this adapter or cross into UI.
 final class AndroidLocalFileAdapter implements LocalFilePort {
-  AndroidLocalFileAdapter({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('xjicloud/platform_files');
-  final MethodChannel _channel;
+  AndroidLocalFileAdapter({
+    MethodChannel? channel,
+    PlatformFileSnapshots? snapshots,
+  }) : _snapshots = snapshots ?? PlatformFileSnapshots(channel: channel);
+  final PlatformFileSnapshots _snapshots;
+  MethodChannel get _channel => _snapshots.channel;
   static final _id = RegExp(r'^[a-f0-9-]{36}$');
-  Future<String> _directory(String kind) async {
-    final result = await _channel.invokeMapMethod<String, dynamic>(
-      'directories',
-    );
-    final path = result?[kind];
-    if (path is! String || path.isEmpty) throw const DomainError('storage');
-    return path;
-  }
+  Future<String> _directory(String kind) => _snapshots.directory(kind);
 
   Future<String> cacheDirectory() => _directory('cache');
   Future<String> _sourcePath(LocalModelRef source) async {

@@ -16,6 +16,15 @@ import '../features/model_asset/infrastructure/preferences_upload_checkpoints.da
 import '../features/model_asset/presentation/model_assets_controller.dart';
 import 'app_container.dart';
 import 'session_coordinator.dart';
+import '../shared/infrastructure/platform_file_snapshots.dart';
+import '../shared/domain/result.dart';
+import '../features/dataset_training/infrastructure/android_image_source_adapter.dart';
+import '../features/dataset_training/infrastructure/http_training_job_repository.dart';
+import '../features/dataset_training/infrastructure/oss_upload_adapter.dart';
+import '../features/dataset_training/infrastructure/local_upload_checkpoint.dart';
+import '../features/dataset_training/infrastructure/sse_job_event_adapter.dart';
+import '../features/dataset_training/infrastructure/file_training_outputs.dart';
+import '../features/dataset_training/presentation/upload_controller.dart';
 
 /// The sole infrastructure assembly point. No production default API is assumed.
 AppContainer createContainer({
@@ -30,7 +39,8 @@ AppContainer createContainer({
     allowDebugHttp: kDebugMode,
   );
   registerSdkLicenses();
-  final files = AndroidLocalFileAdapter();
+  final snapshots = PlatformFileSnapshots();
+  final files = AndroidLocalFileAdapter(snapshots: snapshots);
   final modelAssets = ModelAssetsController(
     HttpModelAssetRepository(api),
     files,
@@ -38,17 +48,40 @@ AppContainer createContainer({
     FileModelCache(files.cacheDirectory),
     sessions,
   );
+  final oss = OssUploadAdapter();
+  final training = UploadController(
+    HttpTrainingJobRepository(api),
+    AndroidImageSourceAdapter(snapshots),
+    oss,
+    LocalUploadCheckpoint(
+      () async => '${await snapshots.directory('training')}/checkpoints',
+    ),
+    SseJobEventAdapter(api),
+    sessions,
+    outputs: FileTrainingOutputs(
+      () => snapshots.directory('training'),
+      oss.download,
+    ),
+  );
   return AppContainer(
     sessions: sessions,
     auth: HttpAuthRepository(api),
     locales: PreferencesLocaleStore(),
-    closeTransport: api.close,
+    closeTransport: () {
+      api.close();
+      oss.close();
+    },
     modelAssets: modelAssets,
+    training: training,
     workspace: WorkspaceController(
       HttpProjectRepository(api),
       LocalWorkspacePersistence(),
       sessions,
-      stopProjectTransfers: modelAssets.stopProjectTransfers,
+      stopProjectTransfers: (id) async {
+        final result = await modelAssets.stopProjectTransfers(id);
+        if (result is Failure<void>) return result;
+        return training.stopProjectTransfers(id);
+      },
     ),
   );
 }

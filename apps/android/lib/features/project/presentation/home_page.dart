@@ -11,10 +11,12 @@ class HomePage extends StatelessWidget {
     required this.onCreate,
     required this.onOpen,
     required this.onRetry,
+    this.trainingSectionBuilder,
   });
   final HomeViewModel viewModel;
   final VoidCallback onCreate, onRetry;
   final void Function(String) onOpen;
+  final Widget Function(String)? trainingSectionBuilder;
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -65,6 +67,8 @@ class HomePage extends StatelessWidget {
                   )
                 else
                   Text(l.noCurrentProject),
+                if (viewModel.current != null && trainingSectionBuilder != null)
+                  trainingSectionBuilder!(viewModel.current!.id),
                 const SizedBox(height: 24),
                 Text(
                   l.recentProjects,

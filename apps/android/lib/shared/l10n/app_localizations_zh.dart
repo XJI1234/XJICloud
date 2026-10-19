@@ -389,4 +389,143 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sourceBusy => '系统文件选择器仍在使用，请先完成或取消上一次选择。';
+
+  @override
+  String get chooseImages => '选择多张图片';
+
+  @override
+  String get chooseImageFolder => '选择图片文件夹';
+
+  @override
+  String get datasetPolicy =>
+      '选择 1–9999 张 JPG、PNG 或 WebP 图片。原图逐张上传，不压缩、不转码；切到后台会暂停发送。';
+
+  @override
+  String get datasetName => '训练任务名称';
+
+  @override
+  String get datasetPreview => '归档预览';
+
+  @override
+  String get datasetImageCount => '图片数量';
+
+  @override
+  String get datasetTotalBytes => '上传总字节';
+
+  @override
+  String get datasetPaused => '本地上传已暂停；服务端状态仍以任务快照为准。';
+
+  @override
+  String get datasetResume => '查询任务并继续';
+
+  @override
+  String get datasetRestart => '取消旧任务并重新提交';
+
+  @override
+  String get datasetRestartMessage =>
+      '签名无法补签。将先查询并取消仍在上传的旧任务，再用这些素材创建新任务并全部重传。若源文件已丢失，请重新选图。';
+
+  @override
+  String get datasetRestartRequired =>
+      '重启后签名不可恢复，或签名已过期。先查询任务；仍在上传时，确认取消旧任务再重新提交。';
+
+  @override
+  String get datasetCreateUncertain =>
+      '创建响应不确定，未自动重试。请刷新任务列表，核对任务 ID、名称和创建时间，再明确选择此次任务。无法自动推断身份。';
+
+  @override
+  String get datasetValidation =>
+      '请选择 1–9999 张非空 JPG、PNG 或 WebP 图片；文件名、格式和 MIME 必须一致。不支持 HEIC。';
+
+  @override
+  String get datasetDiscard => '取消上传并清除素材';
+
+  @override
+  String get datasetDiscardMessage =>
+      '停止本地发送，并查询和取消此次服务端任务。未提交素材将被清除。创建结果不确定时须先核对任务身份。';
+
+  @override
+  String get datasetLeave => '暂停并离开';
+
+  @override
+  String get datasetLeaveMessage => '素材与已确认上传项会保留。后台不会继续发送；返回后先查询任务再恢复。';
+
+  @override
+  String get datasetConfirmCandidate => '确认为此次创建的任务';
+
+  @override
+  String get datasetCandidateMessage =>
+      '请核对任务 ID、名称和创建时间。此操作仅关联记录；不会推断上传对象或恢复丢失的签名。';
+
+  @override
+  String get datasetNoCandidate => '已核对列表，未找到此次任务';
+
+  @override
+  String get datasetNoCandidateMessage =>
+      '仅在已核对完整任务列表并确认此次创建未成功时继续。将清除此创建意图并保留素材，随后可手动提交新任务。';
+
+  @override
+  String get datasetCompleteRetry => '核对后再次请求入队';
+
+  @override
+  String get datasetCompleteMessage =>
+      '完成请求并非幂等。仅当所有图片和 manifest 已确认上传、最新查询仍为 UPLOADING 时再次请求；客户端不会自动重试。';
+
+  @override
+  String get trainingJobs => '训练任务';
+
+  @override
+  String get noTrainingJobs => '此工程还没有训练任务';
+
+  @override
+  String get jobId => '任务 ID';
+
+  @override
+  String get jobCancel => '取消任务';
+
+  @override
+  String get jobCancelMessage => '取消不能保证立即中断 Worker，任务仍可能随后完成。页面会继续查询真实状态。';
+
+  @override
+  String get jobDelete => '删除任务记录';
+
+  @override
+  String get jobDeleteMessage => '删除此终态任务记录及本地下载副本？';
+
+  @override
+  String get jobStateError => '任务状态已变化，请查询最新任务。';
+
+  @override
+  String get outputDownload => '下载训练产物';
+
+  @override
+  String get outputDownloaded => '训练产物已下载到私有存储';
+
+  @override
+  String get outputUnavailable => '服务端尚未提供训练产物下载地址';
+
+  @override
+  String get outputUrlExpired =>
+      '产物下载签名已失效。当前服务端可能重复返回旧地址，重新查询不能保证补签；请联系服务端维护者。';
+
+  @override
+  String get jobPending => '待处理';
+
+  @override
+  String get jobUploading => '上传中';
+
+  @override
+  String get jobQueued => '排队中';
+
+  @override
+  String get jobRunning => '训练中';
+
+  @override
+  String get jobCompleted => '已完成';
+
+  @override
+  String get jobFailed => '失败';
+
+  @override
+  String get jobCancelled => '已取消';
 }

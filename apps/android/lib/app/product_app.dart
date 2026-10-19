@@ -8,6 +8,8 @@ import '../features/project/presentation/project_list_page.dart';
 import '../features/project/presentation/project_detail_page.dart';
 import '../features/model_asset/presentation/model_list.dart';
 import '../features/model_asset/presentation/cache_page.dart';
+import '../features/dataset_training/presentation/upload_flow_page.dart';
+import '../features/dataset_training/presentation/training_job_panel.dart';
 import '../presentation/pages/my_page.dart';
 import '../presentation/theme/app_theme.dart';
 import '../shared/l10n/app_localizations.dart';
@@ -90,7 +92,8 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
           ShellRoute(
             builder: (context, state, child) => _WorkspaceNavigation(
               location: state.uri.path,
-              onUpload: container.modelAssets == null
+              onUpload:
+                  container.modelAssets == null && container.training == null
                   ? null
                   : () => showUpload(context),
               child: child,
@@ -106,6 +109,15 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
                       viewModel: workspace.home,
                       onCreate: () => showProjectEditor(context, workspace),
                       onRetry: workspace.refresh,
+                      trainingSectionBuilder: container.training == null
+                          ? null
+                          : (id) => TrainingJobPanel(
+                              controller: container.training!,
+                              projectId: id,
+                              summary: true,
+                              onUpload: () =>
+                                  showDatasetUpload(context, projectId: id),
+                            ),
                       onOpen: (id) async {
                         final opened = await workspace.openProject(id);
                         if (opened && context.mounted) {
@@ -185,11 +197,173 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
   }
 
   Widget Function(String)? get modelSectionBuilder =>
-      container.modelAssets == null
+      container.modelAssets == null && container.training == null
       ? null
-      : (id) => ModelList(controller: container.modelAssets!, projectId: id);
+      : (id) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (container.modelAssets != null)
+              ModelList(controller: container.modelAssets!, projectId: id),
+            if (container.training != null)
+              Builder(
+                builder: (context) => TrainingJobPanel(
+                  controller: container.training!,
+                  projectId: id,
+                  onUpload: () => showDatasetUpload(context, projectId: id),
+                ),
+              ),
+          ],
+        );
 
   Future<void> showUpload(BuildContext context) async {
+    if (container.training == null) {
+      await showModelUpload(context);
+      return;
+    }
+    final l = AppLocalizations.of(context), g = container.sessions.generation;
+    final kind = await sessionSheet<String>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              key: const Key('upload-dataset-choice'),
+              onPressed: () => Navigator.pop(context, 'images'),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: Text(l.uploadImages),
+            ),
+            if (container.modelAssets != null)
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, 'model'),
+                icon: const Icon(Icons.view_in_ar_outlined),
+                label: Text(l.uploadModel),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!context.mounted || g != container.sessions.generation) return;
+    if (kind == 'images') {
+      await showDatasetUpload(context);
+    } else if (kind == 'model') {
+      await showModelUpload(context);
+    }
+  }
+
+  Future<void> showDatasetUpload(
+    BuildContext context, {
+    String? projectId,
+  }) async {
+    final c = container.training, workspace = container.workspace;
+    if (c == null || workspace == null) return;
+    final g = c.userGeneration, l = AppLocalizations.of(context);
+    String? selected =
+        c.targetProjectId ?? projectId ?? workspace.activeProjectId;
+    if (c.targetProjectId == null) {
+      selected = await sessionSheet<String>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        builder: (context) => ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .8,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setState) => SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    l.uploadDestination,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  if (workspace.projects.isEmpty) ...[
+                    Text(l.noCurrentProject),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        showProjectEditor(this.context, workspace);
+                      },
+                      child: Text(l.createProject),
+                    ),
+                  ],
+                  for (final project in workspace.projects)
+                    ListTile(
+                      selected: selected == project.id,
+                      leading: Icon(
+                        selected == project.id
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                      ),
+                      onTap: () => setState(() => selected = project.id),
+                      title: Text(project.name),
+                    ),
+                  FilledButton(
+                    onPressed: selected == null
+                        ? null
+                        : () => Navigator.pop(context, selected),
+                    child: Text(l.uploadImages),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (selected == null || g != c.userGeneration || !context.mounted) return;
+    final fixedId = selected!;
+    final project = workspace.projectById(fixedId);
+    if (project == null && c.targetProjectId != fixedId) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => UploadFlowPage(
+          controller: c,
+          projectId: fixedId,
+          projectName: project?.name ?? fixedId,
+        ),
+      ),
+    );
+  }
+
+  Future<T?> sessionSheet<T>({
+    required BuildContext context,
+    required WidgetBuilder builder,
+    bool useSafeArea = true,
+    bool isScrollControlled = false,
+  }) async {
+    final generation = container.sessions.generation;
+    BuildContext? sheet;
+    void changed() {
+      if (container.sessions.generation != generation &&
+          sheet?.mounted == true) {
+        Navigator.of(sheet!).pop();
+      }
+    }
+
+    container.sessions.addListener(changed);
+    try {
+      return await showModalBottomSheet<T>(
+        context: context,
+        useSafeArea: useSafeArea,
+        isScrollControlled: isScrollControlled,
+        builder: (context) {
+          sheet = context;
+          return builder(context);
+        },
+      );
+    } finally {
+      container.sessions.removeListener(changed);
+    }
+  }
+
+  Future<void> showModelUpload(BuildContext context) async {
     final models = container.modelAssets!, workspace = container.workspace!;
     final generation = models.userGeneration;
     final l = AppLocalizations.of(context);
@@ -316,9 +490,11 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       container.sessions.checkExpiry();
       container.modelAssets?.foreground();
+      container.training?.foreground();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       container.modelAssets?.background();
+      container.training?.background();
     }
   }
 

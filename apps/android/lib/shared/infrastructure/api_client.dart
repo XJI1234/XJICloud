@@ -51,6 +51,7 @@ final class ApiClient {
     String? contentRange,
     Cancellation? cancellation,
     Future<void> Function(Stream<List<int>>)? consume,
+    Duration receiveTimeout = const Duration(seconds: 20),
   }) async {
     // Path is a decoded API path, never a URL or a pre-encoded user value.
     if (!path.startsWith('/api/v1/') ||
@@ -109,7 +110,7 @@ final class ApiClient {
           followRedirects: false,
           validateStatus: (_) => true,
           sendTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
+          receiveTimeout: receiveTimeout,
           responseType: streaming ? ResponseType.stream : ResponseType.json,
         ),
       );
@@ -119,6 +120,9 @@ final class ApiClient {
       }
       if (status == 401 && authenticated) {
         await sessions.invalidate(expectedGeneration: generation);
+        // Invalidation changes generation. Do not re-read a guarded streaming
+        // error body and turn this known authentication failure into cancelled.
+        return const Failure(DomainError('unauthorized'));
       }
       if (status >= 300 && status < 400) {
         return const Failure(DomainError('redirect'));

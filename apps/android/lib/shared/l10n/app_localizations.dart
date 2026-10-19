@@ -847,6 +847,264 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'系统文件选择器仍在使用，请先完成或取消上一次选择。'**
   String get sourceBusy;
+
+  /// No description provided for @chooseImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择多张图片'**
+  String get chooseImages;
+
+  /// No description provided for @chooseImageFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择图片文件夹'**
+  String get chooseImageFolder;
+
+  /// No description provided for @datasetPolicy.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择 1–9999 张 JPG、PNG 或 WebP 图片。原图逐张上传，不压缩、不转码；切到后台会暂停发送。'**
+  String get datasetPolicy;
+
+  /// No description provided for @datasetName.
+  ///
+  /// In zh, this message translates to:
+  /// **'训练任务名称'**
+  String get datasetName;
+
+  /// No description provided for @datasetPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'归档预览'**
+  String get datasetPreview;
+
+  /// No description provided for @datasetImageCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片数量'**
+  String get datasetImageCount;
+
+  /// No description provided for @datasetTotalBytes.
+  ///
+  /// In zh, this message translates to:
+  /// **'上传总字节'**
+  String get datasetTotalBytes;
+
+  /// No description provided for @datasetPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地上传已暂停；服务端状态仍以任务快照为准。'**
+  String get datasetPaused;
+
+  /// No description provided for @datasetResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询任务并继续'**
+  String get datasetResume;
+
+  /// No description provided for @datasetRestart.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消旧任务并重新提交'**
+  String get datasetRestart;
+
+  /// No description provided for @datasetRestartMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'签名无法补签。将先查询并取消仍在上传的旧任务，再用这些素材创建新任务并全部重传。若源文件已丢失，请重新选图。'**
+  String get datasetRestartMessage;
+
+  /// No description provided for @datasetRestartRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'重启后签名不可恢复，或签名已过期。先查询任务；仍在上传时，确认取消旧任务再重新提交。'**
+  String get datasetRestartRequired;
+
+  /// No description provided for @datasetCreateUncertain.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建响应不确定，未自动重试。请刷新任务列表，核对任务 ID、名称和创建时间，再明确选择此次任务。无法自动推断身份。'**
+  String get datasetCreateUncertain;
+
+  /// No description provided for @datasetValidation.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择 1–9999 张非空 JPG、PNG 或 WebP 图片；文件名、格式和 MIME 必须一致。不支持 HEIC。'**
+  String get datasetValidation;
+
+  /// No description provided for @datasetDiscard.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消上传并清除素材'**
+  String get datasetDiscard;
+
+  /// No description provided for @datasetDiscardMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止本地发送，并查询和取消此次服务端任务。未提交素材将被清除。创建结果不确定时须先核对任务身份。'**
+  String get datasetDiscardMessage;
+
+  /// No description provided for @datasetLeave.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停并离开'**
+  String get datasetLeave;
+
+  /// No description provided for @datasetLeaveMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'素材与已确认上传项会保留。后台不会继续发送；返回后先查询任务再恢复。'**
+  String get datasetLeaveMessage;
+
+  /// No description provided for @datasetConfirmCandidate.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认为此次创建的任务'**
+  String get datasetConfirmCandidate;
+
+  /// No description provided for @datasetCandidateMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'请核对任务 ID、名称和创建时间。此操作仅关联记录；不会推断上传对象或恢复丢失的签名。'**
+  String get datasetCandidateMessage;
+
+  /// No description provided for @datasetNoCandidate.
+  ///
+  /// In zh, this message translates to:
+  /// **'已核对列表，未找到此次任务'**
+  String get datasetNoCandidate;
+
+  /// No description provided for @datasetNoCandidateMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅在已核对完整任务列表并确认此次创建未成功时继续。将清除此创建意图并保留素材，随后可手动提交新任务。'**
+  String get datasetNoCandidateMessage;
+
+  /// No description provided for @datasetCompleteRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'核对后再次请求入队'**
+  String get datasetCompleteRetry;
+
+  /// No description provided for @datasetCompleteMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成请求并非幂等。仅当所有图片和 manifest 已确认上传、最新查询仍为 UPLOADING 时再次请求；客户端不会自动重试。'**
+  String get datasetCompleteMessage;
+
+  /// No description provided for @trainingJobs.
+  ///
+  /// In zh, this message translates to:
+  /// **'训练任务'**
+  String get trainingJobs;
+
+  /// No description provided for @noTrainingJobs.
+  ///
+  /// In zh, this message translates to:
+  /// **'此工程还没有训练任务'**
+  String get noTrainingJobs;
+
+  /// No description provided for @jobId.
+  ///
+  /// In zh, this message translates to:
+  /// **'任务 ID'**
+  String get jobId;
+
+  /// No description provided for @jobCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消任务'**
+  String get jobCancel;
+
+  /// No description provided for @jobCancelMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消不能保证立即中断 Worker，任务仍可能随后完成。页面会继续查询真实状态。'**
+  String get jobCancelMessage;
+
+  /// No description provided for @jobDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除任务记录'**
+  String get jobDelete;
+
+  /// No description provided for @jobDeleteMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除此终态任务记录及本地下载副本？'**
+  String get jobDeleteMessage;
+
+  /// No description provided for @jobStateError.
+  ///
+  /// In zh, this message translates to:
+  /// **'任务状态已变化，请查询最新任务。'**
+  String get jobStateError;
+
+  /// No description provided for @outputDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载训练产物'**
+  String get outputDownload;
+
+  /// No description provided for @outputDownloaded.
+  ///
+  /// In zh, this message translates to:
+  /// **'训练产物已下载到私有存储'**
+  String get outputDownloaded;
+
+  /// No description provided for @outputUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务端尚未提供训练产物下载地址'**
+  String get outputUnavailable;
+
+  /// No description provided for @outputUrlExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'产物下载签名已失效。当前服务端可能重复返回旧地址，重新查询不能保证补签；请联系服务端维护者。'**
+  String get outputUrlExpired;
+
+  /// No description provided for @jobPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'待处理'**
+  String get jobPending;
+
+  /// No description provided for @jobUploading.
+  ///
+  /// In zh, this message translates to:
+  /// **'上传中'**
+  String get jobUploading;
+
+  /// No description provided for @jobQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'排队中'**
+  String get jobQueued;
+
+  /// No description provided for @jobRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'训练中'**
+  String get jobRunning;
+
+  /// No description provided for @jobCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已完成'**
+  String get jobCompleted;
+
+  /// No description provided for @jobFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'失败'**
+  String get jobFailed;
+
+  /// No description provided for @jobCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消'**
+  String get jobCancelled;
 }
 
 class _AppLocalizationsDelegate
