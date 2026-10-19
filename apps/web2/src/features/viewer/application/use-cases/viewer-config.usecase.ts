@@ -7,8 +7,9 @@ import { parseViewerConfig } from '../../domain/services/viewer-config.service'
 export async function loadViewerConfigUseCase(
   deps: { storage: ViewerStoragePort },
   modelId: string,
+  options?: { signal?: AbortSignal },
 ): Promise<Result<ViewerConfig>> {
-  const [error, config] = await deps.storage.loadViewerConfig(modelId)
+  const [error, config] = await deps.storage.loadViewerConfig(modelId, options)
   if (error) {
     return err(error)
   }

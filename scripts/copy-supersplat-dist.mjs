@@ -6,10 +6,13 @@ import { spawnSync } from 'node:child_process'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 /** Prebuilt SuperSplat static assets (committed; no source build). */
 const source = path.join(root, 'vendors', 'supersplat')
-const targets = [
-  path.join(root, 'apps', 'web', 'public', 'supersplat'),
-  path.join(root, 'apps', 'web2', 'public', 'supersplat'),
-]
+const selectedApp = process.argv[2]
+if (selectedApp && !['web', 'web2'].includes(selectedApp)) {
+  throw new Error('Expected a target app: web or web2')
+}
+const targets = (selectedApp ? [selectedApp] : ['web', 'web2']).map((app) =>
+  path.join(root, 'apps', app, 'public', 'supersplat'),
+)
 
 function copyRecursive(from, to) {
   fs.mkdirSync(to, { recursive: true })

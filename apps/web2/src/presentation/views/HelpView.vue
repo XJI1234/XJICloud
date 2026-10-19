@@ -31,10 +31,10 @@ const { t } = useI18n()
           <p class="help-text">{{ t('help.editorDesc') }}</p>
           <h3 class="section-title">{{ t('help.shortcutsTitle') }}</h3>
           <ul class="help-list help-shortcuts">
-            <li><kbd>O</kbd> {{ t('help.shortcutOpen') }}</li>
-            <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> {{ t('help.shortcutTools') }}</li>
+            <li><kbd>← ↑ ↓ →</kbd> {{ t('help.shortcutOrbit') }}</li>
+            <li><kbd>+</kbd> / <kbd>-</kbd> {{ t('help.shortcutZoom') }}</li>
+            <li><kbd>WASD</kbd> {{ t('help.shortcutFly') }}</li>
             <li><kbd>Esc</kbd> {{ t('help.shortcutView') }}</li>
-            <li><kbd>Ctrl+Z</kbd> {{ t('help.shortcutUndo') }}</li>
           </ul>
         </aside>
       </div>

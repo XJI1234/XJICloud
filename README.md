@@ -1,6 +1,6 @@
 # XJICloud
 
-3D Gaussian Splatting（3DGS）建模云平台：上传图片数据集触发 GPU 训练、管理 PLY/SPZ 模型，浏览器内用 Spark 查看、SuperSplat（iframe）高级编辑。
+3D Gaussian Splatting（3DGS）建模云平台：上传图片数据集触发 GPU 训练、管理 PLY/SPZ 模型，浏览器内用 Native3DGS WebGPU 只读查看、SuperSplat（iframe）高级编辑。
 
 > 本仓库为 **pnpm monorepo**：根目录仅做编排，业务代码在 `apps/`、`services/`、`packages/`。
 
@@ -47,7 +47,7 @@ XJICloud/
 
 ### 环境要求
 
-- **Node.js** ≥ 18、**pnpm** 9（`corepack enable`）
+- **Node.js** ≥ 24.14、**pnpm** 9（Native3DGS Web SDK 的工具链要求）
 - **Java** 17+、**Maven** 3.9+
 - **Docker**（Redis、MinIO、Worker）
 
@@ -126,7 +126,7 @@ cd services/backend && mvn -DskipTests package
 
 | 端 | 能力 |
 |----|------|
-| 用户端（web2） | 工程管理、图片数据集 OSS 直传训练、PLY/SPZ 上传、Spark 查看、SuperSplat iframe 编辑 |
+| 用户端（web2） | 工程管理、图片数据集 OSS 直传训练、PLY/SPZ 上传、Native3DGS WebGPU 查看、SuperSplat iframe 编辑 |
 | 管理端 | OSS 配置、Worker / 任务监控、仪表盘 |
 | Worker | 注册 / 心跳 / 领任务；当前为 mock 训练（可替换 `mock_trainer.py`） |
 
