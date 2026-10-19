@@ -9,6 +9,47 @@ import 'package:xjicloud_mobile/shared/domain/cancellation.dart';
 
 void main() {
   test(
+    'cold output store reclaims old published and interrupted files once',
+    () async {
+      final root = await Directory.systemTemp.createTemp('xji-output-restart-');
+      addTearDown(() => root.delete(recursive: true));
+      FileTrainingOutputs store() =>
+          FileTrainingOutputs(() async => root.path, (url, c, consume) async {
+            await consume(Stream.value([1, 2, 3]), 3);
+            return const Success(null);
+          });
+      final previous = store();
+      final old = (await previous.download(
+        'u',
+        'old',
+        'https://oss.test/o',
+        Cancellation(),
+        (_, _) {},
+      ) as Success<TrainingOutputRef>).value;
+      final oldPath = await previous.resolve(old, 'u');
+      final part = File('$oldPath.part');
+      await part.writeAsBytes([1]);
+      final current = store();
+      final fresh = (await current.download(
+        'u',
+        'new',
+        'https://oss.test/o',
+        Cancellation(),
+        (_, _) {},
+      ) as Success<TrainingOutputRef>).value;
+      expect(await File(oldPath).exists(), isFalse);
+      expect(await part.exists(), isFalse);
+      await current.download(
+        'other',
+        'next',
+        'https://oss.test/o',
+        Cancellation(),
+        (_, _) {},
+      );
+      expect(await File(await current.resolve(fresh, 'u')).exists(), isTrue);
+    },
+  );
+  test(
     'private output publishes only after bounded download and isolates account',
     () async {
       final root = await Directory.systemTemp.createTemp(

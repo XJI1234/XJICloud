@@ -13,6 +13,7 @@ final class AndroidImageSourceAdapter implements ImageSourcePort {
   final PlatformFileSnapshots files;
   static final _id = RegExp(r'^[a-f0-9-]{36}$');
   Future<String> _path(SelectedImage source) async {
+    await files.ready();
     if (!_id.hasMatch(source.sourceId)) {
       throw const DomainError('source_changed');
     }
@@ -30,6 +31,7 @@ final class AndroidImageSourceAdapter implements ImageSourcePort {
           .catchError((Object _) {}),
     );
     try {
+      await files.ready();
       if (cancellation.isCancelled) {
         return const Failure(DomainError('cancelled'));
       }
@@ -92,6 +94,7 @@ final class AndroidImageSourceAdapter implements ImageSourcePort {
       return const Failure(DomainError('source_changed'));
     }
     try {
+      await files.ready();
       final data = await files.channel.invokeMapMethod<String, dynamic>(
         'fingerprint',
         {'id': source.sourceId},
@@ -102,6 +105,8 @@ final class AndroidImageSourceAdapter implements ImageSourcePort {
           : const Failure(DomainError('source_changed'));
     } on PlatformException {
       return const Failure(DomainError('source_changed'));
+    } on DomainError catch (error) {
+      return Failure(error);
     }
   }
 

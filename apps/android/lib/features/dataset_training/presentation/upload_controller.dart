@@ -222,6 +222,9 @@ final class UploadController extends ChangeNotifier {
         }
       } finally {
         if (_current(g)) {
+          if (draft == null && checkpoint == null) {
+            targetProjectId = null;
+          }
           busy = false;
           _preparing = false;
           _notify();

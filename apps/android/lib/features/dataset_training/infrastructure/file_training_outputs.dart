@@ -8,7 +8,22 @@ import '../../../shared/domain/cancellation.dart';
 import '../domain/training_output_port.dart';
 
 final class FileTrainingOutputs implements TrainingOutputPort {
-  FileTrainingOutputs(this.directory, this.fetch);
+  FileTrainingOutputs(this.directory, this.fetch, {this.beforeUse});
+  final Future<void> Function()? beforeUse;
+  Future<void>? _prepared;
+
+  /// Output identities are process-local. Purge previous-process artifacts once,
+  /// before publishing or resolving any current-process identity.
+  Future<void> prepare() => _prepared ??= (() async {
+    final root = Directory('${await directory()}/outputs');
+    if (!await root.exists()) return;
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is File &&
+          (entity.path.endsWith('.ply') || entity.path.endsWith('.part'))) {
+        await entity.delete();
+      }
+    }
+  })();
   final Future<String> Function() directory;
   final Future<Result<void>> Function(
     String,
@@ -18,9 +33,14 @@ final class FileTrainingOutputs implements TrainingOutputPort {
   fetch;
   static const maxBytes = 2147483648;
   final _issued = <String, TrainingOutputRef>{};
-  Future<File> _file(TrainingOutputRef ref) async => File(
-    '${await directory()}/outputs/${base64Url.encode(utf8.encode(ref.userId))}/${ref.id}.ply',
-  );
+  Future<File> _file(TrainingOutputRef ref) async {
+    await beforeUse?.call();
+    await prepare();
+    return File(
+      '${await directory()}/outputs/${base64Url.encode(utf8.encode(ref.userId))}/${ref.id}.ply',
+    );
+  }
+
   @override
   Future<Result<TrainingOutputRef>> download(
     String userId,

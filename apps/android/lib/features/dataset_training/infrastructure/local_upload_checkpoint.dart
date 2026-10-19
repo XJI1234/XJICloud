@@ -12,6 +12,49 @@ import '../domain/upload_checkpoint_port.dart';
 final class LocalUploadCheckpoint implements UploadCheckpointPort {
   LocalUploadCheckpoint(this.directory);
   final Future<String> Function() directory;
+
+  /// Include every account and conservatively retain sources from a manifest
+  /// whose state write was interrupted. Any unreadable inventory fails closed.
+  Future<Result<Set<String>>> referencedSources() => _serial(() async {
+    final root = Directory(await directory());
+    final retained = <String>{};
+    if (!await root.exists()) return retained;
+    await for (final entity in root.list(followLinks: false)) {
+      if (entity is! File) continue;
+      if (entity.path.endsWith('.state.json')) {
+        if (await entity.length() > 1024 * 1024) {
+          throw const FormatException('size');
+        }
+        final sources = File(
+          entity.path.replaceFirst(RegExp(r'\.state\.json$'), '.sources.json'),
+        );
+        if (!await sources.exists()) {
+          throw const FormatException('missing sources');
+        }
+        final state = jsonDecode(await entity.readAsString());
+        if (state is! Map<String, dynamic> || state['userId'] is! String) {
+          throw const FormatException('state');
+        }
+      }
+      if (!entity.path.endsWith('.sources.json')) continue;
+      if (await entity.length() > 64 * 1024 * 1024) {
+        throw const FormatException('size');
+      }
+      final items = jsonDecode(await entity.readAsString());
+      if (items is! List || items.length > 9999) {
+        throw const FormatException('sources');
+      }
+      for (final item in items) {
+        if (item is! Map<String, dynamic> ||
+            item['sourceId'] is! String ||
+            !RegExp(r'^[a-f0-9-]{36}$').hasMatch(item['sourceId'])) {
+          throw const FormatException('source');
+        }
+        retained.add(item['sourceId']);
+      }
+    }
+    return retained;
+  });
   Future<void> _tail = Future.value();
   Future<Result<T>> _serial<T>(Future<T> Function() action) {
     final result = _tail.then((_) async {

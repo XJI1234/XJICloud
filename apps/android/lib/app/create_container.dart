@@ -17,7 +17,9 @@ import '../features/model_asset/presentation/model_assets_controller.dart';
 import 'app_container.dart';
 import 'session_coordinator.dart';
 import '../shared/infrastructure/platform_file_snapshots.dart';
+import '../shared/infrastructure/reconcile_private_sources.dart';
 import '../shared/domain/result.dart';
+import '../shared/domain/domain_error.dart';
 import '../features/dataset_training/infrastructure/android_image_source_adapter.dart';
 import '../features/dataset_training/infrastructure/http_training_job_repository.dart';
 import '../features/dataset_training/infrastructure/oss_upload_adapter.dart';
@@ -40,30 +42,49 @@ AppContainer createContainer({
   );
   registerSdkLicenses();
   final snapshots = PlatformFileSnapshots();
+  final modelCheckpoints = PreferencesUploadCheckpoints();
+  final datasetCheckpoints = LocalUploadCheckpoint(
+    () async => '${await snapshots.directory('training')}/checkpoints',
+  );
+  final oss = OssUploadAdapter();
+  final outputs = FileTrainingOutputs(
+    () => snapshots.directory('training'),
+    oss.download,
+    beforeUse: snapshots.ready,
+  );
+  snapshots.initialize = () async {
+    await reconcilePrivateSources(await snapshots.directory('sources'), [
+      modelCheckpoints.referencedSources,
+      datasetCheckpoints.referencedSources,
+    ]);
+    await outputs.prepare();
+  };
   final files = AndroidLocalFileAdapter(snapshots: snapshots);
   final modelAssets = ModelAssetsController(
     HttpModelAssetRepository(api),
     files,
-    PreferencesUploadCheckpoints(),
+    modelCheckpoints,
     FileModelCache(files.cacheDirectory),
     sessions,
   );
-  final oss = OssUploadAdapter();
   final training = UploadController(
     HttpTrainingJobRepository(api),
     AndroidImageSourceAdapter(snapshots),
     oss,
-    LocalUploadCheckpoint(
-      () async => '${await snapshots.directory('training')}/checkpoints',
-    ),
+    datasetCheckpoints,
     SseJobEventAdapter(api),
     sessions,
-    outputs: FileTrainingOutputs(
-      () => snapshots.directory('training'),
-      oss.download,
-    ),
+    outputs: outputs,
   );
   return AppContainer(
+    initializeStorage: () async {
+      try {
+        await snapshots.ready();
+        return const Success(null);
+      } on DomainError catch (error) {
+        return Failure(error);
+      }
+    },
     sessions: sessions,
     auth: HttpAuthRepository(api),
     locales: PreferencesLocaleStore(),

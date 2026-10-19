@@ -71,7 +71,45 @@ class Outputs implements TrainingOutputPort {
   }
 }
 
+class EmptyPicker extends Sources {
+  Result<List<SelectedImage>?> selection = const Success(null);
+  @override
+  Future<Result<List<SelectedImage>?>> choose(bool dir, Cancellation c) async =>
+      selection;
+}
+
 void main() {
+  test('cancelled empty or failed preparation releases target before project B selection', () async {
+    final s = SessionCoordinator(MemoryStore());
+    await s.activate(session());
+    addTearDown(s.dispose);
+    for (final result in <Result<List<SelectedImage>?>>[
+      const Success(null),
+      const Success([]),
+      const Failure(DomainError('storage')),
+    ]) {
+      final sources = EmptyPicker()..selection = result,
+          c = UploadController(
+            Jobs(),
+            sources,
+            Storage(),
+            Journal(),
+            Events(),
+            s,
+          );
+      c.synchronize();
+      await Future<void>.delayed(Duration.zero);
+      await c.choose('project-A');
+      expect(c.draft, isNull);
+      expect(c.checkpoint, isNull);
+      expect(c.targetProjectId, isNull);
+      sources.selection = Success([image(1)]);
+      await c.choose('project-B');
+      expect(c.targetProjectId, 'project-B');
+      expect(c.draft, isNotNull);
+      c.dispose();
+    }
+  });
   test(
     'logout releases issued private outputs and clears their references',
     () async {

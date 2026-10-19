@@ -9,6 +9,36 @@ import '../domain/upload_checkpoint_port.dart';
 import 'model_mapper.dart';
 
 final class PreferencesUploadCheckpoints implements UploadCheckpointPort {
+  /// Inventory every account, independently of the currently signed-in user.
+  Future<Result<Set<String>>> referencedSources() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final retained = <String>{};
+      for (final key in preferences.getKeys().where(
+        (k) => k.startsWith('model-upload.v1.'),
+      )) {
+        final user = Uri.decodeComponent(
+          key.substring('model-upload.v1.'.length),
+        );
+        switch (await read(user)) {
+          case Success<UploadCheckpoint?>(:final value):
+            if (value == null) {
+              throw const FormatException('missing checkpoint');
+            }
+            if (!RegExp(r'^[a-f0-9-]{36}$').hasMatch(value.source.id)) {
+              throw const FormatException('source identity');
+            }
+            retained.add(value.source.id);
+          case Failure<UploadCheckpoint?>(:final error):
+            return Failure(error);
+        }
+      }
+      return Success(retained);
+    } catch (_) {
+      return const Failure(DomainError('storage'));
+    }
+  }
+
   Future<void> _tail = Future.value();
   String _key(String userId) =>
       'model-upload.v1.${Uri.encodeComponent(userId)}';

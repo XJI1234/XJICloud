@@ -53,6 +53,7 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
   late final GoRouter router;
   Locale? locale;
   DomainError? localeError;
+  DomainError? storageError;
   bool restoring = true;
   AppContainer get container => widget.container;
   @override
@@ -182,6 +183,8 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
   }
 
   Future<void> initialize() async {
+    final storage = await container.initializeStorage?.call();
+    if (storage case Failure<void>(:final error)) storageError = error;
     final preferred = await container.locales.read();
     await container.sessions.restore();
     if (!mounted) return;
@@ -520,12 +523,15 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
       }
       return Column(
         children: [
-          if (localeError != null)
+          if (storageError != null || localeError != null)
             Material(
               child: SafeArea(
                 bottom: false,
                 child: Text(
-                  errorText(AppLocalizations.of(context), localeError!),
+                  errorText(
+                    AppLocalizations.of(context),
+                    storageError ?? localeError!,
+                  ),
                 ),
               ),
             ),

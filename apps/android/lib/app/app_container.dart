@@ -5,6 +5,7 @@ import 'session_coordinator.dart';
 import '../features/project/presentation/workspace_controller.dart';
 import '../features/model_asset/presentation/model_assets_controller.dart';
 import '../features/dataset_training/presentation/upload_controller.dart';
+import '../shared/domain/result.dart';
 
 /// Session-scoped capabilities, assembled only by create_container.dart.
 final class AppContainer {
@@ -16,6 +17,7 @@ final class AppContainer {
     this.workspace,
     this.modelAssets,
     this.training,
+    this.initializeStorage,
   }) {
     if (training != null) {
       sessions.addListener(training!.synchronize);
@@ -37,6 +39,7 @@ final class AppContainer {
   final WorkspaceController? workspace;
   final ModelAssetsController? modelAssets;
   final UploadController? training;
+  final Future<Result<void>> Function()? initializeStorage;
   AuthController createAuthController() =>
       AuthController(auth, activate: sessions.activate);
   void dispose() {

@@ -22,6 +22,7 @@ final class AndroidLocalFileAdapter implements LocalFilePort {
 
   Future<String> cacheDirectory() => _directory('cache');
   Future<String> _sourcePath(LocalModelRef source) async {
+    await _snapshots.ready();
     if (!_id.hasMatch(source.id)) throw const DomainError('source_changed');
     return '${await _directory('sources')}/${source.id}';
   }
@@ -35,6 +36,7 @@ final class AndroidLocalFileAdapter implements LocalFilePort {
       });
     });
     try {
+      await _snapshots.ready();
       if (cancellation.isCancelled) {
         return const Failure(DomainError('cancelled'));
       }
@@ -88,6 +90,7 @@ final class AndroidLocalFileAdapter implements LocalFilePort {
       return const Failure(DomainError('source_changed'));
     }
     try {
+      await _snapshots.ready();
       final data = await _channel.invokeMapMethod<String, dynamic>(
         'fingerprint',
         {'id': source.id},
@@ -98,6 +101,8 @@ final class AndroidLocalFileAdapter implements LocalFilePort {
           : const Failure(DomainError('source_changed'));
     } on PlatformException {
       return const Failure(DomainError('source_changed'));
+    } on DomainError catch (error) {
+      return Failure(error);
     }
   }
 
