@@ -22,7 +22,20 @@ const skyCommand = {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ method, ...(input === undefined ? {} : { input: encode(input) }) }),
       })
-      return await response.json()
+      const result = await response.json()
+      if (method === 'state-snapshot' && result.ok === true) {
+        const status = result.value?.routeStorage
+        const notice = document.getElementById('route-storage-status')
+        if (notice && status) {
+          notice.textContent = status.phase === 'degraded'
+            ? '本机航线资料恢复不完整，已保护原文件；导入和删除暂不可用，请检查存储目录。已有有效航线仍可使用。'
+            : `已保存 ${status.savedCount} 条航线，服务重启后自动恢复。`
+          notice.setAttribute('role', status.phase === 'degraded' ? 'alert' : 'status')
+        } else if (notice) {
+          notice.textContent = '当前本地服务尚未启用航线自动保存，需更新并重启服务。'
+        }
+      }
+      return result
     } catch {
       return { ok: false, code: 'DEPENDENCY_FAILURE' }
     }

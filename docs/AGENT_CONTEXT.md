@@ -269,6 +269,10 @@ CREATE TABLE model_versions (
 
 ### 7.0.1 Sky Command 任务执行（独立本机程序）
 
+本机任务执行页的导入航线自动保存：网页网关通过公开 SDK 航线接口，在 `%LOCALAPPDATA%/Sky Command/routes` 保存原始 KML/KMZ 和原子索引，重启仅恢复航线列表，不恢复设备分配或飞机任务。存储契约见 `apps/web2/scripts/sky-route-storage.CONTRACT.md`。
+
+测试证据长期保存到 `D:\XJI-Test-Records`（环境变量 `XJI_TEST_RECORDS_ROOT`），与源码及临时缓存分离且不自动轮换。web2 test/build 默认归档命令、完整输出、退出码、Git 差异；开发网关自动归档状态、操作、SDK 原始诊断和播放证据，SDK 诊断落盘后确认并保留原文件镜像。支持人工标记、截图/录像附件与跨版本比较；现场动作、SDK 回执与推断分开。完整说明及限制见 [TEST_RECORDS.md](./TEST_RECORDS.md)，契约见 `scripts/test-records/CONTRACT.md`。
+
 `apps/web2/src/features/mission-ops` 的任务执行页借助独立 Sky-Command 托盘宿主 `127.0.0.1:17890` 操作原有 `DesktopUiGateway`，视频走本机 `127.0.0.1:18080` HTTP-FLV，手机 MSDK 的 WebSocket/RTMP 仍留在本机程序。默认网页来源 `localhost:5176`；部署来源由本机程序的 `SKYCOMMAND_CLOUD_ORIGIN` 指定。未对目标 Windows 浏览器/手机/飞行器做实机验证，公网 HTTPS → 本机 HTTP 的 PNA/混合内容需要额外验收；返航二次确认已接入原网关的请求/确认/取消链路，实机效果仍需验收。
 
 本地开发的 Vite 还会启动 `apps/web2/scripts/sky-command-gateway.mjs`（SDK 0.2.4，含确认降落请求标志复核），控制端口 `127.0.0.1:8767`，手机 Relay `8080`、RTMP `19500`、HTTP-FLV `18080`。网关就绪后在物理 WLAN 每秒广播 UDP `39082` 公告，并监听手机的精确发现请求，向同子网来源单播回复原公告；Windows 需放行对应程序的 LocalSubnet UDP 39082。手机未 ACTIVE 时每秒请求，ACTIVE 后停发，3 秒观察及冲突门禁不变。关闭网关时停止发现来源；持久身份位于系统临时目录 `sky-command-web/discovery-server-id`（目录保留期间复用），进程实例 ID 每次启动重建。广播失败保留手动连接。电脑/手机发现和会话已实机验证；此路径与独立托盘宿主部署路径、飞行器业务仍应分别验收。

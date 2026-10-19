@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DesktopApplication, DesktopUiGateway, createMediaPorts, createRelayDiscovery, loadOrCreateServerId } from '@xjicloud/sky-command-sdk/desktop'
 import { createNetworkMonitor } from './sky-command-network.mjs'
-import { createPlaybackDiagnosticLog } from './sky-playback-diagnostics.mjs'
+import { createPlaybackDiagnosticLog, playbackDiagnostic, mediaDiagnostic } from './sky-playback-diagnostics.mjs'
+import { createGatewayRecording } from './sky-test-recording.mjs'
+import { createRouteStorage } from './sky-route-storage.mjs'
 
 const methods = {
   'state-snapshot': 'state.snapshot',
@@ -82,9 +84,12 @@ const photosRoot = path.join(dataRoot, 'photos')
 mkdirSync(httpFlvRoot, { recursive: true })
 mkdirSync(photosRoot, { recursive: true })
 
+const testRecording = await createGatewayRecording()
 const playbackDiagnostics = createPlaybackDiagnosticLog(path.join(dataRoot, 'diagnostics'), () => console.error('[playback] 诊断日志写入失败'))
 const mediaPorts = createMediaPorts((event) => {
   playbackDiagnostics.recordMedia(event)
+  const diagnostic = mediaDiagnostic(event)
+  if (diagnostic) testRecording.record('media-diagnostic', diagnostic)
   console.error(`[media] ${event.kind} ${event.detail}`)
 })
 let nextConfirmationId = 0
@@ -97,6 +102,7 @@ const created = DesktopApplication.create({
     maxConnections: 8,
     commandTimeoutMs: 120_000,
     missionTimeoutMs: 600_000,
+    ...(testRecording.diagnosticSink ? { diagnosticSink: testRecording.diagnosticSink } : {}),
   },
   media: {
     dependencies: {
@@ -116,11 +122,13 @@ const created = DesktopApplication.create({
   now: () => Date.now(),
 })
 if (!created.ok) {
+  await testRecording.close()
   console.error(`桌面操作模块配置无效: ${created.code}`)
   process.exit(1)
 }
 const started = await created.value.start()
 if (!started.ok) {
+  await testRecording.close()
   console.error(started.code === 'MEDIA_START_FAILED'
     ? '图传服务未能启动。请确认 19500（RTMP）与 18080（HTTP-FLV）未被占用。'
     : `桌面操作模块启动失败: ${started.code}`)
@@ -155,7 +163,11 @@ function observeLandingProtection(snapshot) {
   }
 }
 observeLandingProtection(created.value.snapshot())
-const stopLandingProtectionNotices = created.value.subscribe(observeLandingProtection)
+testRecording.record('application-state', created.value.snapshot())
+const stopLandingProtectionNotices = created.value.subscribe(snapshot => {
+  observeLandingProtection(snapshot)
+  testRecording.record('application-state', snapshot)
+})
 
 function withLandingProtectionNotices(snapshot) {
   observeLandingProtection(snapshot)
@@ -173,6 +185,7 @@ const gateway = DesktopUiGateway.create({
   application: created.value,
   relayHint: () => lanCards().map((card) => `ws://${card.ipv4}:8080/relay`),
 })
+const routeStorage = await createRouteStorage({ gateway })
 const allowedOrigins = new Set(['http://localhost:5176', 'http://127.0.0.1:5176'])
 const control = createServer((request, response) => {
   const origin = request.headers.origin
@@ -207,6 +220,11 @@ const control = createServer((request, response) => {
         if (name === 'diagnostics-record') {
           const isPlayback = body.input?.action === 'video-playback-diagnostic'
           const recorded = isPlayback ? playbackDiagnostics.recordPlayback(body.input) : true
+          if (isPlayback && recorded) {
+            // Reuse the validated log schema; never archive arbitrary diagnostic strings.
+            const value = playbackDiagnostic(body.input)
+            if (value) testRecording.record('browser-playback', value)
+          }
           response.writeHead(200, { 'content-type': 'application/json' })
           response.end(JSON.stringify(recorded ? { ok: true, value: { queued: true } } : { ok: false, code: 'DIAGNOSTIC_REJECTED' }))
           return
@@ -218,8 +236,12 @@ const control = createServer((request, response) => {
           return
         }
         const input = Object.hasOwn(body, 'input') ? decode(body.input) : undefined
-        let result = await gateway.invoke(method, input)
-        if (method === 'state.snapshot' && result.ok) result = { ...result, value: withLandingProtectionNotices(result.value) }
+        const readOnly = ['state.snapshot', 'network.hint', 'video.playback'].includes(method)
+        let result = readOnly ? await routeStorage.invoke(method, input)
+          : await testRecording.invoke(name, input, () => routeStorage.invoke(method, input))
+        if (method === 'state.snapshot' && result.ok) result = {
+          ...result, value: { ...withLandingProtectionNotices(result.value), routeStorage: routeStorage.snapshot() },
+        }
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify(result))
       } catch {
@@ -251,9 +273,11 @@ async function stop() {
   stopDiscovery()
   networkMonitor.close()
   control.close()
+  await routeStorage.close()
   await created.value.stop()
   await created.value.dispose()
   await playbackDiagnostics.flush()
+  await testRecording.close()
   process.exit(0)
 }
 process.on('SIGINT', () => { void stop() })

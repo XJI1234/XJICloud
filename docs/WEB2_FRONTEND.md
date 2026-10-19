@@ -304,6 +304,10 @@ LoginView
 
 ## 11.1 任务执行 / 本机 Sky Command
 
+导入的 KML/KMZ 由网关 `sky-route-storage.mjs` 自动保存到 `%LOCALAPPDATA%/Sky Command/routes`，`SKY_COMMAND_ROUTES_DIR` 可覆盖绝对路径；启动时从原子索引恢复，经 SDK 重新校验。原始字节及 SHA-256 不变，SDK 航线库仍为会话内存；删除更新持久化索引。不恢复手机分配、上传或任务执行。损坏资料保留并显示恢复异常，禁止覆写未恢复资料；飞控和图传调用不等待航线磁盘队列。详见 `apps/web2/scripts/sky-route-storage.CONTRACT.md`。
+
+2026-10-19 起测试证据独立长期归档到 `D:\XJI-Test-Records`（`XJI_TEST_RECORDS_ROOT` 可覆盖），不随 Temp 轮换。web2 test/build 默认经统一记录入口执行；开发网关启动时通过既有 `diagnosticSink` 接口、应用订阅、控制调用和播放诊断创建真机会话，手机诊断实际落盘后才确认，原诊断镜像保留。记录异步有界，失败不改变业务返回；缺口显式标注。SDK 回执、归一化状态和人工观察分别保存；未取得的 APK/固件保持未知。离线索引、标记、附件和对比说明见 `docs/TEST_RECORDS.md`，接口见 `scripts/test-records/CONTRACT.md`。旧网关可用只读旁路兼容采集，完整控制入口仍需新网关启动。
+
 图传端到端延迟验收上限为 1.5 秒，网页积压读数不能代替相机到显示的实测。飞行与监控页关闭额外接收 stash，共用 0.3 秒缓冲目标、1 秒积压追帧线及 250ms 前台检查；回到前台先追最新缓冲再恢复播放。播放延迟修复不得改变手机推流、飞控、任务或地图，详细契约见 Sky-Command `operator-console/CONTRACT.md`。
 
 图传排查沿用 Sky-Command 的 `operator-console/CONTRACT.md` 与 `electron-host/CONTRACT.md`：先更新契约再改实现。Web 桥保留最近 128 条脱敏播放诊断供只读检查；本机 `diagnostics-record` 对播放诊断真实异步记录，不能伪报成功。浏览器播放事件、HTTP-FLV 连接开闭、RTMP 视频包间隔以及发布开始/结束、观看者背压事件写入 `%TEMP%/sky-command-web/diagnostics/playback.ndjson`，避免只能看见观看连接中断而丢失上游终态；新增发布/背压事件只接受生产适配器的固定文案，不接收任意异常、URL 或路径。单写入器最多保留 512 条等待记录与一批 512 条正在写入的记录；文件达到 8 MiB 后轮换，只保留当前与 `.previous` 两份。日志仅观察播放器，不改变飞控、任务、航线、照片或降落提示；更新嵌入包必须保留本节所述地图优化。

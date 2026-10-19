@@ -26,6 +26,13 @@ export function playbackDiagnostic(input) {
   return record
 }
 
+export function mediaDiagnostic(event) {
+  const fixed = mediaMessages.get(event.kind)
+  if (fixed !== undefined ? event.detail !== fixed : !['http-flv-viewer-open', 'http-flv-viewer-close', 'rtmp-video-gap'].includes(event.kind)) return null
+  if (typeof event.detail !== 'string' || !/^[a-zA-Z0-9_;= .-]{1,512}$/.test(event.detail)) return null
+  return { kind: event.kind, atMs: Date.now(), deviceId: identifier(event.deviceId), detail: event.detail }
+}
+
 // One writer, at most 512 waiting records and one 512-record batch; rotate at 8 MiB.
 export function createPlaybackDiagnosticLog(directory, onError = () => {}) {
   const file = path.join(directory, 'playback.ndjson')
@@ -59,11 +66,8 @@ export function createPlaybackDiagnosticLog(directory, onError = () => {}) {
   return {
     recordPlayback: input => { const value = playbackDiagnostic(input); return value !== null && record(value) },
     recordMedia: event => {
-      const fixed = mediaMessages.get(event.kind)
-      if (fixed !== undefined ? event.detail !== fixed : !['http-flv-viewer-open', 'http-flv-viewer-close', 'rtmp-video-gap'].includes(event.kind)) return
-      // These adapter messages contain only controlled counters/reason enums.
-      if (typeof event.detail !== 'string' || !/^[a-zA-Z0-9_;= .-]{1,512}$/.test(event.detail)) return
-      record({ kind: event.kind, atMs: Date.now(), deviceId: identifier(event.deviceId), detail: event.detail })
+      const value = mediaDiagnostic(event)
+      if (value) record(value)
     },
     flush: async () => { while (writing !== null) await writing },
   }

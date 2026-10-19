@@ -262,7 +262,7 @@
     #confirm[hidden], #mission-confirm[hidden] { display: none; }
     #workspace-routes > .route-preview-panel { padding: 0; overflow: hidden; border-right: 1px solid var(--line); min-height: 0; height: 100%; }
     #workspace-routes > .route-mission-wrap { padding: 20px; overflow: auto; min-height: 0; background: var(--surface); }
-    .route-preview-panel { height: 100%; min-height: 0; display: grid; grid-template-rows: 64px minmax(0, 1fr) auto; background: var(--canvas); }
+    .route-preview-panel { height: 100%; min-height: 0; display: grid; grid-template-rows: 64px minmax(0, 1fr) auto auto; background: var(--canvas); }
     .route-preview-panel > header { display: flex; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--elevated) 92%, transparent); }
     .route-preview-panel > header div { margin-right: 6px; }
     .route-preview-panel > header span { display: block; font-size: 11px; font-weight: 600; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
@@ -863,6 +863,7 @@
       </header>
       <div id="map" class="cesium-host"></div>
       <p id="map-notice" class="notice">导入 Wayline 导出的 KML 或 KMZ 文件以预览航迹。</p>
+      <p id="route-storage-status" class="notice" role="status">正在读取本机航线保存状态。</p>
     </section>
     <section class="route-mission-wrap">
       <div class="route-mission-control">

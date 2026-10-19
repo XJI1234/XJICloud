@@ -32,7 +32,9 @@ async function startGateway(options: { startFails?: boolean; discoveryFails?: bo
   const networkInterfaces = vi.fn(() => interfaces)
   const networkMonitor = { snapshot: () => interfaces, close: vi.fn() }
   const createApplication = vi.fn((_options: unknown) => ({ ok: true, value: application }))
+  const recording = { record: vi.fn(), close: vi.fn(async () => {}), diagnosticSink: { persist: vi.fn(async () => true) }, invoke: vi.fn(async (_method: string, _input: unknown, operation: () => Promise<unknown>) => operation()) }
   const createGateway = vi.fn((_options: unknown) => ({ invoke: async () => ({ ok: true, value: snapshot }) }))
+  const routeStorage = { snapshot: () => ({ phase: 'ready', savedCount: 2, restoredCount: 2, failedCount: 0 }), close: vi.fn(async () => { events.push('routes-close') }), invoke: vi.fn(async () => ({ ok: true, value: snapshot })) }
   const exit = vi.fn((code: number) => { if (code !== 0) throw new Error('startup failed') })
   const run = runInNewContext(`(async () => { ${source}\n })()`, {
     createServer: (handler: typeof serve) => { serve = handler; return {
@@ -45,6 +47,10 @@ async function startGateway(options: { startFails?: boolean; discoveryFails?: bo
     networkInterfaces,
     createNetworkMonitor: async () => networkMonitor,
     createPlaybackDiagnosticLog: () => ({ recordPlayback: () => true, recordMedia: () => {}, flush: async () => {} }),
+    createGatewayRecording: async () => recording,
+    createRouteStorage: async () => { events.push('routes-restore'); return routeStorage },
+    playbackDiagnostic: () => ({ event: 'sample' }),
+    mediaDiagnostic: () => null,
     tmpdir: () => '/tmp', path, randomUUID: () => 'instance-id',
     DesktopApplication: { create: createApplication },
     DesktopUiGateway: { create: createGateway }, createMediaPorts: () => ({}),
@@ -53,7 +59,7 @@ async function startGateway(options: { startFails?: boolean; discoveryFails?: bo
     console: { log: vi.fn(), error: vi.fn() },
   }) as Promise<void>
   return {
-    run, events, signals, createRelayDiscovery, exit, networkInterfaces, networkMonitor, createApplication, createGateway, unsubscribe,
+    run, events, signals, createRelayDiscovery, exit, networkInterfaces, networkMonitor, createApplication, createGateway, unsubscribe, recording, routeStorage,
     advance: (ms: number) => { nowMs += ms },
     publish: (devices: Record<string, unknown>[]) => { snapshot = { workflow: { devices } }; listener?.(snapshot) },
     readSnapshot: () => new Promise<{ value: { workflow: { devices: { connection: Record<string, unknown> }[] } } }>((resolve) => {
@@ -63,6 +69,12 @@ async function startGateway(options: { startFails?: boolean; discoveryFails?: bo
       request.emit('end')
     }),
     changeAddress: (address: string) => { interfaces = { 'Wi-Fi': [{ family: 'IPv4', address, internal: false }] } },
+    invoke: (method: string, input?: unknown) => new Promise<unknown>((resolve) => {
+      const request = Object.assign(new EventEmitter(), { method: 'POST', url: '/invoke', headers: {} })
+      serve(request, { writeHead: vi.fn(), end: (body: string) => resolve(JSON.parse(body)) })
+      request.emit('data', Buffer.from(JSON.stringify({ method, input })))
+      request.emit('end')
+    }),
   }
 }
 
@@ -70,27 +82,29 @@ describe('web relay discovery lifecycle', () => {
   it('advertises only after the relay and browser control are ready, then stops before the relay', async () => {
     const harness = await startGateway()
     await harness.run
-    expect(harness.events).toEqual(['relay-start', 'control-ready', 'discovery-start'])
+    expect(harness.events).toEqual(['relay-start', 'routes-restore', 'control-ready', 'discovery-start'])
     expect(harness.createRelayDiscovery).toHaveBeenCalledWith('server-id', 'instance-id', 8080, expect.any(Object))
     harness.signals.SIGTERM!()
     await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(0))
     expect(harness.networkMonitor.close).toHaveBeenCalledOnce()
     expect(harness.events).toEqual([
-      'relay-start', 'control-ready', 'discovery-start',
-      'discovery-stop', 'control-stop', 'relay-stop', 'relay-dispose',
+      'relay-start', 'routes-restore', 'control-ready', 'discovery-start',
+      'discovery-stop', 'control-stop', 'routes-close', 'relay-stop', 'relay-dispose',
     ])
+    expect(harness.recording.close).toHaveBeenCalledOnce()
   })
 
   it('does not advertise a relay that failed to start', async () => {
     const harness = await startGateway({ startFails: true })
     await expect(harness.run).rejects.toThrow('startup failed')
     expect(harness.createRelayDiscovery).not.toHaveBeenCalled()
+    expect(harness.recording.close).toHaveBeenCalledOnce()
   })
 
   it('cleans a failed broadcaster while retaining manual connections', async () => {
     const harness = await startGateway({ discoveryFails: true })
     await expect(harness.run).resolves.toBeUndefined()
-    expect(harness.events).toEqual(['relay-start', 'control-ready', 'discovery-start', 'discovery-stop'])
+    expect(harness.events).toEqual(['relay-start', 'routes-restore', 'control-ready', 'discovery-start', 'discovery-stop'])
     expect(harness.exit).not.toHaveBeenCalled()
   })
 
@@ -111,6 +125,30 @@ describe('web relay discovery lifecycle', () => {
     expect(application.media.dependencies.resolveEndpointHost()).toBe('192.168.2.30')
     const discovery = harness.createRelayDiscovery.mock.calls[0]![3] as unknown as { interfaces: () => unknown }
     expect(discovery.interfaces()).toEqual(harness.networkMonitor.snapshot())
+  })
+
+  it('records state changes and control calls while passing the diagnostic sink to the existing SDK', async () => {
+    const harness = await startGateway()
+    await harness.run
+    expect(harness.createApplication.mock.calls[0]![0]).toMatchObject({ relay: { diagnosticSink: harness.recording.diagnosticSink } })
+    harness.publish([landingDevice('NOT_SAFE_TO_LAND')])
+    expect(harness.recording.record).toHaveBeenCalledWith('application-state', expect.objectContaining({ workflow: expect.any(Object) }))
+    const result = await harness.invoke('flight-request', { deviceId: 'phone-1', action: 'land' })
+    expect(result).toMatchObject({ ok: true })
+    expect(harness.recording.invoke).toHaveBeenCalledWith('flight-request', { deviceId: 'phone-1', action: 'land' }, expect.any(Function))
+    await harness.readSnapshot()
+    expect(harness.recording.invoke).toHaveBeenCalledOnce()
+  })
+
+  it('uses persistent route operations and exposes storage health alongside the untouched SDK state', async () => {
+    const harness = await startGateway()
+    await harness.run
+    await harness.invoke('route-import', { fileName: 'a.kml', bytes: { __skyBytes: 'AQI=' } })
+    const call = harness.routeStorage.invoke.mock.calls[0] as unknown as [string, { fileName: string; bytes: Uint8Array }]
+    expect(call[0]).toBe('route.import')
+    expect(call[1].fileName).toBe('a.kml')
+    expect(Array.from(call[1].bytes)).toEqual([1, 2])
+    expect(await harness.readSnapshot()).toMatchObject({ value: { routeStorage: { phase: 'ready', savedCount: 2 } } })
   })
 })
 
