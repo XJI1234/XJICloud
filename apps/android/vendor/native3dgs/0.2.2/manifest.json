@@ -1,0 +1,215 @@
+{
+  "version": "0.2.2",
+  "abi": [
+    "arm64-v8a"
+  ],
+  "api": 2,
+  "ndk": "27.2.12479018",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "3f29c98646c93a7eabdf6272b15e89497f0051050022bd3c37f9971f7f2b4825"
+    },
+    {
+      "path": "aar/native3dgs-sdk-release.aar",
+      "sha256": "f0cf100714d5fb15468c7e4cca126cef8007825ab7df63300af0e4438f25813c"
+    },
+    {
+      "path": "cmake/Native3DGSAndroidConfig.cmake",
+      "sha256": "fc98d0a58c0c5e02f220a1d8024c99e46fd94e53cc8efc3b08ded7b329aa479d"
+    },
+    {
+      "path": "docs/capability-map.md",
+      "sha256": "638d93d211a4d44007779a9b8b69711e09d06833182045e867cff962192b2416"
+    },
+    {
+      "path": "docs/development-memory.md",
+      "sha256": "4060a1f32f285ef1a85cb7afcd3cdffa72de5a32a97e4829dc0d3aadd0858380"
+    },
+    {
+      "path": "docs/README.md",
+      "sha256": "e150dff342861bc661173a97aa6686172493cbb58dce5cb4b72c6d395dbc0b89"
+    },
+    {
+      "path": "docs/SDK-guide.md",
+      "sha256": "d25c5acf2b98db8637ff7135e67129fe5734bb923085c140dc6600cc19cfe573"
+    },
+    {
+      "path": "docs/SPEC-android-bridge.md",
+      "sha256": "e930e3a2a331fcf5bcb0124de4ab9967aad6a518d08c3ab64aa207a292b08513"
+    },
+    {
+      "path": "docs/SPEC-android-viewer.md",
+      "sha256": "4506de2bf4f8b8fc53c1005b503ffb142cdead28c96d3dfc695454bee055c3b4"
+    },
+    {
+      "path": "docs/SPEC-engine.md",
+      "sha256": "0f5fec52d217173d21cc47c1331091ac84f2da1d44a0b7b4d9c7c787d4bf7e7a"
+    },
+    {
+      "path": "docs/SPEC-model-io.md",
+      "sha256": "9c9486f524084dd8dc920367d2853dea5a6d8fdd58826e35e38005449cbf1581"
+    },
+    {
+      "path": "docs/SPEC-render-core.md",
+      "sha256": "66330dc424132d9cf5d996cf3e050c048d765d8e97812e82e0e3f01dd867e179"
+    },
+    {
+      "path": "docs/SPEC-sdk-package.md",
+      "sha256": "22995d2f3ac8e335888cd0c9734b7b356d698bc370139033bcdfb7d87175fdef"
+    },
+    {
+      "path": "docs/SPEC-splat-types.md",
+      "sha256": "1ad8d4bc5294f22b31d16084c8ac03bd4221c69f5b9189fb5ab001595a6eb8ab"
+    },
+    {
+      "path": "docs/system-technical-design.md",
+      "sha256": "991c04bfe43690d85fa312fcb46016261a4f976e4b42fada95337e5bc6760d28"
+    },
+    {
+      "path": "docs/technical-development-plan.md",
+      "sha256": "1a9182be59232000b449fa7bf77083563939482d973654eb36e98f219f8e4bcb"
+    },
+    {
+      "path": "docs/verification/core-2026-09-27.md",
+      "sha256": "5d50c45000a20de54ab1e5338cfc3babccb947dd9cc48296c443c83c415b89d3"
+    },
+    {
+      "path": "docs/verification/device-performance-2026-09-28.md",
+      "sha256": "306cf27f4393b65cd0085567345a0b020e3b84dd34ca8853a7a902a94fc69855"
+    },
+    {
+      "path": "docs/verification/device-performance-2026-09-30-adreno750.md",
+      "sha256": "12153d8084c9780b709c1a26900d1263a1ebca20a2b798660ebdadf4073becb5"
+    },
+    {
+      "path": "docs/verification/engine-2026-09-27.md",
+      "sha256": "84105f9b3159d232bda240b3989fd21e5e68c326a73a7139911f865b576b353d"
+    },
+    {
+      "path": "docs/verification/optimization-roadmap-2026-09-29.md",
+      "sha256": "753d66e57552c4c2f5f39d6365fbcd494a96665652aee74c7eb2025d04bb9958"
+    },
+    {
+      "path": "docs/verification/performance-2026-09-28.md",
+      "sha256": "95a7380e3fd6d49ffda03b1912900f9451b60b8c7ca5a3dddfd919617f2a5432"
+    },
+    {
+      "path": "docs/verification/viewer-2026-09-27.md",
+      "sha256": "5921f06c9378fd65dc1730ea88b066f57b79a07c3b9975517d2d9237846aa09c"
+    },
+    {
+      "path": "examples/c-consumer/CMakeLists.txt",
+      "sha256": "4ebbd2708611d4d02717972c6c2c57e92eefda4983dc327cf5b59b30aaa55301"
+    },
+    {
+      "path": "examples/c-consumer/main.c",
+      "sha256": "66d005fcccbd0d7346167eaad35609d098b3d3c1b1e9791e17bb6e591342a03b"
+    },
+    {
+      "path": "examples/kotlin-consumer/build.gradle.kts",
+      "sha256": "ad0a1f2463e79a21f560282319787ba1c9e9f0a3d0211e96600098e27c1b75b9"
+    },
+    {
+      "path": "examples/kotlin-consumer/gradlew",
+      "sha256": "1ce03a421a975125820e1e4b7230f6a151617255b39cf84758505c7e67b316fa"
+    },
+    {
+      "path": "examples/kotlin-consumer/gradlew.bat",
+      "sha256": "57931b17dd228e5c24dac90e815d0bf82477e831a4618dfab4136f5446b42a9f"
+    },
+    {
+      "path": "examples/kotlin-consumer/README.md",
+      "sha256": "0109b9eb889f21da0c7f901a0221660e22689f1665a42e6e3212db4b2427b0a1"
+    },
+    {
+      "path": "examples/kotlin-consumer/settings.gradle.kts",
+      "sha256": "4c5eca87bc439f6a3f5604264d132c882947e7b705561b03eaf1dc315ac4d601"
+    },
+    {
+      "path": "examples/kotlin-consumer/gradle/wrapper/gradle-wrapper.jar",
+      "sha256": "2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046"
+    },
+    {
+      "path": "examples/kotlin-consumer/gradle/wrapper/gradle-wrapper.properties",
+      "sha256": "4105cd01f719e712e175e70cb65cd914c6745eacb34f1c4a98fb462e241f2ad1"
+    },
+    {
+      "path": "examples/kotlin-consumer/src/main/AndroidManifest.xml",
+      "sha256": "a39f2408db4c26b383b69e5b705580e63a70567317b166f4663078ab0912ad0c"
+    },
+    {
+      "path": "examples/kotlin-consumer/src/main/java/org/native3dgs/consumer/Consumer.kt",
+      "sha256": "b19724379332d0bd918a7f05c1ce09dec54481b8f5092de54da6be9c09fa6555"
+    },
+    {
+      "path": "include/native3dgs/android_engine.h",
+      "sha256": "7dab01dc2a3a99c1ab69162ae66e121e340def89c813fcf5ebae9cf3ac496d09"
+    },
+    {
+      "path": "lib/arm64-v8a/libc++_shared.so",
+      "sha256": "4397241b4bd20a8e579bfb41d21107857e12985f6a01ca0c2a5f83380d1270b4"
+    },
+    {
+      "path": "lib/arm64-v8a/libgs_android_decoder.so",
+      "sha256": "64ce845fb868efbca470dffdb21935a7195598c61029e36df6771f89b01520eb"
+    },
+    {
+      "path": "licenses/android-ndk-NOTICE.toolchain",
+      "sha256": "cbe3237be53c0a819f8df6aac5358fdee848eee3b6571b4e2ca20767ebd7465e"
+    },
+    {
+      "path": "licenses/spz-LICENSE",
+      "sha256": "8b1234cafec672d87a126d13bf3740858ae1a2761383342c2d0225154bb523ca"
+    },
+    {
+      "path": "licenses/zstd-LICENSE",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+    },
+    {
+      "path": "shaders/add_prefix.spv",
+      "sha256": "a7c5653d47cf6f747b6ecc334044aa1e348699de076330f8854520dcf35b4f66"
+    },
+    {
+      "path": "shaders/histogram.spv",
+      "sha256": "6b426b584a962356a7bc7520da502ed2ced105b703900071c63a29464dcaf7f5"
+    },
+    {
+      "path": "shaders/project_segmented.spv",
+      "sha256": "8f24a801abc75aea600811559f788d1ba37c575c2d27ca29063c87205028373e"
+    },
+    {
+      "path": "shaders/project.spv",
+      "sha256": "5f86a7ab9c7ced66357c768d147299f5c8a80e59e899bfe68487fa4f711ed8f1"
+    },
+    {
+      "path": "shaders/scan.spv",
+      "sha256": "4bb2c8a98f3fb6603dd952cfffcc3a8cac2b0df1c71850d58823641b919a0b7d"
+    },
+    {
+      "path": "shaders/scatter_subgroup.spv",
+      "sha256": "fcad619ef434059348b35fcf7c8a06b66f13fc24b0e45849f9d2bfd4d43a20bc"
+    },
+    {
+      "path": "shaders/scatter.spv",
+      "sha256": "4b21ae0ce1fee5af148921d9e3817ba37540ab55cb94622eafeb12ddccf6e58e"
+    },
+    {
+      "path": "shaders/splat_frag.spv",
+      "sha256": "69c47bf86c8bf45e1574c6823ef832bd31ebb1fc470c0f198bb9b08397a7fe2a"
+    },
+    {
+      "path": "shaders/splat_vert.spv",
+      "sha256": "5aed03fa6077dd8cf3e5c9cb96aff7f0897dc2ffb4ecb2a87fc8489d4d43a112"
+    },
+    {
+      "path": "shaders/triangle_frag.spv",
+      "sha256": "7614c315617bbdf4f8ec719f3ae28dd707b2a392e62d099ab29c554db55d69bc"
+    },
+    {
+      "path": "shaders/triangle_vert.spv",
+      "sha256": "461381fc389ea98ddd9c0610c40c7dd6ea6995e16cce038d17a8c30ae0464b28"
+    }
+  ],
+  "min_sdk": 29
+}
