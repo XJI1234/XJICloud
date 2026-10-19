@@ -121,7 +121,8 @@ final class ViewerSession {
     }
     final old = _candidate;
     final candidateRequest = _request;
-    final mayBeActive = engine.activeRequestId == candidateRequest;
+    final mayBeActive =
+        candidateRequest > 0 && engine.activeRequestId == candidateRequest;
     _candidate = null;
     _request = 0;
     _early.clear();

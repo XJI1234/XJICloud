@@ -105,14 +105,30 @@ void main() {
       final directory = await snapshots.directory('cache');
       final good = File('$directory/viewer-lifecycle-valid.ply'),
           bad = File('$directory/viewer-lifecycle-invalid.ply');
+      Native3dgsEngineAdapter? cleanupEngine;
+      ViewerController? cleanupController;
+      addTearDown(() async {
+        try {
+          await cleanupController?.close();
+          await tester.pumpWidget(const SizedBox());
+          final closed = await cleanupEngine?.close();
+          if (closed case Failure<void>(:final error)) throw error;
+          // A failed native acknowledgement preserves files that may be in use.
+          if (await good.exists()) await good.delete();
+          if (await bad.exists()) await bad.delete();
+        } finally {
+          cleanupController?.dispose();
+          await cleanupEngine?.dispose();
+        }
+      });
       await good.writeAsBytes(graphdecoFixture(), flush: true);
       await bad.writeAsString('ply\nformat ascii 1.0\nend_header\ninvalid');
       final goodUri = await privateModelUri(good.path),
           badUri = await privateModelUri(bad.path);
-      final engine = Native3dgsEngineAdapter();
+      final engine = cleanupEngine = Native3dgsEngineAdapter();
       var selected = goodUri, releases = 0;
       final identity = RendererIdentity();
-      final controller = ViewerController(
+      final controller = cleanupController = ViewerController(
         ModelSourceAdapter(
           acquire: (source, c, progress) async => Success(
             LocalModelRef(
@@ -145,11 +161,6 @@ void main() {
       if (controller.session.phase == ViewerPhase.unsupported) {
         expect(controller.session.active, isNull);
         // This is an explicit capability test, not an arm64 rendering pass.
-        await tester.pumpWidget(const SizedBox());
-        controller.dispose();
-        await engine.dispose();
-        await good.delete();
-        await bad.delete();
         return;
       }
       Future<void> until(bool Function() predicate) async {
@@ -196,12 +207,6 @@ void main() {
       await controller.close();
       expect(controller.session.active, isNull);
       expect(releases, 22); // first A, invalid B, twenty opened scenes
-      await tester.pumpWidget(const SizedBox());
-      await engine.close();
-      controller.dispose();
-      await engine.dispose();
-      await good.delete();
-      await bad.delete();
     },
   );
 }

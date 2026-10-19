@@ -30,6 +30,7 @@ class Engine implements ViewerEnginePort {
   int activeRequestId = 0;
   int serial = 0;
   bool supported = true, early = false;
+  bool failOpen = false;
   Completer<Result<void>>? closing;
   @override
   Stream<ViewerEngineState> get states => events.stream;
@@ -38,6 +39,7 @@ class Engine implements ViewerEnginePort {
       Success(ViewerCapabilities(supported: supported));
   @override
   Future<Result<int>> open(LocalModelRef model) async {
+    if (failOpen) return const Failure(DomainError('viewer_engine'));
     final id = ++serial;
     if (early) ready(id);
     return Success(id);
@@ -102,6 +104,28 @@ void main() {
     expect(session.active?.fileName, 'A');
     expect(released, isEmpty);
   });
+  test(
+    'failed initial open then cancel stays empty and releases once',
+    () async {
+      engine.failOpen = true;
+      final opening = session.open(const LocalModelSource());
+      await Future<void>.delayed(Duration.zero);
+      sources.pending.last.complete(Success(model('B')));
+      await opening;
+      expect(session.phase, ViewerPhase.failed);
+      expect(session.active, isNull);
+      expect(released, isEmpty);
+
+      await session.cancel();
+      expect(session.phase, ViewerPhase.empty);
+      expect(session.active, isNull);
+      expect(session.error, isNull);
+      expect(released, ['B']);
+      await session.cancel();
+      await session.close();
+      expect(released, ['B']);
+    },
+  );
   test('late B download cannot replace C and releases its lease', () async {
     await opened('A');
     final b = session.open(const LocalModelSource());
