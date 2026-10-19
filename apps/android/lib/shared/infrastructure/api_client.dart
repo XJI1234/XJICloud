@@ -1,8 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../../features/identity/domain/session_access.dart';
 import '../domain/domain_error.dart';
 import '../domain/result.dart';
+import '../domain/cancellation.dart';
 
 /// The API transport is separate from future OSS clients. It never follows redirects.
 final class ApiClient {
@@ -41,6 +45,12 @@ final class ApiClient {
     Map<String, dynamic>? query,
     Map<String, dynamic>? body,
     bool authenticated = false,
+    int? expectedGeneration,
+    Stream<List<int>>? rawBody,
+    int? contentLength,
+    String? contentRange,
+    Cancellation? cancellation,
+    Future<void> Function(Stream<List<int>>)? consume,
   }) async {
     // Path is a decoded API path, never a URL or a pre-encoded user value.
     if (!path.startsWith('/api/v1/') ||
@@ -58,6 +68,10 @@ final class ApiClient {
       return const Failure(DomainError('forbidden'));
     }
     final generation = sessions.generation;
+    if (expectedGeneration != null && generation != expectedGeneration ||
+        cancellation?.isCancelled == true) {
+      return const Failure(DomainError('cancelled'));
+    }
     final session = sessions.session;
     if (authenticated && session == null) {
       return const Failure(DomainError('unauthorized'));
@@ -66,20 +80,37 @@ final class ApiClient {
       await sessions.invalidate(expectedGeneration: generation);
       return const Failure(DomainError('expired'));
     }
+    final cancelToken = CancelToken();
+    final detach = cancellation?.listen(() => cancelToken.cancel());
+    final streaming = rawBody != null || consume != null;
+    Stream<List<int>> guarded(Stream<List<int>> source) async* {
+      await for (final bytes in source) {
+        if (cancellation?.isCancelled == true ||
+            authenticated && generation != sessions.generation) {
+          throw const DomainError('cancelled');
+        }
+        yield bytes;
+      }
+    }
+
     try {
       final response = await _dio.requestUri<Object?>(
         uri,
-        data: body,
+        data: rawBody == null ? body : guarded(rawBody),
+        cancelToken: cancelToken,
         options: Options(
           method: method,
           headers: {
             if (authenticated) 'Authorization': 'Bearer ${session!.token}',
+            if (rawBody != null) 'Content-Type': 'application/octet-stream',
+            'Content-Length': ?contentLength,
+            'Content-Range': ?contentRange,
           },
           followRedirects: false,
           validateStatus: (_) => true,
           sendTimeout: const Duration(seconds: 20),
           receiveTimeout: const Duration(seconds: 20),
-          responseType: ResponseType.json,
+          responseType: streaming ? ResponseType.stream : ResponseType.json,
         ),
       );
       final status = response.statusCode ?? 0;
@@ -93,8 +124,27 @@ final class ApiClient {
         return const Failure(DomainError('redirect'));
       }
       if (status == 403) return const Failure(DomainError('forbidden'));
+      if (status == 404) return const Failure(DomainError('not_found'));
       if (status == 429) return const Failure(DomainError('rate_limit'));
-      final data = response.data;
+      if (consume != null && status == 200) {
+        await consume(guarded((response.data as ResponseBody).stream));
+        if (cancellation?.isCancelled == true ||
+            generation != sessions.generation) {
+          return const Failure(DomainError('cancelled'));
+        }
+        return const Success(null);
+      }
+      Object? data = response.data;
+      if (streaming) {
+        var length = 0;
+        final bytes = <int>[];
+        await for (final chunk in guarded((data as ResponseBody).stream)) {
+          length += chunk.length;
+          if (length > 1024 * 1024) throw const FormatException('response');
+          bytes.addAll(chunk);
+        }
+        data = jsonDecode(utf8.decode(bytes));
+      }
       if (data is! Map<String, dynamic> || data['success'] is! bool) {
         return Failure(
           DomainError(status == 401 ? 'unauthorized' : 'protocol'),
@@ -117,10 +167,20 @@ final class ApiClient {
           ? 'server'
           : 'request';
       return Failure(DomainError(code));
-    } on DioException {
-      return const Failure(DomainError('network'));
+    } on DioException catch (error) {
+      return Failure(
+        DomainError(CancelToken.isCancel(error) ? 'cancelled' : 'network'),
+      );
+    } on DomainError catch (error) {
+      return Failure(error);
+    } on FileSystemException {
+      return const Failure(DomainError('storage'));
     } on FormatException {
       return const Failure(DomainError('protocol'));
+    } finally {
+      // Also closes unread redirect/error bodies from streaming responses.
+      cancelToken.cancel();
+      detach?.call();
     }
   }
 

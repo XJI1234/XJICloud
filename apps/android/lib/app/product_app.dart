@@ -6,6 +6,8 @@ import '../features/identity/presentation/login_page.dart';
 import '../features/project/presentation/home_page.dart';
 import '../features/project/presentation/project_list_page.dart';
 import '../features/project/presentation/project_detail_page.dart';
+import '../features/model_asset/presentation/model_list.dart';
+import '../features/model_asset/presentation/cache_page.dart';
 import '../presentation/pages/my_page.dart';
 import '../presentation/theme/app_theme.dart';
 import '../shared/l10n/app_localizations.dart';
@@ -19,6 +21,7 @@ import 'router.dart';
 /// A destination must exist before it can be retained through a login redirect.
 String controlledTarget(String? target) {
   if (target == '/account' ||
+      target == '/account/cache' ||
       target == '/home' ||
       target == '/projects' ||
       target != null &&
@@ -85,8 +88,13 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
         ),
         if (container.workspace != null)
           ShellRoute(
-            builder: (context, state, child) =>
-                _WorkspaceNavigation(location: state.uri.path, child: child),
+            builder: (context, state, child) => _WorkspaceNavigation(
+              location: state.uri.path,
+              onUpload: container.modelAssets == null
+                  ? null
+                  : () => showUpload(context),
+              child: child,
+            ),
             routes: [
               GoRoute(
                 path: '/home',
@@ -111,19 +119,33 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
               ),
               GoRoute(
                 path: '/projects',
-                builder: (context, state) =>
-                    ProjectListPage(controller: container.workspace!),
+                builder: (context, state) => ProjectListPage(
+                  controller: container.workspace!,
+                  modelSectionBuilder: modelSectionBuilder,
+                ),
                 routes: [
                   GoRoute(
                     path: ':id',
                     builder: (context, state) => ProjectListPage(
                       controller: container.workspace!,
                       projectId: state.pathParameters['id'],
+                      modelSectionBuilder: modelSectionBuilder,
                     ),
                   ),
                 ],
               ),
-              GoRoute(path: '/account', builder: accountPage),
+              GoRoute(
+                path: '/account',
+                builder: accountPage,
+                routes: [
+                  if (container.modelAssets != null)
+                    GoRoute(
+                      path: 'cache',
+                      builder: (context, state) =>
+                          CachePage(controller: container.modelAssets!),
+                    ),
+                ],
+              ),
             ],
           ),
         if (container.workspace == null)
@@ -141,6 +163,9 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
             session: session,
             onToggleLocale: toggleLocale,
             onLogout: () => container.sessions.invalidate(),
+            onCache: container.modelAssets == null
+                ? null
+                : () => context.go('/account/cache'),
           );
   }
 
@@ -157,6 +182,115 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
           localeError = error;
       }
     });
+  }
+
+  Widget Function(String)? get modelSectionBuilder =>
+      container.modelAssets == null
+      ? null
+      : (id) => ModelList(controller: container.modelAssets!, projectId: id);
+
+  Future<void> showUpload(BuildContext context) async {
+    final models = container.modelAssets!, workspace = container.workspace!;
+    final generation = models.userGeneration;
+    final l = AppLocalizations.of(context);
+    final hostContext = context;
+    var selected = workspace.activeProjectId;
+    BuildContext? sheetContext;
+    void identityChanged() {
+      if (generation != models.userGeneration &&
+          sheetContext?.mounted == true) {
+        Navigator.of(sheetContext!).pop();
+      }
+    }
+
+    models.addListener(identityChanged);
+    String? chosen;
+    try {
+      chosen = await showModalBottomSheet<String>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        builder: (context) {
+          sheetContext = context;
+          return ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .8,
+            ),
+            child: ListenableBuilder(
+              listenable: models,
+              builder: (context, _) => StatefulBuilder(
+                builder: (context, setState) => SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        l.uploadModel,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(l.modelUploadPolicy),
+                      if (models.error case final error?)
+                        Text(errorText(l, error)),
+                      if (models.checkpoint != null || models.uploadBusy)
+                        UploadStatus(controller: models)
+                      else if (workspace.projects.isEmpty) ...[
+                        Text(l.noCurrentProject),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            if (generation == models.userGeneration &&
+                                hostContext.mounted) {
+                              showProjectEditor(hostContext, workspace);
+                            }
+                          },
+                          child: Text(l.createProject),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 16),
+                        Text(l.uploadDestination),
+                        for (final project in workspace.projects)
+                          ListTile(
+                            selected: selected == project.id,
+                            leading: Icon(
+                              selected == project.id
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                            ),
+                            title: Text(project.name),
+                            onTap: () => setState(() => selected = project.id),
+                          ),
+                        FilledButton(
+                          onPressed: selected == null || models.restoring
+                              ? null
+                              : () => Navigator.pop(context, selected),
+                          child: Text(l.uploadModel),
+                        ),
+                      ],
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(l.close),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } finally {
+      models.removeListener(identityChanged);
+    }
+    if (chosen != null && generation == models.userGeneration && mounted) {
+      await models.chooseAndUpload(chosen);
+      if (hostContext.mounted &&
+          generation == models.userGeneration &&
+          models.error != null) {
+        ScaffoldMessenger.of(hostContext)
+            .showSnackBar(SnackBar(content: Text(errorText(l, models.error!))));
+      }
+    }
   }
 
   Future<void> toggleLocale() async {
@@ -179,7 +313,13 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) container.sessions.checkExpiry();
+    if (state == AppLifecycleState.resumed) {
+      container.sessions.checkExpiry();
+      container.modelAssets?.foreground();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      container.modelAssets?.background();
+    }
   }
 
   @override
@@ -222,9 +362,14 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
 
 /// Only released capabilities are navigable; Task 7 assembles the full shell.
 class _WorkspaceNavigation extends StatelessWidget {
-  const _WorkspaceNavigation({required this.location, required this.child});
+  const _WorkspaceNavigation({
+    required this.location,
+    required this.child,
+    this.onUpload,
+  });
   final String location;
   final Widget child;
+  final VoidCallback? onUpload;
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -237,6 +382,15 @@ class _WorkspaceNavigation extends StatelessWidget {
     ];
     return Scaffold(
       body: child,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: onUpload == null
+          ? null
+          : FloatingActionButton(
+              key: const Key('central-upload-model'),
+              tooltip: l.uploadModel,
+              onPressed: onUpload,
+              child: const Icon(Icons.upload),
+            ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Material(

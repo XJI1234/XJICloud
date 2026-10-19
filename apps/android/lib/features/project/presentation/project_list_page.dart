@@ -8,9 +8,15 @@ import 'project_detail_page.dart';
 import 'workspace_controller.dart';
 
 class ProjectListPage extends StatelessWidget {
-  const ProjectListPage({super.key, required this.controller, this.projectId});
+  const ProjectListPage({
+    super.key,
+    required this.controller,
+    this.projectId,
+    this.modelSectionBuilder,
+  });
   final WorkspaceController controller;
   final String? projectId;
+  final Widget Function(String projectId)? modelSectionBuilder;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
@@ -27,7 +33,11 @@ class ProjectListPage extends StatelessWidget {
                     child: Text(l.selectProject),
                   ),
                 )
-              : ProjectDetailPage(controller: controller, projectId: selected);
+              : ProjectDetailPage(
+                  controller: controller,
+                  projectId: selected,
+                  modelSectionBuilder: modelSectionBuilder,
+                );
           final list = ListView(
             padding: const EdgeInsets.all(20),
             children: [

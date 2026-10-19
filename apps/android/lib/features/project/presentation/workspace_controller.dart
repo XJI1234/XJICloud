@@ -26,10 +26,16 @@ final class HomeViewModel {
 }
 
 final class WorkspaceController extends ChangeNotifier {
-  WorkspaceController(this.repository, this.persistence, this.sessions);
+  WorkspaceController(
+    this.repository,
+    this.persistence,
+    this.sessions, {
+    this.stopProjectTransfers,
+  });
   final ProjectRepository repository;
   final WorkspacePersistence persistence;
   final SessionAccess sessions;
+  final Future<Result<void>> Function(String projectId)? stopProjectTransfers;
   String? userId;
   int userGeneration = -1;
   List<Project> projects = const [];
@@ -184,6 +190,14 @@ final class WorkspaceController extends ChangeNotifier {
         }
       });
   Future<bool> deleteProject(String id) => _mutate((generation, account) async {
+    if (stopProjectTransfers != null) {
+      final stopped = await stopProjectTransfers!(id);
+      if (!_current(generation)) return false;
+      if (stopped case Failure<void>(:final error)) {
+        this.error = error;
+        return false;
+      }
+    }
     final result = await MutateProject(
       repository,
       persistence,

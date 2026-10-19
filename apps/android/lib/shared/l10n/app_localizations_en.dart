@@ -233,7 +233,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteProjectMessage =>
-      'Delete this project and all of its models, training tasks and datasets? This cannot be undone. Running server work may continue.';
+      'Delete this project and all of its models, training tasks and datasets? This cannot be undone. Running server work may continue. Local active transfers will be stopped first.';
 
   @override
   String get discardChanges => 'Discard changes?';
@@ -258,4 +258,158 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openProject => 'Open project';
+
+  @override
+  String get models => 'Model assets';
+
+  @override
+  String get modelEmpty => 'No models in this project';
+
+  @override
+  String get modelUploadPolicy =>
+      'PLY/SPZ, 1 byte–2 GiB. A private copy supports reliable resume.';
+
+  @override
+  String get modelValidation =>
+      'Choose a valid PLY/SPZ file (1 byte–2 GiB). Free device storage if needed.';
+
+  @override
+  String get modelDownload => 'Download to private cache';
+
+  @override
+  String get modelCached => 'Cached';
+
+  @override
+  String get cacheRemove => 'Remove cached copy';
+
+  @override
+  String get modelCreated => 'Created';
+
+  @override
+  String get modelUpdated => 'Updated';
+
+  @override
+  String get deleteModel => 'Delete cloud model';
+
+  @override
+  String get deleteModelMessage =>
+      'Delete this cloud model and invalidate its account cache? This cannot be undone.';
+
+  @override
+  String get pauseTransfer => 'Pause transfer';
+
+  @override
+  String get resumeTransfer => 'Check server and resume';
+
+  @override
+  String get reselectSource => 'Re-select the same source';
+
+  @override
+  String get abandonUpload => 'Cancel this upload';
+
+  @override
+  String get abandonUploadMessage =>
+      'Stop local tracking and abort the upload session. An already completed cloud model remains; check the list.';
+
+  @override
+  String get uploadReady => 'Ready to upload';
+
+  @override
+  String get uploadPaused => 'Paused; check the server before resuming';
+
+  @override
+  String get uploadCompleting => 'Confirming completion';
+
+  @override
+  String get uploadUncertain => 'Completion needs reconciliation';
+
+  @override
+  String get uploadCompleted =>
+      'Server acknowledged completion; check the refreshed model list';
+
+  @override
+  String get uploadPreparing => 'Preparing a private copy of your file';
+
+  @override
+  String get completionUncertain =>
+      'The completion result is uncertain. Check the refreshed list, model ID and creation time. Uploads and same-name models are never chosen automatically.';
+
+  @override
+  String get uploadCreateUncertain =>
+      'The upload-session response was lost. No automatic retry was made. Check project models; abandoned sessions expire on the server.';
+
+  @override
+  String get retryCompletion => 'Retry completion';
+
+  @override
+  String get retryCompletionMessage =>
+      'Check the model list first. The current server can return “not found” for repeated completion. Retry only after checking; this creates no new upload.';
+
+  @override
+  String get reconcileModel => 'Confirm as this upload result';
+
+  @override
+  String get reconcileModelMessage =>
+      'Check the model ID, filename, size and creation time before confirming this asset.';
+
+  @override
+  String get sourceChanged =>
+      'The source is unavailable or changed. Re-select the exact same file to resume.';
+
+  @override
+  String get cacheTitle => 'Model cache';
+
+  @override
+  String get cacheDescription =>
+      'Manage this account’s model downloads. Files in use remain. Source files and upload copies are preserved.';
+
+  @override
+  String get cacheClear => 'Clear unused cache';
+
+  @override
+  String get cacheFreed => 'Bytes released';
+
+  @override
+  String get cacheBytes => 'Cached bytes';
+
+  @override
+  String get cacheFull =>
+      'Cache quota is exhausted or files are in use. Clear the cache or close models.';
+
+  @override
+  String get cacheInUse =>
+      'This cache file is in use. Close the model and retry.';
+
+  @override
+  String get modelNotFound =>
+      'The model or upload session was not found, deleted, or expired. Refresh and check the project list.';
+
+  @override
+  String get modelDeletedStorage =>
+      'Cloud model deleted, but local cache cleanup failed. Retry clearing cache.';
+
+  @override
+  String get uploadCompletedStorage =>
+      'Server acknowledged completion, but the local record could not be saved. Check the list and finish local tracking.';
+
+  @override
+  String get cancelledTransfer =>
+      'Transfer paused or cancelled. Incomplete cache was not committed.';
+
+  @override
+  String get finishUpload => 'Finish local tracking';
+
+  @override
+  String get uploadDestination => 'Fixed destination project';
+
+  @override
+  String get cancelDownload => 'Cancel download';
+
+  @override
+  String get modelUnavailable =>
+      'The selected model is unavailable. Refresh and check again.';
+
+  @override
+  String get sourceBusy =>
+      'The system file picker is still open. Finish or cancel the previous selection.';
 }

@@ -11,9 +11,11 @@ class ProjectDetailPage extends StatelessWidget {
     super.key,
     required this.controller,
     required this.projectId,
+    this.modelSectionBuilder,
   });
   final WorkspaceController controller;
   final String projectId;
+  final Widget Function(String projectId)? modelSectionBuilder;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
@@ -112,6 +114,7 @@ class ProjectDetailPage extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 16),
                 child: Text(l.loading),
               ),
+            if (modelSectionBuilder != null) modelSectionBuilder!(p.id),
           ],
         ],
       );

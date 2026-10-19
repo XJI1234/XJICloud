@@ -3,6 +3,7 @@ import '../features/identity/domain/locale_store.dart';
 import '../features/identity/presentation/auth_controller.dart';
 import 'session_coordinator.dart';
 import '../features/project/presentation/workspace_controller.dart';
+import '../features/model_asset/presentation/model_assets_controller.dart';
 
 /// Session-scoped capabilities, assembled only by create_container.dart.
 final class AppContainer {
@@ -12,7 +13,12 @@ final class AppContainer {
     required this.locales,
     required this.closeTransport,
     this.workspace,
+    this.modelAssets,
   }) {
+    if (modelAssets != null) {
+      sessions.addListener(modelAssets!.synchronize);
+      modelAssets!.synchronize();
+    }
     if (workspace != null) {
       sessions.addListener(workspace!.synchronize);
       workspace!.synchronize();
@@ -23,9 +29,14 @@ final class AppContainer {
   final LocaleStore locales;
   final void Function() closeTransport;
   final WorkspaceController? workspace;
+  final ModelAssetsController? modelAssets;
   AuthController createAuthController() =>
       AuthController(auth, activate: sessions.activate);
   void dispose() {
+    if (modelAssets != null) {
+      sessions.removeListener(modelAssets!.synchronize);
+      modelAssets!.dispose();
+    }
     if (workspace != null) {
       sessions.removeListener(workspace!.synchronize);
       workspace!.dispose();

@@ -11,10 +11,12 @@ class MyPage extends StatelessWidget {
     required this.session,
     required this.onToggleLocale,
     required this.onLogout,
+    this.onCache,
   });
   final UserSession session;
   final VoidCallback onToggleLocale;
   final VoidCallback onLogout;
+  final VoidCallback? onCache;
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -49,6 +51,12 @@ class MyPage extends StatelessWidget {
                         .formatFullDate(session.expiresAt.toLocal()),
                   ),
                   const SizedBox(height: 32),
+                  if (onCache != null)
+                    TextButton(
+                      key: const Key('account-cache'),
+                      onPressed: onCache,
+                      child: Text(l.cacheTitle),
+                    ),
                   TextButton(
                     key: const Key('account-language'),
                     onPressed: onToggleLocale,

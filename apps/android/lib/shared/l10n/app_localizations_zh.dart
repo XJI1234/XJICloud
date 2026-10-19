@@ -225,7 +225,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteProjectMessage =>
-      '删除此工程及其全部模型、训练任务和数据集？此操作无法撤销，服务端正在运行的任务可能继续。';
+      '删除此工程及其全部模型、训练任务和数据集？此操作无法撤销，服务端正在运行的任务可能继续。 本地活动传输会先停止。';
 
   @override
   String get discardChanges => '放弃修改？';
@@ -250,4 +250,143 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openProject => '打开工程';
+
+  @override
+  String get models => '模型资产';
+
+  @override
+  String get modelEmpty => '此工程暂无模型';
+
+  @override
+  String get modelUploadPolicy =>
+      '支持 PLY/SPZ，文件大小 1 字节至 2 GiB。选择后将创建私有副本用于安全续传。';
+
+  @override
+  String get modelValidation => '请选择有效的 PLY/SPZ 文件（1 字节至 2 GiB）。空间不足时请先释放设备存储。';
+
+  @override
+  String get modelDownload => '下载到私有缓存';
+
+  @override
+  String get modelCached => '已缓存';
+
+  @override
+  String get cacheRemove => '删除此缓存副本';
+
+  @override
+  String get modelCreated => '创建时间';
+
+  @override
+  String get modelUpdated => '更新时间';
+
+  @override
+  String get deleteModel => '删除云模型';
+
+  @override
+  String get deleteModelMessage => '删除此云模型并失效本账号缓存？此操作无法撤销。';
+
+  @override
+  String get pauseTransfer => '暂停传输';
+
+  @override
+  String get resumeTransfer => '核对断点并续传';
+
+  @override
+  String get reselectSource => '重选相同源文件';
+
+  @override
+  String get abandonUpload => '取消此上传';
+
+  @override
+  String get abandonUploadMessage => '停止本地跟踪并取消上传会话。若服务器已完成模型，云模型会保留，请在列表中核对。';
+
+  @override
+  String get uploadReady => '准备上传';
+
+  @override
+  String get uploadPaused => '已暂停，可核对断点后续传';
+
+  @override
+  String get uploadCompleting => '正在确认完成';
+
+  @override
+  String get uploadUncertain => '完成结果待核对';
+
+  @override
+  String get uploadCompleted => '服务器已确认完成，请核对最新模型列表';
+
+  @override
+  String get uploadPreparing => '正在读取文件并准备私有副本';
+
+  @override
+  String get completionUncertain =>
+      '服务器完成结果未确认。列表已刷新，请按模型标识与创建时间核对。不会自动重复上传或选择同名模型。';
+
+  @override
+  String get uploadCreateUncertain =>
+      '创建上传会话的响应未确认，未自动重试。请核对工程模型；未完成会话会由服务器过期清理。';
+
+  @override
+  String get retryCompletion => '再次请求完成';
+
+  @override
+  String get retryCompletionMessage =>
+      '请先核对模型列表。当前服务器重复完成可能返回“模型不存在”；仅在你确认后再次请求。不会新建上传。';
+
+  @override
+  String get reconcileModel => '确认为此次上传结果';
+
+  @override
+  String get reconcileModelMessage => '请核对模型标识、文件名、大小和创建时间，确认这是此次上传生成的资产。';
+
+  @override
+  String get sourceChanged => '源文件丢失或内容已改变。请重选完全相同的文件；不同内容不能续传。';
+
+  @override
+  String get cacheTitle => '模型缓存';
+
+  @override
+  String get cacheDescription => '仅管理当前账号的模型下载。正在使用的文件会保留，源文件与上传副本不会被清除。';
+
+  @override
+  String get cacheClear => '清除可释放缓存';
+
+  @override
+  String get cacheFreed => '已释放字节';
+
+  @override
+  String get cacheBytes => '缓存字节';
+
+  @override
+  String get cacheFull => '缓存配额不足，或所有可释放文件正在使用。请先清理缓存或关闭模型。';
+
+  @override
+  String get cacheInUse => '此缓存正在使用，请关闭模型后重试。';
+
+  @override
+  String get modelNotFound => '模型或上传会话不存在，可能已删除或过期。请刷新工程列表后核对。';
+
+  @override
+  String get modelDeletedStorage => '云模型已删除，但本地缓存清理失败，请重试清理缓存。';
+
+  @override
+  String get uploadCompletedStorage => '服务器已确认完成，但本地记录保存失败。请核对列表后结束本地跟踪。';
+
+  @override
+  String get cancelledTransfer => '传输已暂停或取消，未提交不完整缓存。';
+
+  @override
+  String get finishUpload => '结束本地跟踪';
+
+  @override
+  String get uploadDestination => '固定目标工程';
+
+  @override
+  String get cancelDownload => '取消下载';
+
+  @override
+  String get modelUnavailable => '所选模型不可用，请重新刷新并核对。';
+
+  @override
+  String get sourceBusy => '系统文件选择器仍在使用，请先完成或取消上一次选择。';
 }
