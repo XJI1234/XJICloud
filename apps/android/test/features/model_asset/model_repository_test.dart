@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -7,6 +8,9 @@ import 'package:xjicloud_mobile/shared/domain/result.dart';
 import 'package:xjicloud_mobile/shared/domain/cancellation.dart';
 import 'package:xjicloud_mobile/shared/infrastructure/api_client.dart';
 import 'package:xjicloud_mobile/features/model_asset/infrastructure/http_model_asset_repository.dart';
+import 'package:xjicloud_mobile/features/model_asset/infrastructure/file_model_cache.dart';
+import 'package:xjicloud_mobile/features/model_asset/domain/model_asset.dart';
+import 'package:xjicloud_mobile/features/model_asset/domain/model_cache_port.dart';
 import 'package:xjicloud_mobile/app/session_coordinator.dart';
 
 import '../identity/session_policy_test.dart' show MemoryStore, session;
@@ -18,6 +22,13 @@ class BinaryTransport implements HttpClientAdapter {
   List<int>? sent;
   int status = 200;
   bool binary = false;
+  Object? bodyError;
+  Stream<Uint8List> _body() async* {
+    yield Uint8List.fromList([1, 2]);
+    if (bodyError case final error?) throw error;
+    yield Uint8List.fromList([3, 4]);
+  }
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -27,13 +38,7 @@ class BinaryTransport implements HttpClientAdapter {
     request = options;
     if (stream != null) sent = await stream.expand((x) => x).toList();
     return binary
-        ? ResponseBody(
-            Stream.fromIterable([
-              Uint8List.fromList([1, 2]),
-              Uint8List.fromList([3, 4]),
-            ]),
-            status,
-          )
+        ? ResponseBody(_body(), status)
         : ResponseBody.fromString(
             '{"success":true,"data":{"receivedBytes":10}}',
             status,
@@ -67,6 +72,73 @@ void main() {
     api.close();
     sessions.dispose();
   });
+  for (final failure in [
+    const SocketException('connection reset mid-body'),
+    const HttpException('response closed early'),
+  ]) {
+    test(
+      'actual Dio response stream maps ${failure.runtimeType} to network and cache recovers',
+      () async {
+        final root = await Directory.systemTemp.createTemp(
+          'xji-stream-recovery-',
+        );
+        addTearDown(() => root.delete(recursive: true));
+        final cache = FileModelCache(() async => root.path);
+        final model = ModelAsset(
+          id: id,
+          projectId: id,
+          fileName: 'a.ply',
+          format: 'PLY',
+          sizeBytes: 4,
+          version: 1,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        );
+        transport
+          ..binary = true
+          ..bodyError = failure;
+        final token = Cancellation();
+        final received = <int>[];
+        Future<Result<void>> download(
+          Future<void> Function(Stream<List<int>>) consume,
+        ) => repo.downloadToFile(id, sessions.generation, consume, token);
+        final result = await cache.store(
+          sessions.session!.userId,
+          model,
+          download,
+          token,
+          () => true,
+          onProgress: (bytes, _) => received.add(bytes),
+        );
+        expect((result as Failure<CacheLease>).error.code, 'network');
+        expect(received, [2]);
+        expect(await root.list().length, 0);
+        expect(
+          (await cache.size(sessions.session!.userId) as Success<int>).value,
+          0,
+        );
+        transport.bodyError = null;
+        final retry = (await cache.store(
+          sessions.session!.userId,
+          model,
+          download,
+          token,
+          () => true,
+        ) as Success<CacheLease>).value;
+        expect(await File(await cache.resolve(retry)).readAsBytes(), [
+          1,
+          2,
+          3,
+          4,
+        ]);
+        retry.release();
+        expect(
+          (await cache.clear(sessions.session!.userId) as Success<int>).value,
+          4,
+        );
+      },
+    );
+  }
   test(
     'raw tail PUT sends exact Content-Range content length Bearer and bytes',
     () async {

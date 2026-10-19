@@ -439,33 +439,36 @@ final class ModelAssetsController extends ChangeNotifier {
     error = null;
     _notify();
     return _downloadTasks[asset.id] = () async {
-      final result = await DownloadModel(repository, cache)(
-        account,
-        asset,
-        generation,
-        cancel,
-        () => _current(generation),
-        onProgress: (received, total) {
+      try {
+        final result = await DownloadModel(repository, cache)(
+          account,
+          asset,
+          generation,
+          cancel,
+          () => _current(generation),
+          onProgress: (received, total) {
+            if (_current(generation)) {
+              downloadProgress[asset.id] = received;
+              _notify();
+            }
+          },
+        );
+        if (result case Success<CacheLease>(:final value)) {
+          value.release();
           if (_current(generation)) {
-            downloadProgress[asset.id] = received;
-            _notify();
+            _cached.add(ModelRevision.of(account, asset).key);
           }
-        },
-      );
-      if (result case Success<CacheLease>(:final value)) {
-        value.release();
-        if (_current(generation)) {
-          _cached.add(ModelRevision.of(account, asset).key);
+        } else if (result case Failure<CacheLease>(:final error)) {
+          if (_current(generation)) this.error = error;
         }
-      } else if (result case Failure<CacheLease>(:final error)) {
-        if (_current(generation)) this.error = error;
-      }
-      if (_current(generation)) {
-        _downloads.remove(asset.id);
-        _downloadProjects.remove(asset.id);
-        _downloadTasks.remove(asset.id);
-        downloadProgress.remove(asset.id);
-        _notify();
+      } finally {
+        if (_current(generation)) {
+          _downloads.remove(asset.id);
+          _downloadProjects.remove(asset.id);
+          _downloadTasks.remove(asset.id);
+          downloadProgress.remove(asset.id);
+          _notify();
+        }
       }
     }();
   }

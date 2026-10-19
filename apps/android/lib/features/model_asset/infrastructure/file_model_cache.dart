@@ -16,6 +16,7 @@ final class FileModelCache implements ModelCachePort {
   final Future<String> Function() rootPath;
   final int quotaBytes;
   final _leases = <String, int>{};
+  final _incarnations = <String, Object>{};
   final _invalid = <String>{};
   Future<void> _tail = Future.value();
   bool _initialized = false;
@@ -33,7 +34,9 @@ final class FileModelCache implements ModelCachePort {
         return Failure<T>(error);
       }
     });
-    _tail = result.then<void>((_) {});
+    // Preserve an unexpected rejection for its caller while allowing the next
+    // independent operation to run; a failed operation must not poison the queue.
+    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return result;
   }
 
@@ -85,6 +88,7 @@ final class FileModelCache implements ModelCachePort {
   }
 
   CacheLease _lease(_Entry entry) {
+    final incarnation = _incarnations.putIfAbsent(entry.stem, Object.new);
     _leases.update(entry.stem, (value) => value + 1, ifAbsent: () => 1);
     return CacheLease(
       LocalModelRef(
@@ -94,6 +98,7 @@ final class FileModelCache implements ModelCachePort {
         fingerprint: entry.data['key'] as String,
       ),
       () {
+        if (!identical(_incarnations[entry.stem], incarnation)) return;
         final count = (_leases[entry.stem] ?? 1) - 1;
         if (count > 0) {
           _leases[entry.stem] = count;
@@ -102,7 +107,12 @@ final class FileModelCache implements ModelCachePort {
         _leases.remove(entry.stem);
         if (_invalid.contains(entry.stem)) {
           _serial<void>(() async {
-            await _remove(entry);
+            // A queued store may have replaced this revision before cleanup.
+            if (identical(_incarnations[entry.stem], incarnation) &&
+                _invalid.contains(entry.stem) &&
+                !_leased(entry)) {
+              await _remove(entry);
+            }
             return const Success(null);
           });
         }
@@ -114,6 +124,7 @@ final class FileModelCache implements ModelCachePort {
     if (await entry.meta.exists()) await entry.meta.delete();
     if (await entry.file.exists()) await entry.file.delete();
     _invalid.remove(entry.stem);
+    _incarnations.remove(entry.stem);
   }
 
   bool _leased(_Entry e) => (_leases[e.stem] ?? 0) > 0;

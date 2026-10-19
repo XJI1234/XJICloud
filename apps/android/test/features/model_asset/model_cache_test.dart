@@ -35,6 +35,70 @@ void main() {
     await root.delete(recursive: true);
   });
   test(
+    'queued invalidated lease cleanup preserves same revision replacement',
+    () async {
+      final old = (await cache.store(
+        'u',
+        model(),
+        download,
+        Cancellation(),
+        () => true,
+      ) as Success<CacheLease>).value;
+      await cache.invalidate('u', model().id);
+      final pending = cache.store(
+        'u',
+        model(),
+        download,
+        Cancellation(),
+        () => true,
+      );
+      old.release();
+      final replacement = (await pending as Success<CacheLease>).value;
+      expect(replacement.isReleased, isFalse);
+      // The query executes after the old lease's already queued cleanup.
+      expect((await cache.size('u') as Success<int>).value, 4);
+      expect(await File(await cache.resolve(replacement)).readAsBytes(), [
+        1,
+        2,
+        3,
+        4,
+      ]);
+      expect((await cache.clear('u') as Success<int>).value, 0);
+      final reader =
+          (await cache.acquire('u', model()) as Success<CacheLease?>).value!;
+      reader.release();
+      replacement.release();
+      expect((await cache.clear('u') as Success<int>).value, 4);
+    },
+  );
+  test(
+    'unexpected operation rejection does not poison later cache operations',
+    () async {
+      await expectLater(
+        cache.store(
+          'u',
+          model(),
+          (_) async {
+            throw StateError('unexpected adapter failure');
+          },
+          Cancellation(),
+          () => true,
+        ),
+        throwsStateError,
+      );
+      expect((await cache.size('u') as Success<int>).value, 0);
+      final next = (await cache.store(
+        'u',
+        model(),
+        download,
+        Cancellation(),
+        () => true,
+      ) as Success<CacheLease>).value;
+      next.release();
+      expect((await cache.clear('u') as Success<int>).value, 4);
+    },
+  );
+  test(
     'individual cache eviction is account scoped and refuses an active lease',
     () async {
       final owned = (await cache.store(

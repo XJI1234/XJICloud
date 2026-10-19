@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
 import 'package:xjicloud_mobile/features/model_asset/presentation/model_assets_controller.dart';
 import 'package:xjicloud_mobile/features/model_asset/infrastructure/file_model_cache.dart';
+import 'package:xjicloud_mobile/features/model_asset/infrastructure/http_model_asset_repository.dart';
+import 'package:xjicloud_mobile/shared/infrastructure/api_client.dart';
 import 'package:xjicloud_mobile/features/model_asset/domain/model_asset.dart';
 import 'package:xjicloud_mobile/features/model_asset/domain/model_cache_port.dart';
 import 'package:xjicloud_mobile/shared/domain/result.dart';
@@ -12,6 +15,9 @@ import 'package:xjicloud_mobile/app/session_coordinator.dart';
 
 import '../identity/session_policy_test.dart' show MemoryStore, session;
 import 'chunk_upload_test.dart' show Repo, Files, Journal, source, asset;
+import 'model_repository_test.dart'
+    as transport_fixture
+    show BinaryTransport, id;
 
 import 'dart:io';
 
@@ -32,7 +38,103 @@ class PickerFiles extends Files {
   }
 }
 
+class UnexpectedDownloadRepo extends Repo {
+  bool broken = true;
+  @override
+  Future<Result<void>> downloadToFile(
+    String id,
+    int generation,
+    Future<void> Function(Stream<List<int>>) consume,
+    Cancellation cancellation,
+  ) async {
+    if (broken) throw StateError('unexpected adapter failure');
+    await consume(Stream.value(List.filled(asset.sizeBytes, 1)));
+    return const Success(null);
+  }
+}
+
 void main() {
+  test(
+    'unexpected download rejection always clears busy and task bookkeeping',
+    () async {
+      final sessions = SessionCoordinator(MemoryStore());
+      await sessions.activate(session());
+      addTearDown(sessions.dispose);
+      final root = await Directory.systemTemp.createTemp(
+        'xji-controller-rejection-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final repo = UnexpectedDownloadRepo();
+      final cache = FileModelCache(() async => root.path);
+      final c = ModelAssetsController(
+        repo,
+        Files(),
+        Journal(),
+        cache,
+        sessions,
+      );
+      addTearDown(c.dispose);
+      c.synchronize();
+      await expectLater(c.download(asset), throwsStateError);
+      expect(c.downloading(asset.id), isFalse);
+      expect(c.downloadProgress, isEmpty);
+      expect((await cache.size(c.userId!) as Success<int>).value, 0);
+      repo.broken = false;
+      await c.download(asset);
+      expect(c.downloading(asset.id), isFalse);
+      expect(c.cached(asset), isTrue);
+      expect(await c.stopProjectTransfers('p'), isA<Success<void>>());
+    },
+  );
+  test('actual response stream reset clears controller bookkeeping and allows another download', () async {
+    final sessions = SessionCoordinator(MemoryStore());
+    await sessions.activate(session());
+    addTearDown(sessions.dispose);
+    final root = await Directory.systemTemp.createTemp(
+      'xji-controller-stream-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final transport = transport_fixture.BinaryTransport()
+      ..binary = true
+      ..bodyError = const SocketException('mid-body reset');
+    final api = ApiClient(
+      origin: 'https://api.example.test',
+      sessions: sessions,
+      dio: Dio()..httpClientAdapter = transport,
+    );
+    addTearDown(api.close);
+    final cache = FileModelCache(() async => root.path);
+    final c = ModelAssetsController(
+      HttpModelAssetRepository(api),
+      Files(),
+      Journal(),
+      cache,
+      sessions,
+    );
+    addTearDown(c.dispose);
+    final model = ModelAsset(
+      id: transport_fixture.id,
+      projectId: 'p',
+      fileName: 'a.ply',
+      format: 'PLY',
+      sizeBytes: 4,
+      version: 1,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    c.synchronize();
+    await c.download(model);
+    expect(c.error?.code, 'network');
+    expect(c.downloading(model.id), isFalse);
+    expect(c.downloadProgress.containsKey(model.id), isFalse);
+    expect(await root.list().length, 0);
+    transport.bodyError = null;
+    await c.download(model);
+    expect(c.cached(model), isTrue);
+    expect(c.downloading(model.id), isFalse);
+    expect(c.downloadProgress.containsKey(model.id), isFalse);
+    expect(await c.stopProjectTransfers('p'), isA<Success<void>>());
+  });
   test(
     'foreground refresh removes cache badge after private cache eviction',
     () async {

@@ -173,6 +173,13 @@ final class ApiClient {
       );
     } on DomainError catch (error) {
       return Failure(error);
+    } on SocketException {
+      // Response streams can emit IO errors after Dio returns the headers.
+      return const Failure(DomainError('network'));
+    } on HttpException {
+      return const Failure(DomainError('network'));
+    } on TlsException {
+      return const Failure(DomainError('network'));
     } on FileSystemException {
       return const Failure(DomainError('storage'));
     } on FormatException {
