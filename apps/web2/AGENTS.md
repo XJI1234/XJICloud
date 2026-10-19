@@ -46,7 +46,7 @@
 
 - **浅色壳 + 暗 3D 画布。** 纸白 surface、单一 accent `#3d6b8a`。不要把旧版 Twilight Amber 暗色壳抄回来。
 - 按钮只有 Primary / Ghost / Destructive。
-- 查看器 `/app/layer`：`NativeSplatViewport` + SparkControls；涂抹/标注/导出在 SuperSplat。
+- 查看器 `/app/layer`：`Native3DGSViewer` + 固定的 Native3DGS WebGPU SDK（preview.3），只读本机/工程模型；固定/自由、适配/重置/Y翻转、缩放/截图。上传/删除留在模型管理，编辑留在 SuperSplat。
 - 高级编辑 `/app/supersplat`：无云端模型也要能进；本地 PLY/SPZ 合法即可打开。
 - i18n 在 `src/app/i18n/locales/`；用户可见文案不要用 `—`。
 

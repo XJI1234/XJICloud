@@ -12,7 +12,7 @@ export type UnauthorizedHandler = {
 
 export type HttpClient = {
   request<T>(path: string, options?: RequestInit, responseType?: 'json' | 'blob'): Promise<T>
-  downloadBytes(path: string, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer>
+  downloadBytes(path: string, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal): Promise<ArrayBuffer>
   uploadBytes<T>(
     path: string,
     body: Blob | FormData,
@@ -72,14 +72,15 @@ export function createHttpClient(options: {
     return payload.data
   }
 
-  async function downloadBytes(path: string, onProgress?: (loaded: number, total: number) => void) {
+  async function downloadBytes(path: string, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal) {
+    signal?.throwIfAborted()
     const headers: HeadersInit = {}
     const token = options.tokenProvider.getToken()
     if (token) {
       headers.Authorization = `Bearer ${token}`
     }
 
-    const response = await fetchImpl(`${baseUrl}${path}`, { headers, cache: 'no-store' })
+    const response = await fetchImpl(`${baseUrl}${path}`, { headers, cache: 'no-store', signal })
     if (shouldLogoutOnStatus(response.status, token)) {
       options.unauthorized.notifyUnauthorized()
     }
@@ -91,23 +92,29 @@ export function createHttpClient(options: {
     const total = Number(response.headers.get('Content-Length') ?? 0)
     if (!response.body) {
       const buffer = await response.arrayBuffer()
+      signal?.throwIfAborted()
       onProgress?.(buffer.byteLength, total || buffer.byteLength)
+      signal?.throwIfAborted()
       return buffer
     }
 
     const reader = response.body.getReader()
     const chunks: Uint8Array[] = []
     let loaded = 0
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) {
-        break
+    try {
+      while (true) {
+        signal?.throwIfAborted()
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) {
+          chunks.push(value)
+          loaded += value.length
+          onProgress?.(loaded, total || loaded)
+        }
       }
-      if (value) {
-        chunks.push(value)
-        loaded += value.length
-        onProgress?.(loaded, total || loaded)
-      }
+      signal?.throwIfAborted()
+    } finally {
+      reader.releaseLock()
     }
 
     const merged = new Uint8Array(loaded)

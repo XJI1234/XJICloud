@@ -9,6 +9,19 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # Native3DGS: module MIME and real 404s; do not add site-wide COOP/COEP.
+    # Deploy the complete apps/web2/dist/gs-assets/ directory with this site.
+    location ^~ /gs-assets/ {
+        types {
+            application/javascript js mjs;
+            application/wasm wasm;
+            application/json json;
+            text/plain txt;
+        }
+        default_type application/octet-stream;
+        try_files $uri =404;
+    }
+
     location /supersplat/ {
         alias /var/www/xjicloud/dist/supersplat/;
         try_files $uri $uri/ /supersplat/index.html;

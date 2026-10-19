@@ -34,7 +34,7 @@ export interface ModelAssetRepository {
   downloadBytes(
     modelId: string,
     onProgress?: (loaded: number, total: number) => void,
-    options?: { cacheBust?: string | number; revision?: ModelCacheRevision },
+    options?: { cacheBust?: string | number; revision?: ModelCacheRevision; signal?: AbortSignal },
   ): Promise<Result<ArrayBuffer>>
   downloadVersionBytes(
     modelId: string,

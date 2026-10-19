@@ -1,557 +1,159 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { PhArrowArcLeft, PhArrowArcRight, PhArrowCounterClockwise, PhArrowsDownUp, PhCloud, PhFolderOpen, PhList, PhUploadSimple, PhX } from '@phosphor-icons/vue'
-import NativeSplatViewport from '@/features/viewer/presentation/components/NativeSplatViewport.vue'
+import Native3DGSViewer from '@/features/viewer/presentation/components/Native3DGSViewer.vue'
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
-import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import { useViewerStorage } from '@/features/viewer/presentation/composables/useViewerStorage'
+import type { StoredDefaultView, ViewerModelSummary } from '@/features/viewer/domain/entities/viewer-config.entity'
+import { DomainError } from '@/shared/domain-error'
 import { formatDomainError } from '@/presentation/errors'
 import AppButton from '@/presentation/components/AppButton.vue'
 import AppSheet from '@/presentation/components/AppSheet.vue'
-import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
-import { useWaitSession } from '@/presentation/composables/useWaitSession'
-import { createTransferRateTracker, formatTransferSpeed } from '@/shared/transfer-rate'
-import type { StoredDefaultView, ViewerModelSummary } from '@/features/viewer/domain/entities/viewer-config.entity'
-import type { Project } from '@/features/project/domain/entities/project.entity'
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const workspace = useProjectWorkspace()
-const modelsApi = useModelAssets()
 const viewer = useViewerStorage()
-const wait = useWaitSession()
-const { waitView } = wait
-
-const projectList = ref<Project[]>([])
-const activeProjectId = ref<string | null>(workspace.activeProjectId())
-
-const currentModelId = ref<string | null>(null)
 const currentFile = ref<File | null>(null)
+const activeFile = ref<File | null>(null)
+const activeModelId = ref<string | null>(null)
 const defaultView = ref<StoredDefaultView | null>(null)
-const uploadInputRef = ref<HTMLInputElement | null>(null)
-const localInputRef = ref<HTMLInputElement | null>(null)
-const resetViewToken = ref(0)
-const rotateClockwiseToken = ref(0)
-const rotateCounterclockwiseToken = ref(0)
-const flipYToken = ref(0)
-const menuOpen = ref(true)
-const modelSelectionVisible = ref(false)
-const modelCandidates = ref<ViewerModelSummary[]>([])
-const downloadById = ref<Record<string, true>>({})
-const modelInfo = ref<{ fileName: string; splatCount: number } | null>(null)
-const actionError = ref('')
-const statusState = ref<
-  | { type: 'i18n'; key: string; params?: Record<string, unknown> }
-  | { type: 'raw'; message: string }
->({ type: 'i18n', key: 'viewer.status.pickFile' })
+const error = ref<DomainError | null>(null)
+const download = ref<{ name: string; loaded: number; total: number } | null>(null)
+const pickerVisible = ref(false)
+const pickerLoading = ref(false)
+const candidates = ref<ViewerModelSummary[]>([])
+const pickerMessage = ref('')
+const sortedCandidates = computed(() => [...candidates.value].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)))
+let alive = true
+let selection = 0
+let pickerRequest = 0
+let controller: AbortController | null = null
+let candidateModel: { file: File; modelId: string } | null = null
 
-function setStatus(key: string, params?: Record<string, unknown>) {
-  statusState.value = params ? { type: 'i18n', key, params } : { type: 'i18n', key }
+function cancelLoad() {
+  ++selection
+  controller?.abort()
+  controller = null
+  download.value = null
+  currentFile.value = activeFile.value
+  candidateModel = null
+  error.value = null
 }
-
-function setRawStatus(message: string) {
-  statusState.value = { type: 'raw', message }
-}
-
-const statusMessage = computed(() => {
-  const state = statusState.value
-  if (state.type === 'raw') {
-    return state.message
-  }
-  return String(t(state.key, state.params as Record<string, unknown>))
-})
-
-const activeProjectName = computed(
-  () => projectList.value.find((project) => project.id === activeProjectId.value)?.name ?? t('viewer.noProjectSelected'),
-)
-
-const sortedCandidates = computed(() =>
-  [...modelCandidates.value].sort(
-    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
-  ),
-)
-
-async function loadSavedDefaultView(modelId: string) {
-  const [error, config] = await viewer.loadConfig(modelId)
-  if (error || !config) {
-    defaultView.value = null
-    return
-  }
-  defaultView.value = config.defaultView
-}
-
-function setCurrentModelSource(file: File, modelId: string | null = null) {
-  currentFile.value = file
-  currentModelId.value = modelId
-  modelInfo.value = null
+function openLocal(file: File) {
+  cancelLoad()
+  const [validationError, validated] = viewer.openLocal(file)
+  if (validationError || !validated) { error.value = validationError; return }
   defaultView.value = null
-  actionError.value = ''
-  setStatus('viewer.status.loadingFile', { name: file.name })
-  closeModelSelectionDialog()
-  if (modelId) {
-    void loadSavedDefaultView(modelId)
-  }
+  currentFile.value = validated
+  closePicker()
+}
+function loaded(file: File) {
+  if (file !== currentFile.value) return
+  activeFile.value = file
+  activeModelId.value = candidateModel?.file === file ? candidateModel.modelId : null
+  candidateModel = null
+}
+function closed() {
+  cancelLoad()
+  currentFile.value = null
+  activeFile.value = null
+  activeModelId.value = null
+  defaultView.value = null
+}
+function closePicker() { pickerVisible.value = false; ++pickerRequest; pickerLoading.value = false }
+
+async function openCloudPicker() {
+  const projectId = workspace.activeProjectId()
+  pickerVisible.value = true
+  candidates.value = []
+  pickerMessage.value = ''
+  const request = ++pickerRequest
+  if (!projectId) { pickerMessage.value = t('nativeViewer.noProject'); return }
+  pickerLoading.value = true
+  const [listError, models] = await viewer.listModels(projectId)
+  if (!alive || request !== pickerRequest) return
+  pickerLoading.value = false
+  if (listError) { pickerMessage.value = formatDomainError(t, listError); return }
+  candidates.value = models ?? []
+  if (!candidates.value.length) pickerMessage.value = t('nativeViewer.noCloudModels')
 }
 
-async function loadCloudModel(model: ViewerModelSummary) {
-  if (!activeProjectId.value || downloadById.value[model.id]) {
-    return
-  }
-
-  modelSelectionVisible.value = false
+async function loadCloud(model: ViewerModelSummary) {
+  cancelLoad()
+  const request = selection
+  const abort = new AbortController()
+  controller = abort
+  closePicker()
+  defaultView.value = null
   viewer.rememberMeta(model.id, model.fileName)
-  const tracker = createTransferRateTracker()
-  downloadById.value = {
-    ...downloadById.value,
-    [model.id]: true,
-  }
-  wait.showBusy(t('wait.downloading'))
-
+  download.value = { name: model.fileName, loaded: 0, total: model.sizeBytes }
   try {
-    setStatus('viewer.status.downloading', { name: model.fileName })
-    const [error, loaded] = await viewer.loadBytes(model.id, (loadedBytes, total) => {
-      const percent = total > 0 ? Math.min(99, Math.round((loadedBytes / total) * 100)) : 0
-      const rate = tracker.push(loadedBytes, Date.now())
-      wait.showProgress(
-        t('wait.downloading'),
-        percent,
-        rate != null ? formatTransferSpeed(rate) : waitView.value.speed,
-      )
-      if (total > 0) {
-        setStatus('viewer.status.downloadingProgress', {
-          name: model.fileName,
-          percent,
-        })
-      }
+    // Old camera metadata is optional: never hold a downloaded model behind this request.
+    void viewer.loadConfig(model.id, { signal: abort.signal }).then(([, config]) => {
+      if (alive && request === selection && !abort.signal.aborted) defaultView.value = config?.defaultView ?? null
     })
-    if (error || !loaded) {
-      actionError.value = formatDomainError(t, error)
-      setRawStatus(formatDomainError(t, error))
-      wait.hide()
-      return
-    }
-    wait.showBusy(t('wait.loading'))
-    setCurrentModelSource(loaded.file, loaded.modelId)
-  } catch (error) {
-    actionError.value = formatDomainError(t, error)
-    setRawStatus(formatDomainError(t, error))
-    wait.hide()
+    const [loadError, data] = await viewer.loadBytes(model.id, (bytes, total) => {
+      if (alive && request === selection) download.value = { name: model.fileName, loaded: bytes, total }
+    }, { signal: abort.signal })
+
+    if (!alive || request !== selection || abort.signal.aborted) return
+    if (loadError || !data) { error.value = loadError ?? new DomainError('VIEWER_LOAD_FAILED'); return }
+    candidateModel = { file: data.file, modelId: data.modelId }
+    currentFile.value = data.file
+  } catch {
+    if (alive && request === selection && !abort.signal.aborted) error.value = new DomainError('VIEWER_LOAD_FAILED')
   } finally {
-    const next = { ...downloadById.value }
-    delete next[model.id]
-    downloadById.value = next
+    if (alive && request === selection) download.value = null
   }
 }
 
-function closeModelSelectionDialog() {
-  modelSelectionVisible.value = false
+function modelSize(bytes: number) {
+  return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB`
+    : bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB`
+      : bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`
+}
+function updatedAt(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale.value)
 }
 
-async function deleteProjectModel(model: ViewerModelSummary, event: Event) {
-  event.stopPropagation()
-  event.preventDefault()
-  if (!window.confirm(t('viewer.deleteConfirm'))) {
-    return
-  }
-  const [error] = await modelsApi.remove(model.id)
-  if (error) {
-    actionError.value = formatDomainError(t, error)
-    setRawStatus(formatDomainError(t, error))
-    return
-  }
-  modelCandidates.value = modelCandidates.value.filter((item) => item.id !== model.id)
-  if (currentModelId.value === model.id) {
-    currentFile.value = null
-    currentModelId.value = null
-    modelInfo.value = null
-    defaultView.value = null
-    setStatus('viewer.status.pickFile')
-  }
-  actionError.value = ''
-}
-
-function formatModelSize(sizeBytes: number) {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`
-  }
-  if (sizeBytes < 1024 * 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KB`
-  }
-  if (sizeBytes < 1024 * 1024 * 1024) {
-    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-  return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
-function formatModelUpdatedAt(updatedAt: string) {
-  const date = new Date(updatedAt)
-  if (Number.isNaN(date.getTime())) {
-    return updatedAt
-  }
-  return date.toLocaleString(locale.value)
-}
-
-async function openFilePicker() {
-  actionError.value = ''
-
-  if (!activeProjectId.value) {
-    actionError.value = 'selectProjectFirst'
-    setStatus('viewer.status.selectProjectFirst')
-    return
-  }
-
-  try {
-    const [error, models] = await viewer.listModels(activeProjectId.value)
-    if (error) {
-      actionError.value = formatDomainError(t, error)
-      setRawStatus(formatDomainError(t, error))
-      return
-    }
-    if (!models || models.length === 0) {
-      actionError.value = 'noModels'
-      setStatus('viewer.status.noModels')
-      return
-    }
-
-    modelCandidates.value = models
-    modelSelectionVisible.value = true
-    if (models.length > 1) {
-      setStatus('viewer.status.selectModelMulti', { count: models.length })
-    } else {
-      setStatus('viewer.status.selectModelPrompt')
-    }
-  } catch (error) {
-    actionError.value = formatDomainError(t, error)
-    setRawStatus(formatDomainError(t, error))
-  }
-}
-
-function triggerLocalOpen() {
-  actionError.value = ''
-  localInputRef.value?.click()
-}
-
-function handleLocalFile(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) {
-    return
-  }
-
-  const [error, localFile] = viewer.openLocal(file)
-  if (error || !localFile) {
-    actionError.value = formatDomainError(t, error)
-    setRawStatus(formatDomainError(t, error))
-    return
-  }
-
-  setCurrentModelSource(localFile, null)
-  wait.showBusy(t('wait.loading'))
-}
-
-function triggerUpload() {
-  if (!activeProjectId.value) {
-    actionError.value = 'selectProjectFirst'
-    setStatus('viewer.status.selectProjectFirst')
-    return
-  }
-
-  uploadInputRef.value?.click()
-}
-
-async function handleUpload(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-
-  if (!file || !activeProjectId.value) {
-    return
-  }
-
-  try {
-    setStatus('viewer.status.uploading', { name: file.name })
-    wait.showBusy(t('wait.uploading'))
-    const [error, model] = await modelsApi.upload({
-      projectId: activeProjectId.value,
-      file,
-      onProgress: ({ loaded, total }) => {
-        if (total > 0) {
-          const percent = Math.round((loaded / total) * 100)
-          setStatus('viewer.status.uploadingProgress', {
-            name: file.name,
-            percent,
-          })
-          wait.showProgress(t('wait.uploading'), percent)
-        }
-      },
-    })
-    if (error || !model) {
-      actionError.value = formatDomainError(t, error)
-      setRawStatus(formatDomainError(t, error))
-      wait.hide()
-      return
-    }
-    viewer.rememberMeta(model.id, model.fileName)
-    wait.showBusy(t('wait.loading'))
-    setCurrentModelSource(file, model.id)
-    setStatus('viewer.status.uploadDoneLoading', { name: file.name })
-  } catch (error) {
-    actionError.value = formatDomainError(t, error)
-    setRawStatus(formatDomainError(t, error))
-    wait.hide()
-  }
-}
-
-function requestResetView() {
-  if (!modelInfo.value) {
-    return
-  }
-
-  actionError.value = ''
-  setStatus('viewer.status.resettingCamera')
-  resetViewToken.value += 1
-}
-
-function requestRotateView(direction: 'clockwise' | 'counterclockwise') {
-  if (!modelInfo.value) {
-    return
-  }
-  actionError.value = ''
-  setStatus(direction === 'clockwise' ? 'viewer.status.rotatingCw' : 'viewer.status.rotatingCcw')
-  if (direction === 'clockwise') {
-    rotateClockwiseToken.value += 1
-    return
-  }
-  rotateCounterclockwiseToken.value += 1
-}
-
-function requestFlipY() {
-  if (!modelInfo.value) {
-    return
-  }
-  actionError.value = ''
-  setStatus('viewer.status.flippingY')
-  flipYToken.value += 1
-}
-
-function handleLoaded(info: { fileName: string; splatCount: number; view: 'default' | 'framed' }) {
-  modelInfo.value = { fileName: info.fileName, splatCount: info.splatCount }
-  actionError.value = ''
-  wait.hide()
-  if (info.view === 'default') {
-    setStatus('viewer.status.appliedDefaultView')
-    return
-  }
-  setStatus('viewer.status.modelLoaded', { name: info.fileName })
-}
-
-function handleFailed(message: string) {
-  modelInfo.value = null
-  wait.hide()
-  actionError.value = message === 'load-failed' ? String(t('viewer.status.loadModelFailed')) : message
-  setRawStatus(actionError.value)
-}
-
-function handleStatus(code: string) {
-  if (actionError.value) {
-    return
-  }
-  if (code === 'applied-default') {
-    setStatus('viewer.status.appliedDefaultView')
-    return
-  }
-  if (code === 'reset-default') {
-    setStatus('viewer.status.resetToDefault')
-    return
-  }
-  if (code === 'reset-framed') {
-    setStatus('viewer.status.resetToFramed')
-    return
-  }
-  if (code === 'rotation-cw-done') {
-    setStatus('viewer.status.rotationCwDone')
-    return
-  }
-  if (code === 'rotation-ccw-done') {
-    setStatus('viewer.status.rotationCcwDone')
-    return
-  }
-  if (code === 'flip-y') {
-    setStatus('viewer.status.flippedY')
-    return
-  }
-  if (code === 'loading') {
-    if (currentFile.value) {
-      setStatus('viewer.status.loadingFile', { name: currentFile.value.name })
-    }
-  }
-}
-
-onMounted(() => {
-  workspace.load().then(async ([error, data]) => {
-    if (error) {
-      setStatus('viewer.status.projectsLoadFailed')
-      return
-    }
-    projectList.value = data ?? []
-    activeProjectId.value = workspace.activeProjectId()
-    const queryModelId = typeof route.query.modelId === 'string' ? route.query.modelId : ''
-    if (queryModelId && activeProjectId.value) {
-      const [listError, listed] = await viewer.listModels(activeProjectId.value)
-      if (listError || !listed) {
-        actionError.value = formatDomainError(t, listError)
-        setRawStatus(formatDomainError(t, listError))
-        return
-      }
-      const match = listed.find((item) => item.id === queryModelId)
-      if (match) {
-        await loadCloudModel(match)
-      }
-    }
-  })
-})
+watch(() => route.query.modelId, async (modelId) => {
+  // A route change is a new selection, including removal of modelId.
+  cancelLoad()
+  const request = ++pickerRequest
+  const routeSelection = selection
+  if (typeof modelId !== 'string' || !modelId) return
+  const projectId = workspace.activeProjectId()
+  if (!projectId) { error.value = new DomainError('MODEL_PROJECT_REQUIRED'); return }
+  const [listError, models] = await viewer.listModels(projectId)
+  if (!alive || request !== pickerRequest || routeSelection !== selection) return
+  if (listError) { error.value = listError; return }
+  const model = models?.find((item) => item.id === modelId)
+  if (model) await loadCloud(model)
+  else error.value = new DomainError('VIEWER_LOAD_FAILED')
+}, { immediate: true })
+onBeforeUnmount(() => { alive = false; ++pickerRequest; cancelLoad() })
 </script>
 
 <template>
   <main class="app-shell layer-viewer-root">
-    <section class="viewer-stage">
-      <div class="viewport-frame">
-        <NativeSplatViewport
-          :file="currentFile"
-          :default-view="defaultView"
-          :reset-view-token="resetViewToken"
-          :rotate-clockwise-token="rotateClockwiseToken"
-          :rotate-counterclockwise-token="rotateCounterclockwiseToken"
-          :flip-y-token="flipYToken"
-          @loaded="handleLoaded"
-          @failed="handleFailed"
-          @status="handleStatus"
-        />
-      </div>
-    </section>
-
-    <button
-      v-if="!menuOpen"
-      class="viewer-menu-fab"
-      type="button"
-      :aria-label="t('viewer.menu')"
-      @click="menuOpen = true"
-    >
-      <PhList :size="20" weight="regular" />
-    </button>
-
-    <aside v-else class="viewer-inspector">
-      <div class="viewer-inspector__top">
-        <h1 class="model-title">{{ modelInfo?.fileName || t('viewer.waitingModel') }}</h1>
-        <button class="viewer-inspector__collapse" type="button" :aria-label="t('viewer.collapseMenu')" @click="menuOpen = false">
-          <PhX :size="16" weight="regular" />
+    <Native3DGSViewer :file="currentFile" :default-view="defaultView" :download="download" :error="error" cloud
+      @open-file="openLocal" @open-cloud="openCloudPicker" @cancel="cancelLoad" @closed="closed" @loaded="loaded" />
+    <AppSheet :visible="pickerVisible" :title="t('viewer.selectModelTitle')" @close="closePicker">
+      <p class="model-picker-subtitle">{{ t('nativeViewer.pickerHint') }}</p>
+      <p v-if="pickerLoading" role="status">{{ t('viewer.downloading') }}</p>
+      <p v-else-if="pickerMessage" role="status">{{ pickerMessage }}</p>
+      <div v-else class="model-choice-list">
+        <button v-for="model in sortedCandidates" :key="model.id" class="model-choice-card" :class="{ 'is-current': model.id === activeModelId }" type="button" @click="loadCloud(model)">
+          <span class="model-choice-name">{{ model.fileName }}</span>
+          <span class="model-choice-meta">{{ model.format }} · {{ modelSize(model.sizeBytes) }}</span>
+          <span v-if="model.updatedAt" class="model-choice-updated">{{ t('viewer.updatedAt', { date: updatedAt(model.updatedAt) }) }}</span>
+          <span v-if="model.id === activeModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
         </button>
       </div>
-      <p class="info-project-context">{{ t('viewer.currentProject', { name: activeProjectName }) }}</p>
-      <p v-if="modelInfo" class="viewer-meta">{{ t('viewer.splatCount', { count: modelInfo.splatCount.toLocaleString(locale) }) }}</p>
-      <p v-else class="viewer-hint">{{ t('viewer.emptyHint') }}</p>
-
-      <div class="viewer-actions">
-        <AppButton variant="primary" compact @click="triggerLocalOpen">
-          <PhFolderOpen :size="16" weight="regular" />
-          {{ t('viewer.openLocal') }}
-        </AppButton>
-        <AppButton compact @click="openFilePicker">
-          <PhCloud :size="16" weight="regular" />
-          {{ t('viewer.selectModel') }}
-        </AppButton>
-        <AppButton compact @click="triggerUpload">
-          <PhUploadSimple :size="16" weight="regular" />
-          {{ t('viewer.uploadModel') }}
-        </AppButton>
-        <AppButton compact :disabled="!modelInfo" @click="requestResetView">
-          <PhArrowCounterClockwise :size="16" weight="regular" />
-          {{ t('viewer.resetView') }}
-        </AppButton>
-        <div class="viewer-orient-row">
-          <AppButton compact :disabled="!modelInfo" @click="requestRotateView('counterclockwise')">
-            <PhArrowArcLeft :size="16" weight="regular" />
-            {{ t('viewer.counterclockwise') }}
-          </AppButton>
-          <AppButton compact :disabled="!modelInfo" @click="requestRotateView('clockwise')">
-            <PhArrowArcRight :size="16" weight="regular" />
-            {{ t('viewer.clockwise') }}
-          </AppButton>
-        </div>
-        <AppButton compact :disabled="!modelInfo" @click="requestFlipY">
-          <PhArrowsDownUp :size="16" weight="regular" />
-          {{ t('viewer.flipY') }}
-        </AppButton>
-      </div>
-
-      <p class="viewer-status" :class="{ error: Boolean(actionError) }">{{ statusMessage }}</p>
-    </aside>
-
-    <input
-      ref="localInputRef"
-      class="visually-hidden"
-      type="file"
-      accept=".ply,.spz"
-      @change="handleLocalFile"
-    />
-    <input
-      ref="uploadInputRef"
-      class="visually-hidden"
-      type="file"
-      accept=".ply,.spz"
-      @change="handleUpload"
-    />
-
-    <AppSheet
-      :visible="modelSelectionVisible"
-      :title="t('viewer.selectModelTitle')"
-      @close="closeModelSelectionDialog"
-    >
-      <p class="model-picker-subtitle">{{ t('viewer.modelCountHint', { count: modelCandidates.length }) }}</p>
-      <div class="model-choice-list">
-        <div
-          v-for="candidate in sortedCandidates"
-          :key="candidate.id"
-          class="model-choice-row"
-        >
-          <button
-            class="model-choice-card"
-            :class="{ 'is-current': candidate.id === currentModelId }"
-            type="button"
-            @click="loadCloudModel(candidate)"
-          >
-            <span class="model-choice-name">{{ candidate.fileName }}</span>
-            <span class="model-choice-meta">
-              {{ candidate.format || t('viewer.unknownFormat') }}
-              <template v-if="candidate.sizeBytes"> · {{ formatModelSize(candidate.sizeBytes) }}</template>
-            </span>
-            <span v-if="candidate.updatedAt" class="model-choice-updated">
-              {{ t('viewer.updatedAt', { date: formatModelUpdatedAt(candidate.updatedAt) }) }}
-            </span>
-            <span v-if="downloadById[candidate.id]" class="model-choice-badge">{{ t('viewer.downloading') }}</span>
-            <span v-else-if="candidate.id === currentModelId" class="model-choice-badge">{{ t('viewer.currentlyLoaded') }}</span>
-          </button>
-          <AppButton compact variant="destructive" @click="deleteProjectModel(candidate, $event)">
-            {{ t('viewer.deleteModel') }}
-          </AppButton>
-        </div>
-      </div>
-      <template #footer>
-        <AppButton @click="closeModelSelectionDialog">{{ t('common.cancel') }}</AppButton>
-      </template>
+      <template #footer><AppButton @click="closePicker">{{ t('common.close') }}</AppButton></template>
     </AppSheet>
-    <WaitOverlay
-      :visible="waitView.visible"
-      :phase="waitView.phase"
-      :title="waitView.title"
-      :percent="waitView.percent"
-      :speed="waitView.speed"
-      :complete="waitView.complete"
-      :await-confirm="waitView.awaitConfirm"
-      @dismiss="wait.hide()"
-    />
   </main>
 </template>
