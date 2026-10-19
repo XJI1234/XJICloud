@@ -41,6 +41,7 @@ Future<UploadChoice?> showUploadChooser({required BuildContext context}) =>
 
 /// Scrollable keyboard-safe forms: bottom sheet on compact windows, dialog
 /// above 840dp. The caller owns form state and any unsaved-draft pop guard.
+/// Both modes cover the root navigator, including retained branch tab chrome.
 Future<T?> showAppSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -61,6 +62,7 @@ Future<T?> showAppSheet<T>({
   }
   return showModalBottomSheet<T>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     sheetAnimationStyle: reduceMotion

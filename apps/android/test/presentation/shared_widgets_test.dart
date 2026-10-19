@@ -1,11 +1,98 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xjicloud_mobile/app/app.dart';
+import 'package:xjicloud_mobile/app/router.dart';
 import 'package:xjicloud_mobile/presentation/theme/app_theme.dart';
 import 'package:xjicloud_mobile/presentation/widgets/app_button.dart';
 import 'package:xjicloud_mobile/presentation/widgets/app_sheet.dart';
 import 'package:xjicloud_mobile/shared/l10n/app_localizations.dart';
 
 void main() {
+  for (final width in [360.0, 1280.0]) {
+    testWidgets(
+      'destination form at $width blocks tab changes until dismissed',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(width, 800);
+        addTearDown(tester.view.reset);
+        String? result = 'pending';
+        var guardDraft = true;
+        final router = createAppRouter(
+          initialLocation: '/projects',
+          routes: [
+            createMobileShellRoute(
+              destinations: ShellDestinations(
+                home: (_, _) => const Text('Home fixture'),
+                projects: (_, _) => Builder(
+                  builder: (destinationContext) => Center(
+                    child: TextButton(
+                      onPressed: () async {
+                        result = 'pending';
+                        result = await showAppSheet<String>(
+                          context: destinationContext,
+                          builder: (overlayContext) => PopScope(
+                            // A form's own draft guard keeps a barrier tap from
+                            // dismissing it. Root modality must also block tab taps.
+                            canPop: !guardDraft,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Draft form'),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(overlayContext).pop('saved'),
+                                  child: const Text('Save draft'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Open draft'),
+                    ),
+                  ),
+                ),
+                viewer: (_, _) => const Text('Viewer fixture'),
+                account: (_, _) => const Text('Account fixture'),
+              ),
+              onUpload: (_) {},
+            ),
+          ],
+        );
+        addTearDown(router.dispose);
+        await tester.pumpWidget(
+          XjiCloudApp(router: router, locale: const Locale('zh')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Open draft'));
+        await tester.pumpAndSettle();
+        expect(find.text('Draft form'), findsOneWidget);
+        // The real root modal should intercept a tap aimed at retained shell
+        // chrome. Deliberately tap the covered label without a missed-hit warning.
+        await tester.tap(find.text('我的'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(router.routeInformationProvider.value.uri.path, '/projects');
+        expect(find.text('Draft form'), findsOneWidget);
+        expect(result, 'pending');
+
+        await tester.tap(find.text('Save draft'));
+        await tester.pumpAndSettle();
+        expect(result, 'saved');
+        expect(find.text('Draft form'), findsNothing);
+        expect(router.routeInformationProvider.value.uri.path, '/projects');
+        guardDraft = false;
+        await tester.tap(find.text('Open draft'));
+        await tester.pumpAndSettle();
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(result, isNull);
+        expect(find.text('Draft form'), findsNothing);
+        expect(router.routeInformationProvider.value.uri.path, '/projects');
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'button can become loading while held without a build lifecycle error',
     (tester) async {
