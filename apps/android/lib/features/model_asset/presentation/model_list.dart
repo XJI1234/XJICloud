@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../shared/l10n/app_localizations.dart';
 import '../../../shared/presentation/error_text.dart';
 import '../domain/upload_checkpoint_port.dart';
+import '../domain/model_asset.dart';
 import 'model_assets_controller.dart';
 
 class ModelList extends StatefulWidget {
@@ -11,9 +12,11 @@ class ModelList extends StatefulWidget {
     super.key,
     required this.controller,
     required this.projectId,
+    this.onView,
   });
   final ModelAssetsController controller;
   final String projectId;
+  final void Function(ModelAsset)? onView;
   @override
   State<ModelList> createState() => _ModelListState();
 }
@@ -130,6 +133,11 @@ class _ModelListState extends State<ModelList> {
                       spacing: 12,
                       runSpacing: 8,
                       children: [
+                        if (widget.onView != null)
+                          OutlinedButton(
+                            onPressed: () => widget.onView!(model),
+                            child: Text(l.viewerOpen),
+                          ),
                         if (c.downloading(model.id))
                           TextButton(
                             onPressed: () => c.cancelDownload(model.id),

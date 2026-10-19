@@ -7,6 +7,17 @@ import '../../../shared/domain/domain_error.dart';
 import '../../../shared/domain/cancellation.dart';
 import '../domain/training_output_port.dart';
 
+final class LeasedTrainingOutput {
+  LeasedTrainingOutput(this.path, this._release);
+  final String path;
+  Future<void> Function()? _release;
+  Future<void> release() async {
+    final action = _release;
+    _release = null;
+    await action?.call();
+  }
+}
+
 final class FileTrainingOutputs implements TrainingOutputPort {
   FileTrainingOutputs(this.directory, this.fetch, {this.beforeUse});
   final Future<void> Function()? beforeUse;
@@ -32,6 +43,39 @@ final class FileTrainingOutputs implements TrainingOutputPort {
   )
   fetch;
   static const maxBytes = 2147483648;
+  final _leases = <String, int>{};
+  final _revoked = <String>{};
+  Future<LeasedTrainingOutput> acquire(
+    TrainingOutputRef output,
+    String userId,
+  ) async {
+    if (_revoked.contains(output.id) ||
+        output.userId != userId ||
+        !identical(_issued[output.id], output)) {
+      throw const DomainError('forbidden');
+    }
+    _leases.update(output.id, (n) => n + 1, ifAbsent: () => 1);
+    Future<void> release() async {
+      final count = (_leases[output.id] ?? 1) - 1;
+      if (count > 0) {
+        _leases[output.id] = count;
+        return;
+      }
+      _leases.remove(output.id);
+      if (_revoked.contains(output.id)) {
+        final result = await remove(output);
+        if (result case Failure<void>(:final error)) throw error;
+      }
+    }
+
+    try {
+      return LeasedTrainingOutput(await resolve(output, userId), release);
+    } catch (_) {
+      await release();
+      rethrow;
+    }
+  }
+
   final _issued = <String, TrainingOutputRef>{};
   Future<File> _file(TrainingOutputRef ref) async {
     await beforeUse?.call();
@@ -115,7 +159,9 @@ final class FileTrainingOutputs implements TrainingOutputPort {
 
   /// Task7 may resolve only an issued current-account identity inside infrastructure.
   Future<String> resolve(TrainingOutputRef output, String userId) async {
-    if (output.userId != userId || !identical(_issued[output.id], output)) {
+    if (_revoked.contains(output.id) ||
+        output.userId != userId ||
+        !identical(_issued[output.id], output)) {
       throw const DomainError('forbidden');
     }
     final file = await _file(output);
@@ -130,10 +176,13 @@ final class FileTrainingOutputs implements TrainingOutputPort {
     if (!identical(_issued[output.id], output)) {
       return const Failure(DomainError('forbidden'));
     }
+    _revoked.add(output.id);
+    if ((_leases[output.id] ?? 0) > 0) return const Success(null);
     try {
       final file = await _file(output);
       if (await file.exists()) await file.delete();
       _issued.remove(output.id);
+      _revoked.remove(output.id);
       return const Success(null);
     } on FileSystemException {
       return const Failure(DomainError('storage'));

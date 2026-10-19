@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../shared/l10n/app_localizations.dart';
 import '../../../shared/presentation/error_text.dart';
 import '../domain/training_job.dart';
+import '../domain/training_output_port.dart';
 import '../domain/job_policy.dart';
 import 'upload_controller.dart';
 
@@ -47,11 +48,13 @@ class TrainingJobPanel extends StatefulWidget {
     required this.controller,
     required this.projectId,
     this.onUpload,
+    this.onViewOutput,
     this.summary = false,
   });
   final UploadController controller;
   final String projectId;
   final VoidCallback? onUpload;
+  final void Function(TrainingOutputRef)? onViewOutput;
   final bool summary;
   @override
   State<TrainingJobPanel> createState() => _TrainingJobPanelState();
@@ -232,10 +235,17 @@ class _TrainingJobPanelState extends State<TrainingJobPanel> {
                       ),
                     if (c.downloading(job.id))
                       Text('${c.outputBytes[job.id] ?? 0} B'),
-                    if (c.outputFor(job.id) case final output?)
+                    if (c.outputFor(job.id) case final output?) ...[
+                      if (widget.onViewOutput != null)
+                        OutlinedButton(
+                          onPressed: () => widget.onViewOutput!(output),
+                          child: Text(l.viewerOutput),
+                        ),
+                      if (widget.onViewOutput != null) Text(l.viewerOutputNote),
                       Text(
                         '${l.outputDownloaded}: ${output.fileName} (${output.sizeBytes} B)',
                       ),
+                    ],
                   ],
                 ),
               ),

@@ -1,3 +1,10 @@
+import 'dart:async';
+
+import '../presentation/shell/mobile_shell.dart';
+import '../features/viewer/presentation/viewer_page.dart';
+import '../features/viewer/domain/model_source.dart';
+import '../features/model_asset/domain/model_asset.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,6 +32,11 @@ String controlledTarget(String? target) {
   if (target == '/account' ||
       target == '/account/cache' ||
       target == '/home' ||
+      target == '/viewer' ||
+      target != null &&
+          RegExp(
+            r'^/viewer\?projectId=[0-9a-fA-F-]{36}&modelId=[0-9a-fA-F-]{36}$',
+          ).hasMatch(target) ||
       target == '/projects' ||
       target != null &&
           RegExp(
@@ -90,82 +102,219 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
               _AuthRoute(container: container, onToggleLocale: toggleLocale),
         ),
         if (container.workspace != null)
-          ShellRoute(
-            builder: (context, state, child) => _WorkspaceNavigation(
-              location: state.uri.path,
-              onUpload:
-                  container.modelAssets == null && container.training == null
-                  ? null
-                  : () => showUpload(context),
-              child: child,
-            ),
-            routes: [
-              GoRoute(
-                path: '/home',
-                builder: (context, state) {
-                  final workspace = container.workspace!;
-                  return ListenableBuilder(
-                    listenable: workspace,
-                    builder: (context, _) => HomePage(
-                      viewModel: workspace.home,
-                      onCreate: () => showProjectEditor(context, workspace),
-                      onRetry: workspace.refresh,
-                      trainingSectionBuilder: container.training == null
-                          ? null
-                          : (id) => TrainingJobPanel(
-                              controller: container.training!,
-                              projectId: id,
-                              summary: true,
-                              onUpload: () =>
-                                  showDatasetUpload(context, projectId: id),
-                            ),
-                      onOpen: (id) async {
-                        final opened = await workspace.openProject(id);
-                        if (opened && context.mounted) {
-                          workspace.select(id);
-                          context.go('/projects/$id');
-                        }
-                      },
-                    ),
-                  );
-                },
-              ),
-              GoRoute(
-                path: '/projects',
-                builder: (context, state) => ProjectListPage(
-                  controller: container.workspace!,
-                  modelSectionBuilder: modelSectionBuilder,
-                ),
-                routes: [
-                  GoRoute(
-                    path: ':id',
-                    builder: (context, state) => ProjectListPage(
-                      controller: container.workspace!,
-                      projectId: state.pathParameters['id'],
-                      modelSectionBuilder: modelSectionBuilder,
-                    ),
+          workspaceShell([
+            GoRoute(
+              path: '/home',
+              builder: (context, state) {
+                final workspace = container.workspace!;
+                return ListenableBuilder(
+                  listenable: workspace,
+                  builder: (context, _) => HomePage(
+                    viewModel: workspace.home,
+                    onCreate: () => showProjectEditor(context, workspace),
+                    onOpenLocal: container.viewer == null
+                        ? null
+                        : () {
+                            container.viewer!.open(const LocalModelSource());
+                            context.go('/viewer');
+                          },
+                    onRetry: workspace.refresh,
+                    trainingSectionBuilder: container.training == null
+                        ? null
+                        : (id) => TrainingJobPanel(
+                            controller: container.training!,
+                            projectId: id,
+                            summary: true,
+                            onUpload: () =>
+                                showDatasetUpload(context, projectId: id),
+                          ),
+                    onOpen: (id) async {
+                      final opened = await workspace.openProject(id);
+                      if (opened && context.mounted) {
+                        workspace.select(id);
+                        context.go('/projects/$id');
+                      }
+                    },
                   ),
-                ],
+                );
+              },
+            ),
+            GoRoute(
+              path: '/projects',
+              builder: (context, state) => ProjectListPage(
+                controller: container.workspace!,
+                modelSectionBuilder: modelSectionBuilder,
               ),
-              GoRoute(
-                path: '/account',
-                builder: accountPage,
-                routes: [
-                  if (container.modelAssets != null)
-                    GoRoute(
-                      path: 'cache',
-                      builder: (context, state) =>
-                          CachePage(controller: container.modelAssets!),
-                    ),
-                ],
-              ),
-            ],
-          ),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (context, state) => ProjectListPage(
+                    controller: container.workspace!,
+                    projectId: state.pathParameters['id'],
+                    modelSectionBuilder: modelSectionBuilder,
+                  ),
+                ),
+              ],
+            ),
+            GoRoute(
+              path: '/account',
+              builder: accountPage,
+              routes: [
+                if (container.modelAssets != null)
+                  GoRoute(
+                    path: 'cache',
+                    builder: (context, state) =>
+                        CachePage(controller: container.modelAssets!),
+                  ),
+              ],
+            ),
+          ]),
         if (container.workspace == null)
           GoRoute(path: '/account', builder: accountPage),
       ],
     );
     initialize();
+  }
+
+  String? lastViewerTarget;
+  RouteBase workspaceShell(List<RouteBase> routes) {
+    final viewer = container.viewer;
+    if (viewer == null) {
+      return ShellRoute(
+        builder: (context, state, child) => _WorkspaceNavigation(
+          location: state.uri.path,
+          onUpload: container.modelAssets == null && container.training == null
+              ? null
+              : () => showUpload(context),
+          child: child,
+        ),
+        routes: routes,
+      );
+    }
+    return StatefulShellRoute.indexedStack(
+      builder: (context, state, shell) {
+        final visible = shell.currentIndex == 2;
+        if (!visible) lastViewerTarget = null;
+        if (viewer.visible != visible) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) unawaited(viewer.setVisible(visible));
+          });
+        }
+        return ListenableBuilder(
+          listenable: viewer,
+          builder: (context, _) => MobileShell(
+            navigationShell: shell,
+            onUpload: () => showUpload(context),
+            hideNavigation: visible && viewer.fullscreen,
+            onBeforeSwitch: () => viewer.setFullscreen(false),
+          ),
+        );
+      },
+      branches: [
+        StatefulShellBranch(routes: [routes[0]]),
+        StatefulShellBranch(routes: [routes[1]]),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/viewer',
+              builder: (context, state) {
+                final project = state.uri.queryParameters['projectId'],
+                    model = state.uri.queryParameters['modelId'];
+                final target = '${container.sessions.generation}:${state.uri}';
+                if (project != null &&
+                    model != null &&
+                    target != lastViewerTarget) {
+                  lastViewerTarget = target;
+                  WidgetsBinding.instance.addPostFrameCallback((_) async {
+                    final generation = container.sessions.generation;
+                    await container.modelAssets?.refresh(project);
+                    if (!mounted ||
+                        generation != container.sessions.generation ||
+                        target != lastViewerTarget) {
+                      return;
+                    }
+                    final models =
+                        container.modelAssets?.modelsFor(project) ??
+                        <ModelAsset>[];
+                    final matches = models.where((asset) => asset.id == model);
+                    if (matches.isNotEmpty) {
+                      await viewer.open(CloudModelSource(matches.first));
+                    } else {
+                      viewer.reportError(
+                        const DomainError('model_unavailable'),
+                      );
+                    }
+                  });
+                }
+                return ViewerPage(
+                  controller: viewer,
+                  surfaceBuilder: container.viewerSurface!,
+                  onChooseCloud: () => showViewerModels(context),
+                );
+              },
+            ),
+          ],
+        ),
+        StatefulShellBranch(routes: [routes[2]]),
+      ],
+    );
+  }
+
+  void openCloud(BuildContext context, ModelAsset model) {
+    final uri = '/viewer?projectId=${model.projectId}&modelId=${model.id}';
+    lastViewerTarget = '${container.sessions.generation}:$uri';
+    unawaited(container.viewer!.open(CloudModelSource(model)));
+    context.go(uri);
+  }
+
+  Future<void> showViewerModels(BuildContext context) async {
+    final id = container.workspace?.activeProjectId,
+        models = container.modelAssets;
+    if (id == null || models == null) {
+      context.go('/projects');
+      return;
+    }
+    final generation = container.sessions.generation;
+    unawaited(models.refresh(id));
+    final selected = await sessionSheet<ModelAsset>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (context) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .75,
+        ),
+        child: ListenableBuilder(
+          listenable: models,
+          builder: (context, _) => SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(AppLocalizations.of(context).viewerChooseCloud),
+                if (models.loading(id))
+                  Text(AppLocalizations.of(context).loading),
+                if (models.listError(id) case final error?)
+                  Text(errorText(AppLocalizations.of(context), error)),
+                if (!models.loading(id) && models.modelsFor(id).isEmpty)
+                  Text(AppLocalizations.of(context).modelEmpty),
+                for (final model in models.modelsFor(id))
+                  ListTile(
+                    title: Text(model.fileName),
+                    subtitle: Text('${model.format} · ${model.sizeBytes} B'),
+                    onTap: () => Navigator.pop(context, model),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selected != null &&
+        generation == container.sessions.generation &&
+        context.mounted) {
+      openCloud(context, selected);
+    }
   }
 
   Widget accountPage(BuildContext context, GoRouterState state) {
@@ -206,12 +355,26 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (container.modelAssets != null)
-              ModelList(controller: container.modelAssets!, projectId: id),
+              Builder(
+                builder: (context) => ModelList(
+                  controller: container.modelAssets!,
+                  projectId: id,
+                  onView: container.viewer == null
+                      ? null
+                      : (model) => openCloud(context, model),
+                ),
+              ),
             if (container.training != null)
               Builder(
                 builder: (context) => TrainingJobPanel(
                   controller: container.training!,
                   projectId: id,
+                  onViewOutput: container.viewer == null
+                      ? null
+                      : (output) {
+                          container.viewer!.open(TrainingModelSource(output));
+                          context.go('/viewer');
+                        },
                   onUpload: () => showDatasetUpload(context, projectId: id),
                 ),
               ),

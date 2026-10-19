@@ -45,6 +45,28 @@ void main() {
     'surfaceGeneration': 1,
     'error': 0,
   };
+  test(
+    'dispose acknowledgement is shared and waits for native shutdown',
+    () async {
+      final ack = Completer<Map<String, Object?>>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('native3dgs/methods'),
+            (call) async =>
+                call.method == 'dispose' ? ack.future : {'ok': true},
+          );
+      var completed = false;
+      final closing = controller.dispose().then((_) {
+        completed = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(completed, isFalse);
+      final second = controller.shutdown();
+      ack.complete({'ok': true});
+      await closing;
+      expect((await second).ok, isTrue);
+    },
+  );
   test('disposed controller drops late events', () async {
     await controller.dispose();
     events.add(state(0));

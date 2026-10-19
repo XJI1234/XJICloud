@@ -13,6 +13,8 @@ import 'project_fakes.dart';
 void main() {
   test('controlled redirect accepts only defined internal project routes', () {
     expect(controlledTarget('/home'), '/home');
+    expect(controlledTarget('/viewer'), '/viewer');
+    expect(controlledTarget('/viewer?token=secret'), '/account');
     expect(controlledTarget('/projects'), '/projects');
     expect(
       controlledTarget('/projects/3d1fa7eb-3d29-404b-b6c9-274f77e52de5'),
@@ -22,7 +24,6 @@ void main() {
       'https://evil.test/home',
       '//evil.test/projects',
       '/projects/../admin',
-      '/viewer',
       '/projects/a?token=x',
     ]) {
       expect(controlledTarget(path), '/account');

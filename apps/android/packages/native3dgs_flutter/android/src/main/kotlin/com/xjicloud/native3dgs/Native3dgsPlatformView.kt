@@ -28,8 +28,8 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
     private val channel = EventChannel(messenger, "native3dgs/events/$viewId")
     private var collector: Job? = null
     private var disposed = false
-    private var paused = false
-    private var flutterAttached = true
+    private val closed = CompletableDeferred<Boolean>()
+    private val lifecycleVisibility = ViewVisibility()
     private var free = false
     private var lastX = 0f
     private var lastY = 0f
@@ -73,7 +73,7 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
                 }
             })
             setOnTouchListener { touched, event ->
-                if (paused || disposed) return@setOnTouchListener false
+                if (!lifecycleVisibility.active || disposed) return@setOnTouchListener false
                 scale.onTouchEvent(event)
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> {
@@ -104,20 +104,20 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
         app.registerActivityLifecycleCallbacks(this)
     }
     fun command(name: String, values: List<Double>) {
-        check(!disposed && !paused && flutterAttached) { "View is inactive" }
+        check(!disposed && lifecycleVisibility.active) { "View is inactive" }
         if (name == "free" || name == "fixed") input.clear()
         session?.camera(name, values) ?: error("Unsupported view")
         if (name == "free") free = true
         if (name == "fixed") free = false
     }
     private fun gesture(name: String, values: List<Double>) {
-        if (!disposed && !paused && flutterAttached) input.add(name, values)
+        if (!disposed && lifecycleVisibility.active) input.add(name, values)
     }
     fun stopInput() = input.clear()
     override fun getView() = view
     private fun attach() {
         val surface = view as? SurfaceView ?: return
-        if (!disposed && !paused && flutterAttached && surface.holder.surface.isValid) {
+        if (!disposed && lifecycleVisibility.active && surface.holder.surface.isValid) {
             try { session?.attach(surface.holder.surface, surface.width, surface.height) }
             catch (error: Exception) { session?.failure(error) }
         }
@@ -150,23 +150,37 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
         if (disposed) return
         disposed = true
         input.clear()
-        onDisposed()
         collector?.cancel(); collector = null
         channel.setStreamHandler(null)
         app.unregisterActivityLifecycleCallbacks(this)
         (view as? SurfaceView)?.holder?.removeCallback(this)
         if (session != null) reservation?.beginClosing()
         val closing = session?.shutdown()
-        if (closing == null) scope.cancel()
-        else closing.invokeOnCompletion {
-            reservation?.closeCompleted(session.state.value.render.phase == "Stopped")
+        if (closing == null) {
+            val success = initializationMessage == null
+            closed.complete(success)
+            if (success) onDisposed()
+            scope.cancel()
+        } else closing.invokeOnCompletion {
+            val success = session.state.value.render.phase == "Stopped"
+            reservation?.closeCompleted(success)
+            closed.complete(success)
+            if (success) onDisposed()
             scope.cancel()
         }
     }
-    fun pause() { paused = true; detach() }
-    fun resume() { paused = false; attach() }
-    override fun onFlutterViewAttached(flutterView: View) { flutterAttached = true; attach() }
-    override fun onFlutterViewDetached() { flutterAttached = false; detach() }
+    fun whenClosed(callback: (Boolean) -> Unit) {
+        closed.invokeOnCompletion { callback(session?.state?.value?.render?.phase == "Stopped" ||
+            (session == null && initializationMessage == null)) }
+    }
+    fun setVisible(value: Boolean) {
+        lifecycleVisibility.selected = value
+        if (value) attach() else detach()
+    }
+    fun pause() { lifecycleVisibility.activityResumed = false; detach() }
+    fun resume() { lifecycleVisibility.activityResumed = true; attach() }
+    override fun onFlutterViewAttached(flutterView: View) { lifecycleVisibility.flutterAttached = true; attach() }
+    override fun onFlutterViewDetached() { lifecycleVisibility.flutterAttached = false; detach() }
     override fun onActivityPaused(a: Activity) { if (a == activity()) pause() }
     override fun onActivityResumed(a: Activity) { if (a == activity()) resume() }
     override fun onActivityDestroyed(a: Activity) { if (a == activity()) dispose() }

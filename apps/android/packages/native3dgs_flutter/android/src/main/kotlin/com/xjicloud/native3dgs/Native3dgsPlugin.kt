@@ -47,7 +47,12 @@ class Native3dgsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activit
                     "message" to (view.initializationMessage ?: view.capability.message)))
                 return
             }
-            if (call.method == "dispose") { view.dispose(); result.success(mapOf("ok" to true)); return }
+            if (call.method == "dispose") {
+                view.dispose()
+                view.whenClosed { success -> result.success(mapOf("ok" to success,
+                    "message" to if (success) null else "原生资源未能确认关闭，请重启应用。")) }
+                return
+            }
             val session = view.session ?: error("Unsupported capability")
             check(!session.closing) { "Session is closing" }
             when (call.method) {
@@ -64,6 +69,7 @@ class Native3dgsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activit
                     } catch (error: Exception) { picker = null; throw error }
                     return
                 }
+                "visibility" -> view.setVisible(call.argument<Boolean>("visible") == true)
                 "open" -> {
                     val uri = call.argument<String>("uri") ?: error("Missing URI")
                     require(android.net.Uri.parse(uri).scheme == "content") { "Only content URIs are supported" }
@@ -84,7 +90,8 @@ class Native3dgsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activit
                 else -> { result.notImplemented(); return }
             }
             result.success(mapOf("ok" to true, "operationId" to operation,
-                "requestId" to session.state.value.render.requestId))
+                "requestId" to session.state.value.render.requestId,
+                "activeRequestId" to session.activeRequestId))
         } catch (error: Exception) {
             android.util.Log.e("Native3dgs", "Bridge operation failed: ${error.javaClass.name}")
             result.success(mapOf("ok" to false, "error" to ((error as? EngineFailure)?.code ?: 0),

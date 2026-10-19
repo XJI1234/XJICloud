@@ -555,4 +555,108 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get jobCancelled => 'Cancelled';
+
+  @override
+  String get viewerOpenLocal => 'Open local PLY/SPZ';
+
+  @override
+  String get viewerChooseCloud => 'Choose current project model';
+
+  @override
+  String get viewerOpen => 'View model';
+
+  @override
+  String get viewerTools => 'Viewer tools';
+
+  @override
+  String get viewerFixed => 'Fixed mode';
+
+  @override
+  String get viewerFree => 'Free mode';
+
+  @override
+  String get viewerFit => 'Fit';
+
+  @override
+  String get viewerReset => 'Reset';
+
+  @override
+  String get viewerFlip => 'Flip Y';
+
+  @override
+  String get viewerZoomIn => 'Zoom in';
+
+  @override
+  String get viewerZoomOut => 'Zoom out';
+
+  @override
+  String get viewerFullscreen => 'Fullscreen';
+
+  @override
+  String get viewerExitFullscreen => 'Exit fullscreen';
+
+  @override
+  String get viewerClose => 'Close model';
+
+  @override
+  String get viewerCancel => 'Cancel loading';
+
+  @override
+  String get viewerEmpty =>
+      'Open a local file or choose a model from the current project.';
+
+  @override
+  String get viewerDownload => 'Download / prepare local file';
+
+  @override
+  String get viewerDecode => 'Decode';
+
+  @override
+  String get viewerUpload => 'GPU upload / await first frame';
+
+  @override
+  String get viewerFirstFrame => 'First frame ready';
+
+  @override
+  String get viewerRecover => 'Recovering canvas';
+
+  @override
+  String get viewerClosing => 'Closing model';
+
+  @override
+  String get viewerError =>
+      'Model loading or rendering failed. Cancel or choose a valid PLY/SPZ; the existing scene is retained.';
+
+  @override
+  String get viewerUnsupported =>
+      'Native viewer is unsupported. Requires Android 10+, arm64, Vulkan 1.1 and 4KB memory pages.';
+
+  @override
+  String get viewerConfigFit =>
+      'No compatible camera metadata: automatically fitted without changing cloud configuration.';
+
+  @override
+  String get viewerForward => 'Forward';
+
+  @override
+  String get viewerBackward => 'Backward';
+
+  @override
+  String get viewerLeft => 'Move left';
+
+  @override
+  String get viewerRight => 'Move right';
+
+  @override
+  String get viewerUp => 'Move up';
+
+  @override
+  String get viewerDown => 'Move down';
+
+  @override
+  String get viewerOutput => 'Open training output';
+
+  @override
+  String get viewerOutputNote =>
+      'Training output must be valid Gaussian PLY; completion does not guarantee format compatibility.';
 }

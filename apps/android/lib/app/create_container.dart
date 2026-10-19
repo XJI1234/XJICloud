@@ -1,3 +1,11 @@
+import '../features/viewer/infrastructure/native3dgs_engine_adapter.dart';
+import '../features/viewer/infrastructure/model_source_adapter.dart';
+import '../features/viewer/presentation/viewer_controller.dart';
+import '../features/viewer/domain/model_source.dart' as viewer;
+import '../features/model_asset/application/download_model.dart';
+import '../features/model_asset/domain/model_cache_port.dart';
+import '../features/model_asset/domain/local_file_port.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -60,11 +68,12 @@ AppContainer createContainer({
     await outputs.prepare();
   };
   final files = AndroidLocalFileAdapter(snapshots: snapshots);
+  final cache = FileModelCache(files.cacheDirectory);
   final modelAssets = ModelAssetsController(
     HttpModelAssetRepository(api),
     files,
     modelCheckpoints,
-    FileModelCache(files.cacheDirectory),
+    cache,
     sessions,
   );
   final training = UploadController(
@@ -76,6 +85,91 @@ AppContainer createContainer({
     sessions,
     outputs: outputs,
   );
+  final engine = Native3dgsEngineAdapter();
+  final viewerController = ViewerController(
+    ModelSourceAdapter(
+      acquire: (source, cancellation, progress) async {
+        await snapshots.ready();
+        final account = sessions.session, generation = sessions.generation;
+        if (account == null) return const Failure(DomainError('unauthorized'));
+        bool current() =>
+            sessions.generation == generation && !cancellation.isCancelled;
+        switch (source) {
+          case viewer.CloudModelSource(:final asset):
+            final result = await DownloadModel(modelAssets.repository, cache)(
+              account.userId,
+              asset,
+              generation,
+              cancellation,
+              current,
+              onProgress: (b, t) => progress?.call(b, t),
+            );
+            if (result case Failure<CacheLease>(:final error)) {
+              return Failure(error);
+            }
+            final lease = (result as Success<CacheLease>).value;
+            try {
+              final uri = await privateModelUri(await cache.resolve(lease));
+              return Success(
+                viewer.LocalModelRef(
+                  handle: uri,
+                  fileName: asset.fileName,
+                  releaseResource: () async => lease.release(),
+                ),
+              );
+            } catch (_) {
+              lease.release();
+              rethrow;
+            }
+          case viewer.LocalModelSource():
+            final chosen = await files.choose(cancellation);
+            if (chosen case Failure<LocalModelRef?>(:final error)) {
+              return Failure(error);
+            }
+            final ref = (chosen as Success<LocalModelRef?>).value;
+            if (ref == null) return const Failure(DomainError('cancelled'));
+            Future<void> release() async {
+              final result = await files.release(ref);
+              if (result case Failure<void>(:final error)) throw error;
+            }
+            try {
+              final uri = await privateModelUri(await files.resolveSource(ref));
+              return Success(
+                viewer.LocalModelRef(
+                  handle: uri,
+                  fileName: ref.fileName,
+                  releaseResource: release,
+                ),
+              );
+            } catch (_) {
+              await release();
+              rethrow;
+            }
+          case viewer.TrainingModelSource(:final output):
+            final lease = await outputs.acquire(output, account.userId);
+            try {
+              final uri = await privateModelUri(lease.path);
+              return Success(
+                viewer.LocalModelRef(
+                  handle: uri,
+                  fileName: output.fileName,
+                  releaseResource: lease.release,
+                ),
+              );
+            } catch (_) {
+              await lease.release();
+              rethrow;
+            }
+        }
+      },
+    ),
+    engine,
+    sessions,
+  );
+  sessions.registerCleanup(() async {
+    await viewerController.close();
+    if (viewerController.session.error case final error?) throw error;
+  });
   return AppContainer(
     initializeStorage: () async {
       try {
@@ -85,6 +179,8 @@ AppContainer createContainer({
         return Failure(error);
       }
     },
+    viewer: viewerController,
+    viewerSurface: engine.surface,
     sessions: sessions,
     auth: HttpAuthRepository(api),
     locales: PreferencesLocaleStore(),

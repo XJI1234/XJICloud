@@ -2,6 +2,8 @@ import '../domain/domain_error.dart';
 import '../l10n/app_localizations.dart';
 
 String errorText(AppLocalizations l, DomainError error) => switch (error.code) {
+  'viewer_engine' => l.viewerError,
+  'viewer_unsupported' => l.viewerUnsupported,
   'network' => l.errorNetwork,
   'credentials' => l.errorCredentials,
   'captcha' => l.errorCaptcha,

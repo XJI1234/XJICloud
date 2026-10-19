@@ -51,6 +51,7 @@ class Native3dgsResult {
     required this.ok,
     this.message,
     this.requestId,
+    this.activeRequestId,
     this.uri,
     this.supported,
     this.error = 0,
@@ -58,7 +59,7 @@ class Native3dgsResult {
   });
   final bool ok;
   final String? message, uri;
-  final int? requestId;
+  final int? requestId, activeRequestId;
   final bool? supported;
   final int error;
   final String? errorOrigin;

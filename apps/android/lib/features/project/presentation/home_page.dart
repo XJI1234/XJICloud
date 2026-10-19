@@ -12,9 +12,11 @@ class HomePage extends StatelessWidget {
     required this.onOpen,
     required this.onRetry,
     this.trainingSectionBuilder,
+    this.onOpenLocal,
   });
   final HomeViewModel viewModel;
   final VoidCallback onCreate, onRetry;
+  final VoidCallback? onOpenLocal;
   final void Function(String) onOpen;
   final Widget Function(String)? trainingSectionBuilder;
   @override
@@ -36,6 +38,14 @@ class HomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(l.projectsIntro),
+                if (onOpenLocal != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton(
+                      onPressed: onOpenLocal,
+                      child: Text(l.viewerOpenLocal),
+                    ),
+                  ),
                 const SizedBox(height: 24),
                 if (viewModel.loading)
                   Padding(

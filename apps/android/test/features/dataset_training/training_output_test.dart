@@ -8,6 +8,32 @@ import 'package:xjicloud_mobile/shared/domain/domain_error.dart';
 import 'package:xjicloud_mobile/shared/domain/cancellation.dart';
 
 void main() {
+  test('viewer lease defers logout removal and denies reacquisition', () async {
+    final root = await Directory.systemTemp.createTemp('xji-output-lease-');
+    addTearDown(() => root.delete(recursive: true));
+    final store = FileTrainingOutputs(() async => root.path, (
+      url,
+      c,
+      consume,
+    ) async {
+      await consume(Stream.value([1, 2, 3]), 3);
+      return const Success(null);
+    });
+    final ref = (await store.download(
+      'u',
+      'j',
+      'https://oss.test/o',
+      Cancellation(),
+      (_, _) {},
+    ) as Success<TrainingOutputRef>).value;
+    final lease = await store.acquire(ref, 'u');
+    expect(await store.remove(ref), isA<Success<void>>());
+    expect(await File(lease.path).exists(), isTrue);
+    await expectLater(store.acquire(ref, 'u'), throwsA(isA<DomainError>()));
+    await lease.release();
+    expect(await File(lease.path).exists(), isFalse);
+    await lease.release();
+  });
   test(
     'cold output store reclaims old published and interrupted files once',
     () async {

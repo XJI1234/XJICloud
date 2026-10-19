@@ -528,4 +528,104 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get jobCancelled => '已取消';
+
+  @override
+  String get viewerOpenLocal => '打开本机 PLY/SPZ';
+
+  @override
+  String get viewerChooseCloud => '选择当前工程模型';
+
+  @override
+  String get viewerOpen => '查看模型';
+
+  @override
+  String get viewerTools => '查看工具';
+
+  @override
+  String get viewerFixed => '固定模式';
+
+  @override
+  String get viewerFree => '自由模式';
+
+  @override
+  String get viewerFit => '适配';
+
+  @override
+  String get viewerReset => '重置';
+
+  @override
+  String get viewerFlip => 'Y 翻转';
+
+  @override
+  String get viewerZoomIn => '放大';
+
+  @override
+  String get viewerZoomOut => '缩小';
+
+  @override
+  String get viewerFullscreen => '全屏';
+
+  @override
+  String get viewerExitFullscreen => '退出全屏';
+
+  @override
+  String get viewerClose => '关闭模型';
+
+  @override
+  String get viewerCancel => '取消加载';
+
+  @override
+  String get viewerEmpty => '打开本机文件，或从当前工程选择一个模型。';
+
+  @override
+  String get viewerDownload => '下载 / 准备本机文件';
+
+  @override
+  String get viewerDecode => '解码';
+
+  @override
+  String get viewerUpload => 'GPU 上传 / 等待首帧';
+
+  @override
+  String get viewerFirstFrame => '首帧就绪';
+
+  @override
+  String get viewerRecover => '恢复画布';
+
+  @override
+  String get viewerClosing => '正在关闭模型';
+
+  @override
+  String get viewerError => '模型加载或渲染失败。可取消或重新选择有效 PLY/SPZ；已有场景会保留。';
+
+  @override
+  String get viewerUnsupported =>
+      '当前平台不支持原生查看器。需要 Android 10+、arm64、Vulkan 1.1 和 4KB 内存页。';
+
+  @override
+  String get viewerConfigFit => '缺少兼容视角元数据，已自动取景；不会覆盖云端配置。';
+
+  @override
+  String get viewerForward => '前进';
+
+  @override
+  String get viewerBackward => '后退';
+
+  @override
+  String get viewerLeft => '左移';
+
+  @override
+  String get viewerRight => '右移';
+
+  @override
+  String get viewerUp => '上移';
+
+  @override
+  String get viewerDown => '下移';
+
+  @override
+  String get viewerOutput => '打开训练产物';
+
+  @override
+  String get viewerOutputNote => '训练产物须为有效 Gaussian PLY；任务完成不代表格式兼容。';
 }

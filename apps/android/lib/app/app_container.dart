@@ -1,3 +1,6 @@
+import 'package:flutter/widgets.dart';
+
+import '../features/viewer/presentation/viewer_controller.dart';
 import '../features/identity/domain/auth_repository.dart';
 import '../features/identity/domain/locale_store.dart';
 import '../features/identity/presentation/auth_controller.dart';
@@ -15,10 +18,16 @@ final class AppContainer {
     required this.locales,
     required this.closeTransport,
     this.workspace,
+    this.viewer,
+    this.viewerSurface,
     this.modelAssets,
     this.training,
     this.initializeStorage,
   }) {
+    if (viewer != null) {
+      sessions.addListener(viewer!.synchronize);
+      viewer!.synchronize();
+    }
     if (training != null) {
       sessions.addListener(training!.synchronize);
       training!.synchronize();
@@ -37,12 +46,18 @@ final class AppContainer {
   final LocaleStore locales;
   final void Function() closeTransport;
   final WorkspaceController? workspace;
+  final ViewerController? viewer;
+  final Widget Function()? viewerSurface;
   final ModelAssetsController? modelAssets;
   final UploadController? training;
   final Future<Result<void>> Function()? initializeStorage;
   AuthController createAuthController() =>
       AuthController(auth, activate: sessions.activate);
   void dispose() {
+    if (viewer != null) {
+      sessions.removeListener(viewer!.synchronize);
+      viewer!.dispose();
+    }
     if (training != null) {
       sessions.removeListener(training!.synchronize);
       training!.dispose();

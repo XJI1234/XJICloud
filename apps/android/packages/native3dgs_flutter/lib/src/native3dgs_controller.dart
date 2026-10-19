@@ -70,13 +70,14 @@ class Native3dgsController {
         'operationId': operation,
         ...extra,
       });
-      if (_disposed || operation != _operation) {
+      if (method != 'dispose' && (_disposed || operation != _operation)) {
         return const Native3dgsResult(ok: false, message: '操作已被替代。');
       }
       final result = Native3dgsResult(
         ok: data?['ok'] == true,
         message: data?['message'] as String?,
         requestId: (data?['requestId'] as num?)?.toInt(),
+        activeRequestId: (data?['activeRequestId'] as num?)?.toInt(),
         uri: data?['uri'] as String?,
         supported: data?['supported'] as bool?,
         error: (data?['error'] as num?)?.toInt() ?? 0,
@@ -123,6 +124,9 @@ class Native3dgsController {
     return result;
   }
 
+  Future<Native3dgsResult> setVisible(bool visible) =>
+      _invoke('visibility', {'visible': visible});
+
   Future<Native3dgsResult> pickFile() => _invoke('pickFile');
   Future<Native3dgsResult> open(String uri) async {
     if (Uri.tryParse(uri)?.scheme != 'content') {
@@ -148,12 +152,18 @@ class Native3dgsController {
     String command, [
     List<double> values = const [],
   ]) => _invoke('camera', {'command': command, 'values': values});
-  Future<void> dispose() async {
-    if (_disposed) return;
+  Future<Native3dgsResult>? _disposing;
+
+  /// Repeated callers share the actual native closeAndWait acknowledgement.
+  Future<Native3dgsResult> shutdown() => _disposing ??= (() async {
     final closing = _invoke('dispose');
     _disposed = true;
     await _subscription.cancel();
-    await closing;
+    final result = await closing;
     await _states.close();
+    return result;
+  })();
+  Future<void> dispose() async {
+    await shutdown();
   }
 }

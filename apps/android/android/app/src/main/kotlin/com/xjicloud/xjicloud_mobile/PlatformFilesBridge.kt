@@ -27,6 +27,14 @@ class PlatformFilesBridge(private val activity: Activity, channel: MethodChannel
         sources.listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
+                "modelUri" -> {
+                    try {
+                        val file = privateModelFile(call.argument<String>("path") ?: "",
+                            listOf(sources, cache, File(training, "outputs")))
+                        result.success(androidx.core.content.FileProvider.getUriForFile(activity,
+                            "${activity.packageName}.native3dgs.files", file).toString())
+                    } catch (_: Exception) { result.error("storage", "Invalid private model", null) }
+                }
                 "directories" -> result.success(mapOf("sources" to sources.absolutePath, "cache" to cache.absolutePath, "training" to training.absolutePath))
                 "chooseImages" -> {
                     if (pending != null) result.error("source_busy", "A selection is already open", null)

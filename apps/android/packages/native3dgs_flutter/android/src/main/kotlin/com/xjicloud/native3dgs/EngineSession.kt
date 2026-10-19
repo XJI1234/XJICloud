@@ -59,6 +59,7 @@ class EngineSession(private val engine: EnginePort, private val scope: Coroutine
     private val closeDispatcher: CoroutineDispatcher = Dispatchers.IO) {
     private val mutable = MutableStateFlow(SessionState())
     val state: StateFlow<SessionState> = mutable
+    val activeRequestId: Long get() = engine.state.value.activeRequestId
     private var operation = 0L
     private var request: Long? = null
     private var openJob: Job? = null

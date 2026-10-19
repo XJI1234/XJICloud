@@ -1105,6 +1105,204 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已取消'**
   String get jobCancelled;
+
+  /// No description provided for @viewerOpenLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开本机 PLY/SPZ'**
+  String get viewerOpenLocal;
+
+  /// No description provided for @viewerChooseCloud.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择当前工程模型'**
+  String get viewerChooseCloud;
+
+  /// No description provided for @viewerOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看模型'**
+  String get viewerOpen;
+
+  /// No description provided for @viewerTools.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看工具'**
+  String get viewerTools;
+
+  /// No description provided for @viewerFixed.
+  ///
+  /// In zh, this message translates to:
+  /// **'固定模式'**
+  String get viewerFixed;
+
+  /// No description provided for @viewerFree.
+  ///
+  /// In zh, this message translates to:
+  /// **'自由模式'**
+  String get viewerFree;
+
+  /// No description provided for @viewerFit.
+  ///
+  /// In zh, this message translates to:
+  /// **'适配'**
+  String get viewerFit;
+
+  /// No description provided for @viewerReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置'**
+  String get viewerReset;
+
+  /// No description provided for @viewerFlip.
+  ///
+  /// In zh, this message translates to:
+  /// **'Y 翻转'**
+  String get viewerFlip;
+
+  /// No description provided for @viewerZoomIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'放大'**
+  String get viewerZoomIn;
+
+  /// No description provided for @viewerZoomOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'缩小'**
+  String get viewerZoomOut;
+
+  /// No description provided for @viewerFullscreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'全屏'**
+  String get viewerFullscreen;
+
+  /// No description provided for @viewerExitFullscreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出全屏'**
+  String get viewerExitFullscreen;
+
+  /// No description provided for @viewerClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭模型'**
+  String get viewerClose;
+
+  /// No description provided for @viewerCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消加载'**
+  String get viewerCancel;
+
+  /// No description provided for @viewerEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开本机文件，或从当前工程选择一个模型。'**
+  String get viewerEmpty;
+
+  /// No description provided for @viewerDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载 / 准备本机文件'**
+  String get viewerDownload;
+
+  /// No description provided for @viewerDecode.
+  ///
+  /// In zh, this message translates to:
+  /// **'解码'**
+  String get viewerDecode;
+
+  /// No description provided for @viewerUpload.
+  ///
+  /// In zh, this message translates to:
+  /// **'GPU 上传 / 等待首帧'**
+  String get viewerUpload;
+
+  /// No description provided for @viewerFirstFrame.
+  ///
+  /// In zh, this message translates to:
+  /// **'首帧就绪'**
+  String get viewerFirstFrame;
+
+  /// No description provided for @viewerRecover.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复画布'**
+  String get viewerRecover;
+
+  /// No description provided for @viewerClosing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在关闭模型'**
+  String get viewerClosing;
+
+  /// No description provided for @viewerError.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型加载或渲染失败。可取消或重新选择有效 PLY/SPZ；已有场景会保留。'**
+  String get viewerError;
+
+  /// No description provided for @viewerUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前平台不支持原生查看器。需要 Android 10+、arm64、Vulkan 1.1 和 4KB 内存页。'**
+  String get viewerUnsupported;
+
+  /// No description provided for @viewerConfigFit.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少兼容视角元数据，已自动取景；不会覆盖云端配置。'**
+  String get viewerConfigFit;
+
+  /// No description provided for @viewerForward.
+  ///
+  /// In zh, this message translates to:
+  /// **'前进'**
+  String get viewerForward;
+
+  /// No description provided for @viewerBackward.
+  ///
+  /// In zh, this message translates to:
+  /// **'后退'**
+  String get viewerBackward;
+
+  /// No description provided for @viewerLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左移'**
+  String get viewerLeft;
+
+  /// No description provided for @viewerRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右移'**
+  String get viewerRight;
+
+  /// No description provided for @viewerUp.
+  ///
+  /// In zh, this message translates to:
+  /// **'上移'**
+  String get viewerUp;
+
+  /// No description provided for @viewerDown.
+  ///
+  /// In zh, this message translates to:
+  /// **'下移'**
+  String get viewerDown;
+
+  /// No description provided for @viewerOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开训练产物'**
+  String get viewerOutput;
+
+  /// No description provided for @viewerOutputNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'训练产物须为有效 Gaussian PLY；任务完成不代表格式兼容。'**
+  String get viewerOutputNote;
 }
 
 class _AppLocalizationsDelegate

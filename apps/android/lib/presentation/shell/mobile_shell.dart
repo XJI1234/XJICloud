@@ -9,10 +9,14 @@ class MobileShell extends StatelessWidget {
     super.key,
     required this.navigationShell,
     required this.onUpload,
+    this.hideNavigation = false,
+    this.onBeforeSwitch,
   });
 
   final StatefulNavigationShell navigationShell;
   final VoidCallback onUpload;
+  final bool hideNavigation;
+  final VoidCallback? onBeforeSwitch;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +36,11 @@ class MobileShell extends StatelessWidget {
           selected: selected,
           button: true,
           child: InkWell(
-            onTap: () => navigationShell.goBranch(index),
+            key: Key('nav-${['home', 'projects', 'viewer', 'account'][index]}'),
+            onTap: () {
+              onBeforeSwitch?.call();
+              navigationShell.goBranch(index);
+            },
             borderRadius: BorderRadius.circular(AppTokens.controlRadius),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 64, minWidth: 48),
@@ -64,51 +72,54 @@ class MobileShell extends StatelessWidget {
     }
 
     return PopScope(
-      canPop: navigationShell.currentIndex == 0,
+      canPop: navigationShell.currentIndex == 0 || hideNavigation,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && navigationShell.currentIndex != 0) {
+        if (!didPop && navigationShell.currentIndex != 0 && !hideNavigation) {
           navigationShell.goBranch(0);
         }
       },
       child: Scaffold(
         body: navigationShell,
-        bottomNavigationBar: Material(
-          color: tokens.card,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  destination(0),
-                  destination(1),
-                  Transform.translate(
-                    offset: const Offset(0, -12),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: SizedBox.square(
-                        dimension: 60,
-                        child: FloatingActionButton(
-                          heroTag: null,
-                          tooltip: l10n.upload,
-                          onPressed: onUpload,
-                          backgroundColor: tokens.accent,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: const CircleBorder(),
-                          child: const Icon(Icons.arrow_upward),
+        bottomNavigationBar: hideNavigation
+            ? null
+            : Material(
+                color: tokens.card,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        destination(0),
+                        destination(1),
+                        Transform.translate(
+                          offset: const Offset(0, -12),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: SizedBox.square(
+                              dimension: 60,
+                              child: FloatingActionButton(
+                                key: const Key('central-upload-model'),
+                                heroTag: null,
+                                tooltip: l10n.upload,
+                                onPressed: onUpload,
+                                backgroundColor: tokens.accent,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: const CircleBorder(),
+                                child: const Icon(Icons.arrow_upward),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        destination(2),
+                        destination(3),
+                      ],
                     ),
                   ),
-                  destination(2),
-                  destination(3),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
