@@ -1,0 +1,93 @@
+{
+  "device": "Lenovo TB710FU Android16 arm64 4KB Adreno750",
+  "commit": "cbb9d2802ccb9bdaab57ad6a27d627fae451e009",
+  "mode": "debug native integration",
+  "points": 4096,
+  "method": "Stopwatch from host open to observed Ready, includes100ms pump granularity; not preciseGPUtiming",
+  "observations": [
+    {
+      "cycle": 0,
+      "openToObservedReadyMs": 415
+    },
+    {
+      "cycle": 1,
+      "openToObservedReadyMs": 261
+    },
+    {
+      "cycle": 2,
+      "openToObservedReadyMs": 132
+    },
+    {
+      "cycle": 3,
+      "openToObservedReadyMs": 130
+    },
+    {
+      "cycle": 4,
+      "openToObservedReadyMs": 127
+    },
+    {
+      "cycle": 5,
+      "openToObservedReadyMs": 121
+    },
+    {
+      "cycle": 6,
+      "openToObservedReadyMs": 132
+    },
+    {
+      "cycle": 7,
+      "openToObservedReadyMs": 262
+    },
+    {
+      "cycle": 8,
+      "openToObservedReadyMs": 140
+    },
+    {
+      "cycle": 9,
+      "openToObservedReadyMs": 130
+    },
+    {
+      "cycle": 10,
+      "openToObservedReadyMs": 132
+    },
+    {
+      "cycle": 11,
+      "openToObservedReadyMs": 132
+    },
+    {
+      "cycle": 12,
+      "openToObservedReadyMs": 127
+    },
+    {
+      "cycle": 13,
+      "openToObservedReadyMs": 131
+    },
+    {
+      "cycle": 14,
+      "openToObservedReadyMs": 134
+    },
+    {
+      "cycle": 15,
+      "openToObservedReadyMs": 128
+    },
+    {
+      "cycle": 16,
+      "openToObservedReadyMs": 126
+    },
+    {
+      "cycle": 17,
+      "openToObservedReadyMs": 133
+    },
+    {
+      "cycle": 18,
+      "openToObservedReadyMs": 129
+    },
+    {
+      "cycle": 19,
+      "openToObservedReadyMs": 126
+    },
+    {
+      "cycle": 20,
+      "openToObservedReadyMs": 125
+    }
+  ]
+}

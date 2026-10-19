@@ -202,11 +202,15 @@ test('archive rejects more than four-digit image capacity', () {
 - Create: `integration_test/mobile_journey_test.dart`、`test/presentation/accessibility_test.dart`、`docs/verification/android-device-matrix.md`、`docs/verification/mobile-journey.md`。
 - Modify: 本任务实际发现问题的 `lib/`/插件文件；同步 README/ENVIRONMENT 的实现状态。真正新增客户端落地后更新根 `docs/AGENT_CONTEXT.md` 与 README 的架构入口，只记已实现事实。
 
-- [ ] **1. 自动化门禁。** `dart format --output=none --set-exit-if-changed lib test integration_test packages/native3dgs_flutter/lib`、`flutter analyze`、`flutter test`、插件Kotlin测试、arm64 debug APK；正式发布前再release签名构建和bundle验证，签名材料不入Git。
+- [x] **1. 自动化门禁。** `dart format --output=none --set-exit-if-changed lib test integration_test packages/native3dgs_flutter/lib`、`flutter analyze`、`flutter test`、插件Kotlin测试、arm64 debug APK；正式发布前再release签名构建和bundle验证，签名材料不入Git。
 - [ ] **2. 用户路径。** 注册→登录→建工程→选图→前台上传→后台暂停→返回继续→训练→完成→下载/本地打开；另走模型分片→工程查看→缓存清理→退出→另一账号。Phone和Pad分别记录步骤/预期/实际，模拟器不替代arm64渲染。
 - [ ] **3. 异常与无障碍。** 空工程、无模型、无权限、不支持Vulkan、ASCII/损坏PLY、断网、后端500、401、签名403、空间不足、低内存；200%字级/TalkBack/减少动画/预测返回/键盘/600与840断点。高危失败先修再重跑受影响门禁。
 - [ ] **4. 发布能力核验。** SDK与Flutter native库的arm64/16KB页打包与加载，在相应设备实际验证；保留license。iOS、截图、持续后台上传、真实训练算法均按事实列未覆盖，不用Android结果外推。
-- [ ] **5. 完成Review与交付。** 对照产品范围扫描未迁移功能和无效按钮，审查鉴权/旧请求/文件释放/DDD/测试；明确High/Critical=无或修复条目、设备与未覆盖项。提交建议 `test(android): verify phone tablet and native viewer journeys`。
+- [x] **5. 完成Review与交付。** 对照产品范围扫描未迁移功能和无效按钮，审查鉴权/旧请求/文件释放/DDD/测试；明确High/Critical=无或修复条目、设备与未覆盖项。提交建议 `test(android): verify phone tablet and native viewer journeys`。
+
+客户端收口 `cbb9d28` / `90d124e` 已完成，最终 211 Flutter 测试、format/analyze/debug 构建通过，原生未改动，沿用 33 JVM 测试记录。真实 SDK 生命周期与隔离本机双账号 mobile journey 各 1 项在 HA28L0L4 通过；实际部署服务登录与普通 APK 用户路径另有验证。整合审查发现隐藏 Tab watcher 未停止，五项 RED→GREEN 回归及限定复审确认修复；无未解决 Critical/Important，Viewer Domain 跨 BC 聚合耦合为非阻塞后续项。详见 [用户路径与边界](../docs/verification/mobile-journey.md) 和 [最终审查](../docs/verification/android-final-review.md)。
+
+第 2–4 项保持未全量验收：部署 Worker 完成/真实产物 E2E、物理 TalkBack/预测返回及部分资源故障注入、独立手机/跨 GPU、16KB/签名发行均未通过或未覆盖。固定 SDK 明确拒绝 16KB，不能用 4KB 真机及 ZIP 对齐冒充该发布门槛。
 
 ## 可选后续专项（不计入首版完成）
 

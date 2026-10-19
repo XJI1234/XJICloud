@@ -1,6 +1,6 @@
 # XJICloud 移动客户端
 
-状态：2026-10-20，登录会话、工程管理、模型分片/缓存、图片前台上传/任务管理及正式原生 Viewer 已落地，正在完成 Phone/Pad 收口和最终验收。分阶段证据见 [真机矩阵](docs/verification/android-device-matrix.md) 与 [用户路径](docs/verification/mobile-journey.md)。部署 Worker 尚未完成测试任务，完整训练/产物下载 E2E 未通过。
+状态：2026-10-20，登录会话、工程管理、模型分片/缓存、图片前台上传/任务管理及正式原生 Viewer 已落地，客户端 Phone/Pad 收口及最终代码审查完成。211 项 Flutter 测试通过，真实 SDK 生命周期及隔离本机双账号用户链各在真机通过 1 项。分阶段证据见 [真机矩阵](docs/verification/android-device-matrix.md)、[用户路径](docs/verification/mobile-journey.md) 与 [最终审查](docs/verification/android-final-review.md)。部署 Worker 尚未完成测试任务，完整训练/产物下载 E2E 未通过；其他设备与发行门槛仍按计划保留未验收。
 
 目录名沿用需求 `apps/android`，iOS 平台尚未创建。普通入口提供主页、工程管理、模型查看、我的四个底栏入口与中央上传；图片训练与模型分片是独立流程。正式 Viewer 可打开本机 PLY/SPZ 或工程模型，训练产物保持独立身份，不伪装为工程模型。
 

@@ -155,3 +155,21 @@ SAF 文件在屏幕末端时，第一次脚本点击落在裁切区域，没有�
 应用主进程起止 PSS 817502 / 784666 KiB、RSS 986096 / 953848 KiB；decoder PSS 28217 / 28572 KiB。系统 Thermal Status 全程 0，电池温度 26.9→28.7°C，USB 充电中；这不是 GPU 核心温度或无降频证明。30 秒后主进程 PSS 780130→末次 784666 KiB 仍有约 4.4 MiB 增长，不能宣称无泄漏。样本和单设备数据不代表百万点真实场景、跨 GPU 或 SDK 画质性能基准达标。
 
 同一普通 profile 产品入口随后经 SAF 连续 20 次关闭/打开 4096-splat PLY，全部首帧就绪、无崩溃；再选 SPZ 正常呈现灰球，关闭后退出账号返回登录页。20 次前后主进程 PSS 927242 / 981536 KiB，增加约 53.0 MiB，过程中有回收和波动，不判定泄漏已排除。各次内存见 [开关数据](viewer-profile-cycles-2026-10-20.json)；其中 `safToObservedReadyMs` 包含系统文件选择器导航和 uiautomator 采样延迟，**不是解码/首帧耗时**。
+
+`cbb9d28` 的 `integration_test/viewer_lifecycle_test.dart` 已在同一真机实际通过：真实 decoder/Surface、无网络替身冒充渲染；有效 4096-splat PLY、错误 B 保留 A、相机、隐藏/恢复、20 次关闭重开、退出和 22 次租约释放断言均成功，失败清理 teardown 正常结束。首次从 open 命令到观察 Ready 为 415ms，重开为 121–262ms；包含 100ms 测试泵采样粒度，不是精确 GPU 分段时间，见 [加载观测](viewer-native-load-2026-10-20.json)。
+
+## 资源清理
+
+部署验收完成后，通过用户 API 仅取消/删除本轮持有精确 ID 的 4 个任务、1 个模型和1个测试工程；重新列举确认不存在，原有两个工程 ID 均保留。未使用 admin/worker API。OSS 物理对象没有用户删除接口，不能声明 bucket 字节已删除；本机双账号验收数据位于独立 H2 内存实例，结束服务时销毁。
+
+## Task 8 最终收口
+
+`90d124e` 最终 211 Flutter 测试、173 文件 format 无变更、analyze 无问题、普通 arm64 debug 构建通过；原生代码未改，沿用此前 33 JVM 通过记录。最终整合审查的隐藏 Tab watcher Important 已用五项 RED→GREEN 回归修复，独立限定复审关闭；无未解决 Critical/Important，跨 BC 聚合耦合 Minor 留作后续。详见 [最终审查](android-final-review.md)。
+
+同一真机对隔离本机 H2/Redis 执行真实双账号 mobile journey：最终 1 项通过（约 45 秒测试体和 teardown），实际建/编辑/删除工程、HTTP 模型下载、Native3DGS 首帧、全屏/返回、关闭清缓存、退出与另一账号数据/场景隔离全部断言通过。先前编辑失败由真实 IME/布局变化定位，测试改为稳定后再断言并点击；下一次超时为外部夹具使用响应 ID 而非实际列表 ID。纠正配置前先实际鉴权下载并核对 binary 夹具 SHA-256，未修改后端或放宽产品成功条件。不是部署环境双账号 E2E。
+
+恢复普通 API-only APK 后，再次实际登录部署 HTTPS 服务、打开工程列表。临时 432dp 竖屏窗口、200% 字号、动画关闭时，账号、帮助/关闭、缓存/返回、创建草稿/真实 IME/放弃修改确认均可操作；未提交该草稿。通过系统 SAF 打开本机 4096-splat PLY，正式 Viewer 首帧就绪；随后恢复原屏幕/字号/动画/旋转，关闭模型返回主页。系统文件选择脚本原固定横屏滑动坐标在 compact 窗口失效，改用当前可见坐标后成功，未视为产品失败。
+
+普通交付包 `build/app/outputs/flutter-apk/xjicloud-android-acceptance-arm64-debug.apk`：147047330 字节，SHA-256 `c5802e86d59436f9e581679674c740f862241b512b17cec8f852b5e138463b31`。六个 SO 全 arm64，三份 notices、ZIP 对齐均核验；无 integration 入口/外部凭据配置标记，随机测试账号凭据不在 kernel。普通构建仅指定 API origin，未编入账号配置。测试后重新构建普通 `app-debug.apk`，与该备份和真机已安装 base.apk 的 SHA-256 三者一致。
+
+本机隔离 backend/H2 与本轮 Redis 已停止，adb reverse 已移除；设备仅移除本轮 `Download/XJICloudAcceptance` 文件夹及具名触控/截图辅助文件。Sogou 输入法、原始屏幕、横屏锁定、字号 1.0、动画及原 accessibility 0/null 已恢复。保留部署服务登录的普通产品包；不保留集成测试入口。Phone 是同一平板窗口验证，真实 TalkBack/独立手机/跨 GPU/16KB 等缺口见 [用户路径](mobile-journey.md)。
