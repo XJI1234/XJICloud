@@ -4,6 +4,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Flutter's target-platform selects its engine, but its default JNI filter still
+// admits all supported ABIs. Apply the same selection to every dependency's .so.
+val targetAbis = providers.gradleProperty("target-platform")
+    .orElse("android-arm64").get().split(",").map { platform ->
+        when (platform) {
+            "android-arm" -> "armeabi-v7a"
+            "android-arm64" -> "arm64-v8a"
+            "android-x64" -> "x86_64"
+            else -> throw GradleException("Unsupported Android target platform: $platform")
+        }
+    }
+
 android {
     namespace = "com.xjicloud.xjicloud_mobile"
     compileSdk = flutter.compileSdkVersion
@@ -27,10 +39,19 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            abiFilters.clear()
+            abiFilters.addAll(targetAbis)
+        }
     }
 
     buildTypes {
         release {
+            // Native3DGS production rendering is supported only on arm64.
+            ndk {
+                abiFilters.clear()
+                abiFilters.add("arm64-v8a")
+            }
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
