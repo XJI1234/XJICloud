@@ -13,5 +13,9 @@ String errorText(AppLocalizations l, DomainError error) => switch (error.code) {
   'forbidden' => l.errorForbidden,
   'protocol' || 'redirect' => l.errorProtocol,
   'preferences' => l.errorPreferences,
+  'workspace_storage' => l.workspaceStorage,
+  'project_deleted_storage' => l.projectDeletedStorage,
+  'project_unavailable' => l.projectUnavailable,
+  'project_validation' => l.projectValidation,
   _ => l.errorRequest,
 };

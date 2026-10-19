@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 
 import '../features/identity/presentation/auth_controller.dart';
 import '../features/identity/presentation/login_page.dart';
+import '../features/project/presentation/home_page.dart';
+import '../features/project/presentation/project_list_page.dart';
+import '../features/project/presentation/project_detail_page.dart';
 import '../presentation/pages/my_page.dart';
 import '../presentation/theme/app_theme.dart';
 import '../shared/l10n/app_localizations.dart';
@@ -14,18 +17,28 @@ import 'app_container.dart';
 import 'router.dart';
 
 /// A destination must exist before it can be retained through a login redirect.
-String controlledTarget(String? target) =>
-    target == '/account' ? target! : '/account';
+String controlledTarget(String? target) {
+  if (target == '/account' ||
+      target == '/home' ||
+      target == '/projects' ||
+      target != null &&
+          RegExp(
+            r'^/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+          ).hasMatch(target)) {
+    return target!;
+  }
+  return '/account';
+}
 
 class ProductApp extends StatefulWidget {
   const ProductApp({
     super.key,
     required this.container,
-    this.initialLocation = '/account',
+    this.initialLocation,
     this.disposeContainer = true,
   });
   final AppContainer container;
-  final String initialLocation;
+  final String? initialLocation;
   final bool disposeContainer;
   @override
   State<ProductApp> createState() => _ProductAppState();
@@ -42,7 +55,9 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     router = createAppRouter(
-      initialLocation: widget.initialLocation,
+      initialLocation:
+          widget.initialLocation ??
+          (container.workspace == null ? '/account' : '/home'),
       refreshListenable: container.sessions,
       redirect: (context, state) {
         final session = container.sessions.session;
@@ -55,7 +70,10 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
           ).toString();
         }
         if (authenticated && state.uri.path == '/login') {
-          return controlledTarget(state.uri.queryParameters['from']);
+          final target = controlledTarget(state.uri.queryParameters['from']);
+          return container.workspace == null && target != '/account'
+              ? '/account'
+              : target;
         }
         return null;
       },
@@ -65,22 +83,65 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
           builder: (context, state) =>
               _AuthRoute(container: container, onToggleLocale: toggleLocale),
         ),
-        GoRoute(
-          path: '/account',
-          builder: (context, state) {
-            final session = container.sessions.session;
-            return session == null
-                ? const SizedBox.shrink()
-                : MyPage(
-                    session: session,
-                    onToggleLocale: toggleLocale,
-                    onLogout: () => container.sessions.invalidate(),
+        if (container.workspace != null)
+          ShellRoute(
+            builder: (context, state, child) =>
+                _WorkspaceNavigation(location: state.uri.path, child: child),
+            routes: [
+              GoRoute(
+                path: '/home',
+                builder: (context, state) {
+                  final workspace = container.workspace!;
+                  return ListenableBuilder(
+                    listenable: workspace,
+                    builder: (context, _) => HomePage(
+                      viewModel: workspace.home,
+                      onCreate: () => showProjectEditor(context, workspace),
+                      onRetry: workspace.refresh,
+                      onOpen: (id) async {
+                        final opened = await workspace.openProject(id);
+                        if (opened && context.mounted) {
+                          workspace.select(id);
+                          context.go('/projects/$id');
+                        }
+                      },
+                    ),
                   );
-          },
-        ),
+                },
+              ),
+              GoRoute(
+                path: '/projects',
+                builder: (context, state) =>
+                    ProjectListPage(controller: container.workspace!),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    builder: (context, state) => ProjectListPage(
+                      controller: container.workspace!,
+                      projectId: state.pathParameters['id'],
+                    ),
+                  ),
+                ],
+              ),
+              GoRoute(path: '/account', builder: accountPage),
+            ],
+          ),
+        if (container.workspace == null)
+          GoRoute(path: '/account', builder: accountPage),
       ],
     );
     initialize();
+  }
+
+  Widget accountPage(BuildContext context, GoRouterState state) {
+    final session = container.sessions.session;
+    return session == null
+        ? const SizedBox.shrink()
+        : MyPage(
+            session: session,
+            onToggleLocale: toggleLocale,
+            onLogout: () => container.sessions.invalidate(),
+          );
   }
 
   Future<void> initialize() async {
@@ -157,6 +218,59 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
       );
     },
   );
+}
+
+/// Only released capabilities are navigable; Task 7 assembles the full shell.
+class _WorkspaceNavigation extends StatelessWidget {
+  const _WorkspaceNavigation({required this.location, required this.child});
+  final String location;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final paths = ['/home', '/projects', '/account'];
+    final labels = [l.home, l.projects, l.account];
+    const icons = [
+      Icons.home_outlined,
+      Icons.folder_outlined,
+      Icons.person_outline,
+    ];
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Material(
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < paths.length; i++)
+                  Expanded(
+                    child: Semantics(
+                      selected: location.startsWith(paths[i]),
+                      child: TextButton(
+                        key: Key('nav-${paths[i].substring(1)}'),
+                        onPressed: () => context.go(paths[i]),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(icons[i]),
+                            const SizedBox(height: 4),
+                            Text(labels[i], textAlign: TextAlign.center),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AuthRoute extends StatefulWidget {

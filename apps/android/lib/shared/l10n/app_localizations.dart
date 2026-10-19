@@ -421,6 +421,162 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'Native3DGS SDK 0.2.2 · XJICloud 安卓客户端'**
   String get sdkAbout;
+
+  /// No description provided for @currentProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前工程'**
+  String get currentProject;
+
+  /// No description provided for @recentProjects.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近打开'**
+  String get recentProjects;
+
+  /// No description provided for @createProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建工程'**
+  String get createProject;
+
+  /// No description provided for @firstProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建第一个工程'**
+  String get firstProject;
+
+  /// No description provided for @projectName.
+  ///
+  /// In zh, this message translates to:
+  /// **'工程名称'**
+  String get projectName;
+
+  /// No description provided for @projectDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'描述'**
+  String get projectDescription;
+
+  /// No description provided for @saveProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get saveProject;
+
+  /// No description provided for @editProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑工程'**
+  String get editProject;
+
+  /// No description provided for @deleteProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除工程'**
+  String get deleteProject;
+
+  /// No description provided for @setCurrentProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'设为当前工程'**
+  String get setCurrentProject;
+
+  /// No description provided for @projectCreated.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建时间'**
+  String get projectCreated;
+
+  /// No description provided for @projectEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无工程'**
+  String get projectEmpty;
+
+  /// No description provided for @selectProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择工程以查看详情。'**
+  String get selectProject;
+
+  /// No description provided for @projectUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'该工程不可用，请刷新工程列表。'**
+  String get projectUnavailable;
+
+  /// No description provided for @projectValidation.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入 1–256 字的工程名称，描述最多 2000 字。'**
+  String get projectValidation;
+
+  /// No description provided for @workspaceStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存或读取工作区，请重试。'**
+  String get workspaceStorage;
+
+  /// No description provided for @projectDeletedStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'工程已删除，但本地工作区保存失败；请刷新以同步。'**
+  String get projectDeletedStorage;
+
+  /// No description provided for @deleteProjectMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除此工程及其全部模型、训练任务和数据集？此操作无法撤销，服务端正在运行的任务可能继续。'**
+  String get deleteProjectMessage;
+
+  /// No description provided for @discardChanges.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃修改？'**
+  String get discardChanges;
+
+  /// No description provided for @discardChangesMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前修改尚未保存。'**
+  String get discardChangesMessage;
+
+  /// No description provided for @keepEditing.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续编辑'**
+  String get keepEditing;
+
+  /// No description provided for @discard.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃修改'**
+  String get discard;
+
+  /// No description provided for @projectsIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'用工程整理模型与训练素材。'**
+  String get projectsIntro;
+
+  /// No description provided for @noRecentProjects.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开过的工程将显示在这里。'**
+  String get noRecentProjects;
+
+  /// No description provided for @noCurrentProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择工程以继续。'**
+  String get noCurrentProject;
+
+  /// No description provided for @openProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开工程'**
+  String get openProject;
 }
 
 class _AppLocalizationsDelegate

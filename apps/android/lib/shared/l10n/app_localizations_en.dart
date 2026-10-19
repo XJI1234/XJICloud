@@ -175,4 +175,87 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sdkAbout => 'Native3DGS SDK 0.2.2 · XJICloud for Android';
+
+  @override
+  String get currentProject => 'Current project';
+
+  @override
+  String get recentProjects => 'Recently opened';
+
+  @override
+  String get createProject => 'Create project';
+
+  @override
+  String get firstProject => 'Create your first project';
+
+  @override
+  String get projectName => 'Project name';
+
+  @override
+  String get projectDescription => 'Description';
+
+  @override
+  String get saveProject => 'Save';
+
+  @override
+  String get editProject => 'Edit project';
+
+  @override
+  String get deleteProject => 'Delete project';
+
+  @override
+  String get setCurrentProject => 'Set as current';
+
+  @override
+  String get projectCreated => 'Created';
+
+  @override
+  String get projectEmpty => 'No projects yet';
+
+  @override
+  String get selectProject => 'Select a project to view its details.';
+
+  @override
+  String get projectUnavailable =>
+      'This project is unavailable. Refresh your projects.';
+
+  @override
+  String get projectValidation =>
+      'Enter a name of 1–256 characters and a description of at most 2000 characters.';
+
+  @override
+  String get workspaceStorage =>
+      'Unable to save or load your workspace. Please retry.';
+
+  @override
+  String get projectDeletedStorage =>
+      'Project deleted. Local workspace could not be saved; refresh to reconcile.';
+
+  @override
+  String get deleteProjectMessage =>
+      'Delete this project and all of its models, training tasks and datasets? This cannot be undone. Running server work may continue.';
+
+  @override
+  String get discardChanges => 'Discard changes?';
+
+  @override
+  String get discardChangesMessage => 'Your changes have not been saved.';
+
+  @override
+  String get keepEditing => 'Keep editing';
+
+  @override
+  String get discard => 'Discard';
+
+  @override
+  String get projectsIntro => 'Organize your models and training in projects.';
+
+  @override
+  String get noRecentProjects => 'Projects you open will appear here.';
+
+  @override
+  String get noCurrentProject => 'Choose a project to continue.';
+
+  @override
+  String get openProject => 'Open project';
 }

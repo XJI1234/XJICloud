@@ -171,4 +171,83 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sdkAbout => 'Native3DGS SDK 0.2.2 · XJICloud 安卓客户端';
+
+  @override
+  String get currentProject => '当前工程';
+
+  @override
+  String get recentProjects => '最近打开';
+
+  @override
+  String get createProject => '创建工程';
+
+  @override
+  String get firstProject => '创建第一个工程';
+
+  @override
+  String get projectName => '工程名称';
+
+  @override
+  String get projectDescription => '描述';
+
+  @override
+  String get saveProject => '保存';
+
+  @override
+  String get editProject => '编辑工程';
+
+  @override
+  String get deleteProject => '删除工程';
+
+  @override
+  String get setCurrentProject => '设为当前工程';
+
+  @override
+  String get projectCreated => '创建时间';
+
+  @override
+  String get projectEmpty => '暂无工程';
+
+  @override
+  String get selectProject => '选择工程以查看详情。';
+
+  @override
+  String get projectUnavailable => '该工程不可用，请刷新工程列表。';
+
+  @override
+  String get projectValidation => '请输入 1–256 字的工程名称，描述最多 2000 字。';
+
+  @override
+  String get workspaceStorage => '无法保存或读取工作区，请重试。';
+
+  @override
+  String get projectDeletedStorage => '工程已删除，但本地工作区保存失败；请刷新以同步。';
+
+  @override
+  String get deleteProjectMessage =>
+      '删除此工程及其全部模型、训练任务和数据集？此操作无法撤销，服务端正在运行的任务可能继续。';
+
+  @override
+  String get discardChanges => '放弃修改？';
+
+  @override
+  String get discardChangesMessage => '当前修改尚未保存。';
+
+  @override
+  String get keepEditing => '继续编辑';
+
+  @override
+  String get discard => '放弃修改';
+
+  @override
+  String get projectsIntro => '用工程整理模型与训练素材。';
+
+  @override
+  String get noRecentProjects => '打开过的工程将显示在这里。';
+
+  @override
+  String get noCurrentProject => '选择工程以继续。';
+
+  @override
+  String get openProject => '打开工程';
 }

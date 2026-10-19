@@ -6,6 +6,9 @@ import '../features/identity/infrastructure/secure_session_store.dart';
 import '../features/identity/infrastructure/preferences_locale_store.dart';
 import '../shared/infrastructure/api_client.dart';
 import '../shared/infrastructure/sdk_licenses.dart';
+import '../features/project/infrastructure/http_project_repository.dart';
+import '../features/project/infrastructure/local_workspace_persistence.dart';
+import '../features/project/presentation/workspace_controller.dart';
 import 'app_container.dart';
 import 'session_coordinator.dart';
 
@@ -27,5 +30,10 @@ AppContainer createContainer({
     auth: HttpAuthRepository(api),
     locales: PreferencesLocaleStore(),
     closeTransport: api.close,
+    workspace: WorkspaceController(
+      HttpProjectRepository(api),
+      LocalWorkspacePersistence(),
+      sessions,
+    ),
   );
 }
