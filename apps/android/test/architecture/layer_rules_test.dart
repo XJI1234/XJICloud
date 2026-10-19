@@ -5,6 +5,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/layer_rules.dart';
 
 void main() {
+  test('ordinary and developer main entries cannot assemble adapters', () {
+    for (final entry in ['main.dart', 'main_probe.dart', 'main_other.dart']) {
+      expect(
+        layerViolations(
+          entry,
+          "import 'features/identity/infrastructure/secure_session_store.dart';",
+        ),
+        isNotEmpty,
+      );
+      expect(
+        layerViolations(
+          entry,
+          "export 'package:xjicloud_mobile/shared/infrastructure/api_client.dart';",
+        ),
+        isNotEmpty,
+      );
+      expect(
+        layerViolations(entry, "import 'app/create_container.dart';"),
+        isEmpty,
+      );
+    }
+  });
   test(
     'rejects framework IO and adapters from Domain, including relative exports',
     () {

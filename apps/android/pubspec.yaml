@@ -37,9 +37,13 @@ dependencies:
   native3dgs_flutter:
     path: packages/native3dgs_flutter
   go_router: ^18.1.0
+  dio: ^5.9.0
+  flutter_secure_storage: ^10.0.0
+  shared_preferences: ^2.5.3
   flutter_localizations:
     sdk: flutter
 
+  intl: ^0.20.3
 dev_dependencies:
   integration_test:
     sdk: flutter
@@ -66,6 +70,9 @@ flutter:
   generate: true
   assets:
     - assets/brand/logo_nw.png
+    - vendor/native3dgs/0.2.2/licenses/spz-LICENSE
+    - vendor/native3dgs/0.2.2/licenses/zstd-LICENSE
+    - vendor/native3dgs/0.2.2/licenses/android-ndk-NOTICE.toolchain
 
   # To add assets to your application, add an assets section, like this:
   # assets:

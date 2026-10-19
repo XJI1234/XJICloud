@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 
-import 'app/engine_probe_page.dart';
+import 'app/create_container.dart';
+import 'app/product_app.dart';
+export 'main_probe.dart' show XjiCloudProbeApp;
 
-void main() => runApp(const XjiCloudProbeApp());
-
-class XjiCloudProbeApp extends StatelessWidget {
-  const XjiCloudProbeApp({super.key});
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    title: 'XJICloud Native3DGS P0',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff3d6b8a)),
-    ),
-    home: const EngineProbePage(),
-  );
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    runApp(ProductApp(container: createContainer()));
+  } on ArgumentError {
+    runApp(const ConfigurationErrorApp());
+  } on FormatException {
+    runApp(const ConfigurationErrorApp());
+  }
 }

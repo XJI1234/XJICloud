@@ -5,7 +5,7 @@ import '../presentation/theme/app_theme.dart';
 import '../shared/l10n/app_localizations.dart';
 
 /// Product app host. The composition root owns and disposes [router].
-/// P0 remains the default entry until real destinations are composed.
+/// P0 has a separate developer entry; only working capabilities are composed.
 class XjiCloudApp extends StatelessWidget {
   const XjiCloudApp({
     super.key,

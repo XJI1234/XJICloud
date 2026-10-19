@@ -8,6 +8,7 @@ List<String> layerViolations(String sourcePath, String source) {
       sourcePath.startsWith('presentation/') ||
       sourcePath.contains('/presentation/');
   final app = sourcePath.startsWith('app/');
+  final entry = RegExp(r'^main(?:_[a-zA-Z0-9_]+)?\.dart$').hasMatch(sourcePath);
   final owner = RegExp(r'^features/([^/]+)/').firstMatch(sourcePath)?.group(1);
   final directives = RegExp(r'''\b(?:import|export)\s+[^;]+;''');
   final uris = RegExp(r'''['"]([^'"]+)['"]''');
@@ -53,7 +54,9 @@ List<String> layerViolations(String sourcePath, String source) {
           targetOwner != null &&
           owner != targetOwner) {
         reason = 'cross BC infrastructure dependency';
-      } else if (app && sourcePath != 'app/create_container.dart' && infra) {
+      } else if ((app || entry) &&
+          sourcePath != 'app/create_container.dart' &&
+          infra) {
         reason = 'infrastructure assembly outside create_container.dart';
       }
       if (reason != null) violations.add('$sourcePath -> $uri: $reason');
