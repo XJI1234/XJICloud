@@ -1,0 +1,14 @@
+{
+  "@@locale": "en",
+  "appTitle": "XJICloud",
+  "home": "Home",
+  "projects": "Projects",
+  "viewer": "Model viewer",
+  "account": "Account",
+  "upload": "Upload",
+  "uploadImages": "Upload images and train",
+  "uploadModel": "Upload PLY/SPZ model",
+  "loading": "Working",
+  "cancel": "Cancel",
+  "confirm": "Confirm"
+}

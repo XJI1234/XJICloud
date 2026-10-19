@@ -1,0 +1,14 @@
+{
+  "@@locale": "zh",
+  "appTitle": "XJICloud",
+  "home": "主页",
+  "projects": "工程管理",
+  "viewer": "模型查看",
+  "account": "我的",
+  "upload": "上传",
+  "uploadImages": "上传图片并训练",
+  "uploadModel": "上传 PLY/SPZ 模型",
+  "loading": "处理中",
+  "cancel": "取消",
+  "confirm": "确认"
+}

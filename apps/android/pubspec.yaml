@@ -36,6 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   native3dgs_flutter:
     path: packages/native3dgs_flutter
+  go_router: ^18.1.0
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   integration_test:
@@ -60,6 +63,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  generate: true
+  assets:
+    - assets/brand/logo_nw.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
