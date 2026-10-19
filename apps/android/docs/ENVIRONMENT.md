@@ -18,7 +18,7 @@
 | Flutter 默认 NDK | 28.2.13676358；消费预编译 AAR，不重编 SDK |
 | Emulator | 36.5.10.0；`-accel-check` 确认 WHPX 可用 |
 | AVD | 新建 XJICloud_API35，google_apis / x86_64，1080×2400，density 420，2GB RAM |
-| 真机 | 未连接；用户确认本轮仅完成可构建 P0 |
+| 真机 | 尚未接入 Agent；用户已手动安装 P0 APK，报告可浏览模型，并授权 P1 构建后联合调试 |
 
 保留现有 Flutter，不执行 upgrade/downgrade。旧计划的 3.38.9 基线已由本机基线替换，兼容性以本轮实际构建为准。SDK AAR 仍固定 0.2.2 与原 SHA-256，不随 Flutter 调整。
 
@@ -61,8 +61,8 @@ flutter devices
 
 插件 Kotlin 测试、设备测试命令与记录见 [P0 验证记录](verification/p0.md)。local.properties、.dart_tool、build 和签名材料必须保持忽略。
 
-## 5. 未通过的设备门槛
+## 5. 设备验证进展
 
-本轮没有 Android 10+、arm64、Vulkan 1.1 真机。模拟器只能验证 Flutter UI、通道与明确拒绝不支持架构；不能证明 SDK 首帧、PLY/SPZ 解码、手势/浮层合成、Surface 恢复、内存和热态性能通过。
+初次 P0 交付时没有 Android 10+、arm64、Vulkan 1.1 真机。随后用户手动安装 APK 并确认模型浏览正常，已授权进入 P1；当前尚未将设备接入 Agent。模拟器证据仍只涵盖 Flutter UI、通道与明确拒绝不支持架构，不外推为 GPU/Surface、内存和热态验收。
 
-连接真机后按 [原生接入验收矩阵](NATIVE3DGS.md) 补测，P0 设备门槛通过前不进入 P1。Windows 不承担 iOS 构建/签名验证；未做移动业务流程或浏览器 E2E，本轮不修改 web2、backend、admin、Spark 或 Rust。
+P1 构建后连接真机，按 [原生接入验收矩阵](NATIVE3DGS.md) 补测尚未观察的项目。Windows 不承担 iOS 构建/签名验证；不修改 web2、backend、admin、Spark 或 Rust。

@@ -8,7 +8,7 @@
 
 **Tech Stack:** 本机 Flutter 3.47.7、Dart 3.13.5、JDK 21、Android API 29+；Native3DGS AAR 0.2.2 / arm64 / Vulkan 1.1；Flutter SDK controller。go_router、dio、secure storage、系统文件选择、path_provider 按后续阶段需要引入。
 
-**Spec:** [架构](../docs/ARCHITECTURE.md)、[UI](../docs/MOBILE_UI.md)、[API](../docs/API_REUSE.md)、[原生桥](../docs/NATIVE3DGS.md)、[环境证据](../docs/ENVIRONMENT.md)。2026-10-19 用户要求按计划实施，随后确认本轮先完成可构建 P0，无真机；后续阶段仍以真机验收为进入条件。
+**Spec:** [架构](../docs/ARCHITECTURE.md)、[UI](../docs/MOBILE_UI.md)、[API](../docs/API_REUSE.md)、[原生桥](../docs/NATIVE3DGS.md)、[环境证据](../docs/ENVIRONMENT.md)。2026-10-19 可构建 P0 已交付并迁回当前 checkout；用户手动在移动设备安装 APK，报告可以正常浏览模型，随后授权继续 P1，构建后接入真机联合调试。完整设备验收矩阵仍待补测。
 
 ## Global Constraints
 
@@ -32,7 +32,7 @@
 | P3 上传训练 | 6 | 图片上传、暂停恢复、任务观看 | 真实 OSS + mock Worker 流、complete 不确定分支 |
 | P4 完整体验 | 7–8 | 云模型打开、最终 UI/生命周期/异常闭环 | 真机 E2E、审查、profile 数据与明确未覆盖项 |
 
-当前执行范围为可构建 P0；进度与证据见 [P0 验证记录](../docs/verification/p0.md)。自动化通过与真机验收分开标记；缺少真机时 Task 1 和 P0 不标整体完成，Task 2–8 保持未执行。每个任务通过后记录命令、设备/样本、结果、Review；只有无 High/Critical 才可标完成。提交建议按任务分开，执行前核对工作区，不夹带他人变更。
+当前执行范围为 P1（Task 2–3），依据用户的真机浏览结果与继续实施指令；进度分别见 [P0 验证记录](../docs/verification/p0.md) 和后续 P1 记录。自动化、用户报告与 Agent 现场真机验收分开标记；Task 1 完整设备矩阵保留未通过项，Task 4–8 尚未执行。每个任务通过后记录命令、设备/样本、结果、Review；只有无 High/Critical 才可标完成。当前 checkout 直接维护，提交按任务分开，不夹带他人变更。
 
 ## Task 1：可构建基线与原生渲染纵向验证
 
@@ -83,10 +83,10 @@ test('Result keeps failure distinct from an empty list', () {
 });
 ```
 
-- [ ] **1. 写并运行失败测试。** 上述 Result 用例；360/800/1280dp 与断点布局；四 Tab 顺序、中央上传动作不改变 Tab index、二次进入保留滚动；200% 字号无 overflow。`flutter test test/presentation test/architecture`，先验证失败原因。
-- [ ] **2. 实现共享内核与壳。** ThemeExtension 使用 UI 文档精确 token；有状态路由分支管理四目的地，上传为独立 flow。创建 architecture import 门禁；不为主页/我的新增 BC。纯静态壳允许测试内容，正式路由不能把假数据作为生产功能。
-- [ ] **3. 实现登录/上传/表单公共控件。** 复制透明 logo_nw，48dp 热区、SafeArea、键盘滚动、l10n、减少动画；不加入搜索/双屏/编辑占位。
-- [ ] **4. 验证并 Review。** `flutter analyze`、`flutter test`、arm64 debug build；模拟器操作四 Tab、上传打开/返回、旋转与字体放大。审查内层依赖/重复容器、没有业务 IO 漏入 Widget。提交建议 `feat(android): add adaptive shell and shared design system`。
+- [x] **1. 写并运行失败测试。** 上述 Result 用例；360/800/1280dp 与断点布局；四 Tab 顺序、中央上传动作不改变 Tab index、二次进入保留滚动；200% 字号无 overflow。`flutter test test/presentation test/architecture`，先验证失败原因。
+- [x] **2. 实现共享内核与壳。** ThemeExtension 使用 UI 文档精确 token；有状态路由分支管理四目的地，上传为独立 flow。创建 architecture import 门禁；不为主页/我的新增 BC。纯静态壳允许测试内容，正式路由不能把假数据作为生产功能。
+- [x] **3. 实现登录/上传/表单公共控件。** 复制透明 logo_nw，48dp 热区、SafeArea、键盘滚动、l10n、减少动画；不加入搜索/双屏/编辑占位。
+- [x] **4. 验证并 Review。** `flutter analyze`、`flutter test`、arm64 debug build；模拟器操作四 Tab、上传打开/返回、旋转与字体放大。审查内层依赖/重复容器、没有业务 IO 漏入 Widget。提交 `426bb48`、弹层修复 `1573f0e`；独立复审通过，见 [P1 验证记录](../docs/verification/p1.md)。
 
 ## Task 3：Identity 与我的基础页
 
@@ -102,10 +102,10 @@ test('Result keeps failure distinct from an empty list', () {
 - `SessionStore.read/write/clear` 管理 secure storage。`SessionCoordinator.invalidate` 幂等清登录会话并通知 workspace/传输/watcher/viewer。
 - `UserSession` 含 userId/username/displayName/token/UTC expiresAt；`CaptchaChallenge` 含 key/图片内容，不加入服务端未返回的 expires 字段。
 
-- [ ] **1. 固定 fixture 与失败测试。** 按真实 AuthResponse/CaptchaResponse 写 JSON：captchaKey/captchaImage；覆盖注册必验证码、登录 needCaptcha、错误验证码刷新、JWT exp 到期、网络失败不清 token、401 一次清理并失效迟到回调。`flutter test test/features/identity`。
-- [ ] **2. 实现分层与网络。** JSON wrapper 只在 ApiClient 解包，error mapping 保留错误；API Bearer 拦截仅作用于 API origin，拒绝跨 origin 转发凭证。DTO 不传入 UI；安全存储 token，偏好中不写密码/token。
-- [ ] **3. 实现白底表单与路由守卫。** UI 文档登录/注册/验证码/键盘避让/动画。注册成功返回登录；我的只展示 session 信息、语言/帮助/退出。清会话返回后无法系统返回到受保护页；保留受控站内目标路由。
-- [ ] **4. 实际联调与 Review。** 后端 + Redis 启动后完成注册、登录、错误验证码、断网、过期/401、退出重登；Phone 与 Pad 均测。跑 analyze/test/build；未启动服务则明确此任务联调门槛未过。提交建议 `feat(android): reuse identity APIs with secure sessions`。
+- [x] **1. 固定 fixture 与失败测试。** 按真实 AuthResponse/CaptchaResponse 写 JSON：captchaKey/captchaImage；覆盖注册必验证码、登录 needCaptcha、错误验证码刷新、JWT exp 到期、网络失败不清 token、401 一次清理并失效迟到回调。`flutter test test/features/identity`。
+- [x] **2. 实现分层与网络。** JSON wrapper 只在 ApiClient 解包，error mapping 保留错误；API Bearer 拦截仅作用于 API origin，拒绝跨 origin 转发凭证。DTO 不传入 UI；安全存储 token，偏好中不写密码/token。
+- [x] **3. 实现白底表单与路由守卫。** UI 文档登录/注册/验证码/键盘避让/动画。注册成功返回登录；我的只展示 session 信息、语言/帮助/退出。清会话返回后无法系统返回到受保护页；保留受控站内目标路由。
+- [x] **4. 实际联调与 Review。** 本机后端 + Redis 及部署 HTTPS 登录均完成用户路径；Phone/模拟 Pad、验证码、退出恢复、断网已验证；exp/401 走受控测试（实际后端无效 Bearer 返回 403 的限制已记录）。76 项测试、analyze、arm64 构建通过；独立审查/复审通过，提交 `b41282e`、`db8c6b9`，见 [P1 验证记录](../docs/verification/p1.md)。物理设备矩阵仍待联合调试。
 
 ## Task 4：Project、主页与工程详情
 

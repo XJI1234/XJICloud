@@ -19,7 +19,7 @@
 
 技术栈：**Vue 3.5 + Vite + pnpm workspace**（当前用户端为 `apps/web2`，前端 DDD，无 Pinia 作为业务源）；**Spring Boot 3.3 + Java 17**（后端）、**Redis**（任务队列）、**S3 兼容 OSS**（MinIO / 阿里云 OSS）、**Python GPU Worker 容器**（Alibaba Cloud Linux 3）、**Rust/WASM**（浏览器端 Spark）。
 
-**桌面端（Electron/Tauri）已移除**，仅保留 Web。
+**桌面端（Electron/Tauri）已移除**。移动客户端位于 `apps/android`：Flutter Android 宿主、Native3DGS 0.2.2 本地原生桥与开发探针已建立，用户报告真机模型浏览正常；Phone/Pad 共享主题与导航组件、Identity 登录注册/加密会话及账号页已落地。完整原生设备矩阵仍待联调；工程、上传训练与云模型业务尚未实现。普通入口为 P1，`main_probe.dart` 为原生开发入口。维护前读该目录 `AGENTS.md`、`docs/` 与 `plans/`，不得将阶段设计视为已完成能力。
 
 ---
 
@@ -27,6 +27,7 @@
 
 ```
 XJICloud/
+├── apps/android/             # Flutter 移动客户端，P0 原生桥 / P1 UI与会话分阶段实现
 ├── apps/web2/                # 当前用户前端 @xjicloud/web2（:5176，DDD）
 ├── apps/web/                 # 已弃用：旧用户前端 @xjicloud/web（:5174）
 ├── apps/admin/               # 管理前端 @xjicloud/admin（:5175，base /admin/）

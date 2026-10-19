@@ -1,6 +1,6 @@
 # 移动客户端维护规则
 
-先读根目录 AGENTS、`docs/TEAM_ENGINEERING.md`、`docs/AGENT_CONTEXT.md`，再读本目录 README 与设计文档。当前已建立可构建 P0 工程与原生桥，尚未通过真机验收；计划中的后续业务目录或 API 不能当作已实现。
+先读根目录 AGENTS、`docs/TEAM_ENGINEERING.md`、`docs/AGENT_CONTEXT.md`，再读本目录 README 与设计文档。P0 原生桥及 P1 共享主题/自适应壳、Identity/账号页已落地，证据见 `docs/verification/`；完整真机矩阵仍待联合调试。普通入口为 P1，独立原生探针为 `lib/main_probe.dart`。计划中的工程、上传训练和正式查看器业务不能当作已实现。
 
 用户已要求将 P0 工程迁回当前仓库，后续直接在本 checkout 的 `apps/android` 继续维护；不要默认另建独立工作区。
 

@@ -1,6 +1,6 @@
 # 产品范围与 Flutter DDD 架构
 
-2026-10-19。P0 Flutter 开发工程与本地原生插件已开始落地，证据见 [P0 验证记录](verification/p0.md)；下述五个业务 BC 与正式产品导航仍为后续设计，尚未实现。依据：根工程手册、web2 AGENTS/WEB2_FRONTEND、现有 Controller/DTO、发布 SDK 实物。
+2026-10-19。P0 Flutter 工程与本地原生插件、P1 共享内核/主题/自适应组件、Identity 与账号页已落地，记录见 [P0](verification/p0.md) 与 [P1](verification/p1.md)。工程、训练、模型资产、正式 Viewer 的业务 BC 和完整产品导航仍为后续设计。普通 `main.dart` 启动产品登录/账号路由，`main_probe.dart` 保留独立原生验证。依据：根工程手册、web2 AGENTS/WEB2_FRONTEND、现有 Controller/DTO、发布 SDK 实物。
 
 ## 1. 复用什么
 
@@ -46,7 +46,7 @@ flowchart TD
 
 外层依赖内层。页面用组合根注入的 controller，不 new 仓库。跨 BC 仅在 Application 编排，禁止导入其他 BC 的 Infrastructure。主页与“我的”是组合页面，不为页面名新增领域。
 
-建议目录（创建工程时才落地）：
+目录约定（当前已创建 Identity；其余业务目录随阶段落地）：
 
 ```text
 apps/android/

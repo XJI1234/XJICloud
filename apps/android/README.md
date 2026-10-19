@@ -1,12 +1,12 @@
 # XJICloud 移动客户端
 
-状态：**已建立可构建 P0 Flutter 工程与本地 Native3DGS 渲染桥；尚未通过 arm64 真机验收**。2026-10-19。构建、测试与审查证据见 [P0 验证记录](docs/verification/p0.md)。
+状态：**P1 登录注册、加密会话与账号页已落地，正在收尾构建验收**。2026-10-19。P0 原生桥已由用户手动确认可浏览模型，完整真机矩阵仍待联合调试。证据见 [P0](docs/verification/p0.md) 与 [P1 验证记录](docs/verification/p1.md)。
 
-目录名沿用需求 `apps/android`。当前仅创建 Android 宿主与开发验证页，iOS 平台尚未创建。后续共享 Dart 业务代码；当前开发页不代表登录、工程、上传训练等产品能力已实现。
+目录名沿用需求 `apps/android`，iOS 平台尚未创建。当前普通入口提供登录、注册、验证码、账号、语言、帮助/许可证和退出；共享四目的地壳已验证，工程、上传训练及正式查看器业务将在后续阶段接入，不提供假入口。
 
 工程已从独立工作区迁回当前仓库，后续直接在本目录维护。无需进入 `.codex/worktrees`。
 
-## 启动 P0 开发入口
+## 启动产品入口与 P0 探针
 
 本机使用 Flutter 3.47.7 / Dart 3.13.5 / JDK 21。进入本目录执行：
 
@@ -15,13 +15,19 @@ powershell -ExecutionPolicy Bypass -File scripts/fetch-native3dgs.ps1
 flutter pub get
 flutter analyze
 flutter test
-flutter build apk --debug --target-platform android-arm64
-flutter run -d <device-id>
+flutter build apk --debug --target-platform android-arm64 --dart-define=API_BASE_URL=https://cloud.xji.org.cn
+flutter run -d <device-id> --dart-define=API_BASE_URL=https://cloud.xji.org.cn
+
+# 独立原生模型探针，不需要登录或网络配置
+flutter run -d <device-id> -t lib/main_probe.dart
+flutter build apk --debug --target-platform android-arm64 -t lib/main_probe.dart
 ```
 
 固定 SDK AAR、原文档与许可证已在 vendor 中；下载脚本可重建依赖并校验 ZIP、51 个 manifest 文件和 AAR。原生插件位于 `packages/native3dgs_flutter`，消费 AAR 的打包声明位于 Android app，避免在 Flutter library AAR 中重复嵌套本地 AAR。
 
-入口为“Native3DGS · P0 开发验证”：本机 SAF 文件选择、打开/取消/关闭、相机操作与会话状态。支持性检查在创建引擎前执行；x86_64 模拟器与当前 SDK 不兼容的 16KB 页环境会显示明确原因，不加载引擎。此页不调用云端接口，也不注册产品导航。
+`API_BASE_URL` 必须是 HTTPS origin，不含 `/api/v1`；缺失或不合法会显示配置错误。用户最初提供的 HTTPS 8080 端口实测不支持 TLS，已使用同域名可用的 443 HTTPS 认证入口。debug 另允许 loopback HTTP：`--dart-define=API_BASE_URL=http://127.0.0.1:8080` 配合 `adb reverse tcp:8080 tcp:8080`；release 不允许明文。测试账号从外部文件传入 integration test，禁止把该测试 APK 当交付包，普通构建只传 API 地址。
+
+`main_probe.dart` 为“Native3DGS · P0 开发验证”：本机 SAF 文件选择、打开/取消/关闭、相机操作与会话状态。支持性检查在创建引擎前执行；x86_64 模拟器与当前 SDK 不兼容的 16KB 页环境会显示明确原因，不加载引擎。此页不调用云端接口，也不注册产品导航。探针与产品沿用相同 applicationId，安装会替换当前入口。
 
 ## 阅读顺序
 
