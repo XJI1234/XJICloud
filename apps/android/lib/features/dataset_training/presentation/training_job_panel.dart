@@ -96,7 +96,10 @@ class _TrainingJobPanelState extends State<TrainingJobPanel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    visible = ModalRoute.isCurrentOf(context) ?? true;
+    // Retained indexed-shell routes stay current while their branch is offstage.
+    visible =
+        (ModalRoute.isCurrentOf(context) ?? true) &&
+        TickerMode.valuesOf(context).enabled;
     syncPresence();
   }
 

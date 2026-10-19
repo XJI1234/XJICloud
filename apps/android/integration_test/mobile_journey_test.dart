@@ -30,6 +30,12 @@ void main() {
     'real project edit, cloud native view, cache, logout and account isolation',
     // Diagnose the real save; retain every original success assertion below.
     (tester) async {
+      final previousHitTestPolicy =
+          WidgetController.hitTestWarningShouldBeFatal;
+      WidgetController.hitTestWarningShouldBeFatal = true;
+      addTearDown(() {
+        WidgetController.hitTestWarningShouldBeFatal = previousHitTestPolicy;
+      });
       for (final value in [
         username,
         password,
@@ -76,10 +82,26 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        Future<void> tap(Finder finder) async {
+        Future<void> tap(Finder finder, {VoidCallback? beforeTap}) async {
+          // Unfocus the real input connection before locating a button: native
+          // IME updates and dialog inset animations can change text or geometry.
+          FocusManager.instance.primaryFocus?.unfocus();
+          await tester.pumpAndSettle();
+          await until(
+            () => tester.view.viewInsets.bottom == 0,
+            seconds: 10,
+            phase: 'keyboard-dismissed',
+          );
           expect(finder, findsOneWidget);
           await tester.ensureVisible(finder);
           await tester.pumpAndSettle();
+          await until(
+            () => finder.hitTestable().evaluate().length == 1,
+            seconds: 10,
+            phase: 'tap-target-visible',
+          );
+          expect(finder.hitTestable(), findsOneWidget);
+          beforeTap?.call();
           await tester.tap(finder);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
@@ -158,7 +180,39 @@ void main() {
           find.byKey(const Key('project-description-input')),
           'Mobile acceptance owned resource',
         );
-        await tap(find.byKey(const Key('save-project')));
+        await tap(
+          find.byKey(const Key('save-project')),
+          beforeTap: () {
+            expect(
+              tester
+                      .widget<TextFormField>(
+                        find.byKey(const Key('project-name-input')),
+                      )
+                      .controller
+                      ?.text ==
+                  name,
+              isTrue,
+              reason: 'Settled creation name must match the acceptance input.',
+            );
+            expect(
+              tester
+                      .widget<TextFormField>(
+                        find.byKey(const Key('project-description-input')),
+                      )
+                      .controller
+                      ?.text ==
+                  'Mobile acceptance owned resource',
+              isTrue,
+              reason: 'Settled creation description must match the acceptance input.',
+            );
+            expect(
+              tester
+                  .widget<FilledButton>(find.byKey(const Key('save-project')))
+                  .onPressed,
+              isNotNull,
+            );
+          },
+        );
         await until(
           () =>
               !workspace.busy &&
@@ -204,12 +258,16 @@ void main() {
         }
 
         void editChanged() => editDiagnostics('project-edit-controller-change');
-        editDiagnostics('project-edit-before-save');
-        expect(editInputMatches(), isTrue);
-        expect(editSaveEnabled(), isTrue);
         workspace.addListener(editChanged);
         try {
-          await tap(find.byKey(const Key('save-project')));
+          await tap(
+            find.byKey(const Key('save-project')),
+            beforeTap: () {
+              editDiagnostics('project-edit-before-save');
+              expect(editInputMatches(), isTrue);
+              expect(editSaveEnabled(), isTrue);
+            },
+          );
           editDiagnostics('project-edit-after-tap');
           await until(
             () =>
