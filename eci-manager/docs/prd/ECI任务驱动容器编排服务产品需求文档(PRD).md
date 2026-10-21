@@ -4,11 +4,11 @@
 | ------------ | ------------ | -------- | ------------ |
 | **v2.0.3** | 2026-07-30 | 一期 mock 交付完成（T1–T3） | 后端开发、容器运维、测试、评审人 |
 | **产品定位** | 独立任务驱动的 ECI 容器编排服务 | 本服务在现有实例管理能力上增加任务提交、自动创建、终态检测、超时保护与自动删除 | |
-| **前身文档** | `ECI容器管理后端Demo产品需求文档(PRD).md` v1.1 | 本文件已取代前身文档；Demo 阶段已完成的创建、查询、删除能力继续保留 | |
+| **前身文档** | `eci-manager/prd/ECI容器管理后端Demo产品需求文档(PRD).md` v1.1 | 本文件已取代前身文档；Demo 阶段已完成的创建、查询、删除能力继续保留 | |
 
 > **v2.0.3：** 一期 **T1–T3 已在 mock 下交付并验收**（`mvn test` + 文档 curl）。真云联调为可选，不阻塞一期 closure。实现细节见 [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)；工程位于 `eci-manager/`，不修改主仓 `backend/`。
 >
-> **关联增量 PRD：** [ECI任务OSS对象存储集成产品需求文档(PRD).md](ECI任务OSS对象存储集成产品需求文档(PRD).md) v1.0 — 任务容器 OSS presigned URL 读写（v2.1 规划）。
+> **关联增量 PRD：** [ECI任务OSS对象存储集成产品需求文档(PRD).md](eci-manager/prd/ECI任务OSS对象存储集成产品需求文档(PRD).md) v1.0 — 任务容器 OSS presigned URL 读写（v2.1 规划）。
 
 ### v1.1 → v2.0 变更概览
 

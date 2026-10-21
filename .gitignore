@@ -10,6 +10,8 @@ demos
 node_modules
 dist
 dist-ssr
+__pycache__/
+*.py[cod]
 # Generated at web predev/prebuild from vendors/supersplat
 apps/web/public/supersplat
 apps/web2/public/supersplat
@@ -35,3 +37,8 @@ deploy/config/install-summary.txt
 *.sw?
 Cookies
 tmp/
+docs/superpowers
+.superpowers/
+
+# Local agent configuration
+/.codex/

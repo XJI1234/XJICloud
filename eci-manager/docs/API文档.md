@@ -106,7 +106,7 @@
 | 400 | 参数非法（如任务缺 `image`、非法 `restartPolicy`、`maxRuntimeSec≤0`、未知 `resource`、云钥不成对、mock 下测 ECI、OSS 未配 endpoint/bucket） |
 | 401 | 缺少或错误的 `X-Api-Key` |
 | 404 | 任务/实例不存在 |
-| 409 | 冲突（如创建中禁止删实例；任务已终态无法取消） |
+| 409 | 冲突（如创建中禁止删实例；`SUCCEEDED` 任务无法取消） |
 | 500 | 未预期服务器错误；真云创建时镜像缓存不存在或未就绪（`ImageSnapshot.NotFound` / `ImageSnapshot.IncorrectStatus`）会经此路径回写 `failureReason`；当前无映射的旧 HTTP 钥路由也被全局兜底异常处理转为 500 |
 
 ### 2.4 任务状态（`TaskStatus`）
@@ -525,7 +525,7 @@ GPU 示例（贵、看库存；测完必须删）：
 
 8081 每种阿里云资源只持有**一把当前 AccessKey**（`ECI_OPENAPI` / `OSS`），可通过 GET/PUT 热切、落盘、测通；以下云当前钥语义与 HTTP Api-Key 配置鉴权相互独立。
 
-- **没有**多钥目录、没有按 id 选钥。统一 AK 列表在**主后端第二步**；第二步将调用本节省下的同一 URL。
+- 8081 不提供多钥目录或按 id 选钥。主后端 8080 已维护统一 AK 目录，并通过本节接口测试和推送选用的当前钥，见[云访问密钥管理说明](./云访问密钥管理说明.md)。
 - GET / 响应 / 日志**永不返回 SK**（只给 `accessKeyHint`）。
 - 均需 `X-Api-Key`。无钥或错钥 → **401**，文案「无效或缺失的 Api-Key」。
 - 本期**不能**清空当前钥（避免误切 IMDS）。要换钥就 PUT 新的一对。
@@ -653,7 +653,7 @@ Mock 下 `resource=ECI_OPENAPI` 的 test 期望 **400**。真云测 ECI 须 `eci
 - 所有受保护 REST API 继续使用 `X-Api-Key`，请求头与配置值精确匹配才返回非 `401`。
 - HTTP Api-Key 不运行时热切、不写入 `eci_runtime_config`，也不从 H2 恢复。修改密钥必须改部署 env/yml 并重启服务；不存在 HTTP Api-Key 轮换或吊销接口。
 - 旧 `PUT /api/v1/eci/credentials/http-api-key` 和 `POST /api/v1/eci/credentials/revoke-previous-api-key` 已无业务映射；带正确钥请求时，当前全局异常处理会将无资源异常返回为 **500**，不是轮换成功，也不是 404。缺钥请求仍先返回 **401**。调用方不得再调用这两个路径。
-- 主后端第二步调用 8081 时仍传部署配置中的 `X-Api-Key`，不依赖 H2 旧行。
+- 主后端调用 8081 时仍传部署配置中的 `X-Api-Key`，不依赖 H2 旧行。
 - 升级时 H2 中可能残留旧 `eci.api-key`、`previous`、`previous-expires-at` 行，但新版本全部忽略，不能覆盖配置或继续授权。曾通过旧 PUT 轮换过的部署，升级前必须把当时仍有效的当前 HTTP Api-Key 回写到受保护的 env/yml，再停止旧版本并启动新版本；只回写当前有效钥，不回写已撤销或仅处于旧重叠窗口的钥。
 - HTTP Api-Key 不写入日志、响应、静态控制台或本文档明文。
 
@@ -744,7 +744,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | 可选 `storage`（OSS presign 注入 env） | `POST /tasks` | **已实现**（一期无响应 `storageResolved`） |
 | 任务列表 / 详情 | `GET /tasks`、`GET /tasks/{id}` | **已实现** |
 | 任务日志尾部 | `GET /tasks/{id}/logs` | **已实现** |
-| 操作台元数据 | `GET /meta` | **已实现**（无密钥） |
+| 操作台元数据 | `GET /meta` | 已实现；需 Api-Key，响应不含云密钥 |
 | 本地操作台静态页 | `GET /` | **已实现** |
 | 任务取消（幂等） | `POST /tasks/{id}/cancel` | **已实现** |
 | 一任务一实例绑定 | `taskId` ↔ `instanceId` | **已实现** |
@@ -756,7 +756,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | 当前云钥 GET/PUT | `/api/v1/eci/runtime-credentials` | **已实现**（每 resource 一把当前钥） |
 | 测通草稿或当前钥 | `POST /runtime-credentials/test` | **已实现**（CI 不连真云） |
 | HTTP Api-Key 配置鉴权 | `eci.api-key` / `ECI_API_KEY` + `X-Api-Key` | **已实现** |
-| 8081 多钥目录 / 按 id 选钥 | — | **不做**（主后端第二步） |
+| 8081 多钥目录 / 按 id 选钥 | — | 由主后端 8080 提供，8081 只保存当前钥 |
 
 ---
 
@@ -768,7 +768,3 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | [测试说明.md](./测试说明.md) | 可复制粘贴的逐步测试 |
 | [../README.md](../README.md) | 工程入口与进度摘要 |
 | [PRD](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) | 产品需求全文 |
-| [实现计划](../../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md) | 分阶段任务 |
-| [当前钥计划](../../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md) | 第一步 C1–C5 |
-| [当前钥设计](../../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md) | 8081 执行器；第二步目录规划 |
-| [当前钥设计](../../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md) | 8081 当前钥执行器；第二步目录规划 |

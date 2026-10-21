@@ -2,7 +2,7 @@
 
 > 供 Cursor / 其他 AI Agent 快速理解 **eci-manager** 子工程：结构、架构、已锁定决策、联调结论与约束。执行规则见 [AGENTS.md](AGENTS.md)。  
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
-> 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
+> 主仓全局上下文见 [AGENT_CONTEXT.md](../docs/AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
 **最后更新：** 2026-10-19（任务云端状态快照与安全取消契约）
 
@@ -36,7 +36,7 @@
   - ✅ 每 resource 一把**当前钥**落盘 + GET/PUT `/runtime-credentials` + 热重建
   - ✅ HTTP Api-Key 配置鉴权（`eci.api-key` / `ECI_API_KEY`）
   - ✅ `POST /runtime-credentials/test`（草稿或已保存；不改当前）
-  - ✅ 文档：8081 只有当前钥；列表在主后端第二步；`.env` 是种子
+  - ✅ 8081 只保存当前钥；主后端 8080 已实现 AK 目录、测试与选用推送；`.env` 是种子
 - **已交付（P0 生命周期可靠性，2026-09-21）：**
   - ✅ `eci_lifecycle_action` 持久化 CREATE/DELETE 动作、租约、退避与启动恢复；移除 `AsyncLifecycleWorker` 长轮询
   - ✅ DELETE 失败 2 秒起、300 秒封顶指数退避无限重试；`delete-timeout-sec` 只告警，不停止清理
@@ -59,24 +59,19 @@
 - **已交付（本地操作台，2026-09-16）：**
   - ✅ `SecurityConfig` 放行 `/`、`/index.html`、`/console/**`、`/favicon.ico`
   - ✅ 静态操作台（无 Node）：Api-Key 闸门、MOCK/CLOUD 徽章、任务提交/轮询/计时/日志尾部、实例与当前云钥 Tab
-  - ✅ `GET /api/v1/eci/meta`（无密钥）；`GET /api/v1/eci/tasks/{id}/logs`
+  - ✅ `GET /api/v1/eci/meta`（需 Api-Key，响应不含云密钥）；`GET /api/v1/eci/tasks/{id}/logs`
   - ✅ `ApplicationReadyEvent` 打开 `http://127.0.0.1:{port}/`（WSL: `cmd.exe /c start`）；`./scripts/start.sh mock|cloud`
 - **独立进程**、独立 `pom.xml`，端口 **8081**，**禁止改动**主仓 `backend/` 业务代码
 - 对应 PRD：仓库根目录 [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../ECI任务驱动容器编排服务产品需求文档(PRD).md) **v2.0.3**
-- **OSS 增量 PRD：** [`ECI任务OSS对象存储集成产品需求文档(PRD).md`](../ECI任务OSS对象存储集成产品需求文档(PRD).md) **v1.0**
-- **实现计划：** [`docs/superpowers/plans/2026-07-27-eci-task-orchestration.md`](../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md)
-- **OSS 计划 / 续跑：** [`docs/superpowers/plans/2026-07-30-eci-oss-integration.md`](../docs/superpowers/plans/2026-07-30-eci-oss-integration.md)、[`docs/superpowers/2026-07-31-eci-oss-handoff.md`](../docs/superpowers/2026-07-31-eci-oss-handoff.md)
-- **当前钥（第一步 C1–C5）：** [`docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md`](../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md)、[设计](../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md)
+- **OSS 增量 PRD：** [`ECI任务OSS对象存储集成产品需求文档(PRD).md`](prd/ECI任务OSS对象存储集成产品需求文档(PRD).md) **v1.0**
 
-**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、独立 Node/React 前端、业务回调、镜像注册表、批量提交、运行时切换 `EciProvider`；`storage.mode=dataset` / 响应 `storageResolved`；SSE/WebSocket 流式日志；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（第二步主后端）。主 backend 已通过 `/tasks`、`clientRequestId` 和 `storage.mode=keys` 接入；本地静态操作台已交付，不另起构建步骤。
+**当前非目标（一期）：** 训练队列、Worker 注册/心跳、自动扩缩、独立 Node/React 前端、业务回调、镜像注册表、批量提交、运行时切换 `EciProvider`；`storage.mode=dataset` / 响应 `storageResolved`；SSE/WebSocket 流式日志；OSS 存全量容器日志（方案 B）；**8081 多钥目录 / 按 id 选钥**（主后端 8080 已提供）。主 backend 已通过 `/tasks`、`clientRequestId` 和 `storage.mode=keys` 接入；本地静态操作台已交付，不另起构建步骤。
 
 ### 1.1 下一步路线图（按紧急程度）
 
 > **执行规则：** 先完成 P0，再继续真云规模化使用或主后端集成。每一项单独确认契约、单独按 TDD 实现和审查，不把多个阶段捆成一次大改。本文只记录方向与验收口径；开始实现时仍须先写对应设计或计划。
 >
-> **P0 设计：** [`docs/superpowers/specs/2026-09-21-eci-manager-p0-lifecycle-reliability-design.md`](../docs/superpowers/specs/2026-09-21-eci-manager-p0-lifecycle-reliability-design.md)
 >
-> **P0 实施计划：** [`docs/superpowers/plans/2026-09-21-eci-manager-p0-lifecycle-reliability.md`](../docs/superpowers/plans/2026-09-21-eci-manager-p0-lifecycle-reliability.md)
 
 #### P0：云资源安全与状态一致性（最紧急）
 
@@ -106,7 +101,7 @@
 
 #### P3：产品集成与后续扩展（P0-P2 后）
 
-1. 主后端统一 AK 目录调用现有 `GET/PUT /runtime-credentials` 与 `POST .../test`；8081 继续只保存每个 resource 的当前钥，不新增第二套目录。
+1. 主后端统一 AK 目录及 `PUT /runtime-credentials`、`POST .../test` 集成已完成；8081 继续只保存每个 resource 的当前钥，不新增第二套目录。
 2. 如需进一步封装，再设计 `storage.mode=dataset` / `storageResolved`；当前 backend 使用 `storage.mode=keys`，契约为输入 OSS key 列表和输出 OSS key。
 3. 仍不在本阶段加入训练队列、Worker 注册/心跳、自动扩缩、批量提交、独立前端或运行时 Provider 切换；这些能力必须另立 PRD。
 
@@ -244,9 +239,9 @@ PENDING|STARTING|RUNNING → CANCELLING → CANCELLED（cancel 后清理完成�
 | HTTP Api-Key（`eci.api-key` / `ECI_API_KEY` / `X-Api-Key`） | 保护本服务 REST | 进程配置唯一权威；改配置后重启 |
 | 阿里云当前钥 | 调 ECI OpenAPI / 本服务 OSS presign | 每种 `resource` **一把当前 AK**（库表 `eci_runtime_config`） |
 
-**8081 只有当前钥**，没有多钥目录、没有按 id 选钥。统一 AK 列表在**主后端第二步**；第二步将调用同一套 `GET/PUT /runtime-credentials`、`POST .../test`。
+**8081 只有当前钥**，没有多钥目录、没有按 id 选钥。统一 AK 列表已由主后端 8080 管理，并通过 `PUT /runtime-credentials` 和 `POST .../test` 推送与测试凭据。
 
-HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把值注入该配置。所有受保护请求都必须传配置中的 `X-Api-Key`，改钥必须修改部署的 env/yml 并重启。第二步调用 8081 时仍传同一配置值的 `X-Api-Key`。HTTP Api-Key 不写入 `eci_runtime_config`，也不从该表恢复。
+HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把值注入该配置。所有受保护请求都必须传配置中的 `X-Api-Key`，改钥必须修改部署的 env/yml 并重启。主后端调用 8081 时仍传同一配置值的 `X-Api-Key`。HTTP Api-Key 不写入 `eci_runtime_config`，也不从该表恢复。
 
 升级时，H2 中可能残留旧版本的 `eci.api-key`、`previous`、`previous-expires-at` 行，但新版本一律忽略，不能覆盖配置或继续授权。曾经通过旧 PUT 轮换过的部署，必须在升级前把当时仍有效的当前 HTTP Api-Key 回写到受保护的 env/yml，再停止旧版本并启动新版本；不要回写已撤销或仅处于旧重叠窗口的钥。旧行可留在 H2，不需要迁移读取或新写入。
 
@@ -333,7 +328,7 @@ TaskResponse 新增 `instanceStatus`、`cloudStatus`、`statusReason`、`cleanup
 | 成功任务日志 | **不存** `containerLogTail`（防磁盘膨胀） |
 | 生产选型 ECI/CCI | 待定，不阻塞 |
 | 云凭证 | 每 resource 一把当前钥（落盘+热切）；`.env` 仅种子；Java 不读 `ALIBABA_CLOUD_*`；成对 AK → STATIC_AK；空则 RAM/默认链 |
-| 8081 目录 | **不做**；列表与绑定在主后端第二步 |
+| 8081 目录 | 8081 不提供；列表与绑定已由主后端 8080 管理 |
 | P0 范围 | Task 1–8 完成；动作恢复、删除重试、取消收敛与 Mock 验证已纳入 |
 | `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 `TaskLifecycleWatcher` 在 Describe=Succeeded 且实例 TERMINATED 后写入 |
 | 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
@@ -488,14 +483,13 @@ source ../.tools/env.sh
 ## 6. 与主仓关系
 
 ```
-【当前】开发者 ──HTTP+X-Api-Key──► eci-manager:8081 ──OpenAPI──► 阿里云 ECI
+开发者或 XJICloud backend:8080
+  ──HTTP+X-Api-Key──► eci-manager:8081 ──OpenAPI──► 阿里云 ECI
 
-【后续可选，本工程未实现】
-XJICloud backend:8080 ──HTTP──► eci-manager
-  或代码迁入 / 换 CCI Client
+主 backend 负责训练队列调度、AK 目录与选用；eci-manager 负责当前钥和实例生命周期。
 ```
 
-`env` 预留：`XJICLOUD_BACKEND_URL`、`WORKER_SECRET`、`WORKER_NAME`（本阶段不联调训练流水线）。
+活动训练路径已接入主 backend，容器使用 OSS 预签名 URL 传输输入输出，不依赖 Worker 注册或心跳。
 
 ---
 
@@ -516,12 +510,7 @@ XJICloud backend:8080 ──HTTP──► eci-manager
 | 路径 | 说明 |
 |------|------|
 | `../ECI任务驱动容器编排服务产品需求文档(PRD).md` | 需求 v2.0.3 |
-| `../ECI任务OSS对象存储集成产品需求文档(PRD).md` | OSS 增量 PRD v1.0 |
-| `../docs/superpowers/plans/2026-07-27-eci-task-orchestration.md` | 编排实现计划 |
-| `../docs/superpowers/plans/2026-07-30-eci-oss-integration.md` | OSS 实现计划 |
-| `../docs/superpowers/2026-07-31-eci-oss-handoff.md` | OSS 续跑摘要 |
-| `../docs/superpowers/plans/2026-09-08-eci-credential-hot-reload.md` | 当前钥第一步 C1–C5 |
-| `../docs/superpowers/specs/2026-09-08-eci-manager-credential-runtime-design.md` | 当前钥设计（第二步目录规划） |
+| `prd/ECI任务OSS对象存储集成产品需求文档(PRD).md` | OSS 增量 PRD v1.0 |
 | `scripts/run-hello-python.sh` | 真云普通 Python 任务 |
 | `scripts/debug-oss-smoke.sh` | 真云 OSS storage 冒烟 |
 | `scripts/submit-3dgs-standard.sh` | POST 标准档 3DGS |

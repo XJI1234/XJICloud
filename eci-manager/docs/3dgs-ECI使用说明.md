@@ -1,5 +1,7 @@
 # 3DGS 真云 ECI 使用说明
 
+命令中的 `/path/to/XJICloud` 请替换为实际仓库路径；运行前需安装 JDK 17 和 Maven 3.9+。
+
 > **适用：** `eci-manager/`（默认 `http://127.0.0.1:8081`）  
 > **主路径：** [`scripts/submit-3dgs-standard.sh`](../scripts/submit-3dgs-standard.sh)  
 > **容器引导：** [`scripts/3dgs-bootstrap.py`](../scripts/3dgs-bootstrap.py)  
@@ -17,20 +19,20 @@
 
 | 项 | 值 |
 |----|-----|
-| 工程 | `~/XJI/XJICloud/eci-manager` |
+| 工程 | `/path/to/XJICloud/eci-manager` |
 | 地域 | `cn-hangzhou`（ACR / ECI / OSS 一致） |
-| 镜像 | `crpi-urdof1biefqsi8uj-vpc.cn-hangzhou.personal.cr.aliyuncs.com/ylif4/3dgs:1.0.0`（**固定 tag**，勿用 `:latest`） |
-| 镜像缓存（默认） | `imc-bp15yiuttnxf8fh9n9fy` |
+| 镜像 | 用 `GS_IMAGE` 指定可由目标 VPC 拉取的 3DGS 镜像，固定版本 tag；镜像须提供 `/opt/3dgs/docker/entrypoint.sh shell` 入口 |
+| 镜像缓存 | 用 `IMAGE_SNAPSHOT_ID` 指定目标账号、同地域可用的缓存 ID；脚本中的联调默认值不能直接复用于其他环境 |
 | 规格（默认） | `ecs.gn7i-c16g1.4xlarge`（A10 24GB），`cpu=16` `memory=60` **`gpu=1`**，`shmSize=8Gi` |
-| OSS 输入 | `oss://eci-manager-bucket/3dgs/raw/<建筑名>.zip` |
-| OSS 输出 | `oss://eci-manager-bucket/3dgs/exports/<建筑名>.ply` |
+| OSS 输入 | `oss://<ECI_OSS_BUCKET>/3dgs/raw/<建筑名>.zip` |
+| OSS 输出 | `oss://<ECI_OSS_BUCKET>/3dgs/exports/<建筑名>.ply` |
 
 zip 结构：一层目录，例如 `新文科楼/image*.JPG`，不要嵌套成 `新文科楼/新文科楼/`。
 
 ### 1.2 `.env`（真云）
 
 ```bash
-cd ~/XJI/XJICloud/eci-manager
+cd /path/to/XJICloud/eci-manager
 # 若无 .env：cp .env.example .env 后填写
 ```
 
@@ -40,25 +42,27 @@ cd ~/XJI/XJICloud/eci-manager
 |------|------|
 | `SPRING_PROFILES_ACTIVE` | `cloud,local` |
 | `ECI_API_KEY` | 与请求头 `X-Api-Key` 一致 |
-| `ECI_ACCESS_KEY_ID` / `SECRET` | 调 ECI OpenAPI 的当前钥**种子**（推荐直接填） |
+| `ECI_ACCESS_KEY_ID` / `ECI_ACCESS_KEY_SECRET` | 可选的首次 ECI 凭据种子；后续通过 8080 选用并推送当前钥，或使用 RAM 角色 |
 | `ALIBABA_CLOUD_ACCESS_KEY_ID` / `SECRET` | 仅 `load-env.sh` 映射到上一行；Java 不读 |
 | `ECI_REGION_ID` / `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 创建容器网络 |
 | `ECI_OSS_ENABLED` | `true` |
 | `ECI_OSS_ENDPOINT` | **内网** `https://oss-cn-hangzhou-internal.aliyuncs.com`（容器无 NAT 时公网会超时） |
-| `ECI_OSS_BUCKET` | `eci-manager-bucket` |
-| `ECI_OSS_ACCESS_KEY` / `ECI_OSS_SECRET_KEY` | 仅用于本机签发 presign，**不会**注入容器 |
+| `ECI_OSS_BUCKET` | 自己的目标 bucket |
+| `ECI_OSS_ACCESS_KEY` / `ECI_OSS_SECRET_KEY` | 可选的首次 OSS 凭据种子；通常由 8080 选用 `OSS` 后推送，凭据只留在服务端，不会注入容器 |
 | `ECI_OSS_PRESIGN_EXPIRATION_MINUTES` | **1440**（默认 60 分钟不够训完；PUT 必须活到训练结束） |
 | `ECI_CREATE_TIMEOUT_SEC` | 建议 **1800**（大镜像首次拉取常超过默认 300 秒） |
 
 改过 `.env` 必须重启 eci-manager。种子只在库中 current 行不存在时写入；若已 `PUT /runtime-credentials` 热切过，重启后仍用库里的当前钥。可 `GET /api/v1/eci/runtime-credentials` 看 hint（无 SK）。8081 没有多钥目录。
+
+8080 的连接配置、Admin 中的测试与选用步骤见 [README 密钥配置](../README.md#配置密钥与真云环境)。
 
 ### 1.3 启动服务
 
 **终端 A**（保持运行）：
 
 ```bash
-cd ~/XJI/XJICloud/eci-manager
-source ../.tools/env.sh    # 若需 JDK/Maven
+cd /path/to/XJICloud/eci-manager
+if [ -f ../.tools/env.sh ]; then source ../.tools/env.sh; fi    # 若需 JDK/Maven
 ./scripts/start.sh
 ```
 
@@ -67,7 +71,7 @@ source ../.tools/env.sh    # 若需 JDK/Maven
 **终端 B** 健康检查：
 
 ```bash
-cd ~/XJI/XJICloud/eci-manager
+cd /path/to/XJICloud/eci-manager
 source scripts/load-env.sh
 curl -s -w "\nHTTP:%{http_code}\n" "$ECI_BASE/actuator/health"
 ```
@@ -78,60 +82,38 @@ curl -s -w "\nHTTP:%{http_code}\n" "$ECI_BASE/actuator/health"
 
 ## 2. 把原图放到 OSS
 
-本机上传用 **公网** endpoint；eci-manager 给容器签发用 **内网**（见上表）。
+使用有目标 bucket 写入权限的账号登录 OSS 控制台，将准备好的 ZIP 上传到 `ECI_OSS_BUCKET` 指定的 bucket，目标对象 key 为 `3dgs/raw/<建筑名>.zip`。本地 ZIP、对象 key 中的建筑名和提交时的 `BUILDING` 应一致。
 
-```bash
-cd ~/XJI/XJICloud/eci-manager
-python3 -m pip install --user oss2   # 若尚未安装
-python3 - <<'PY'
-from pathlib import Path
-import oss2
+也可用已配置独立上传凭据的 OSS 客户端上传。8080 推送给 eci-manager 的当前钥只供服务端使用，本机上传工具无法从该流程取得 Secret；上传工具需要自己的登录身份或上传凭据。
 
-env = {}
-for line in Path(".env").read_text(encoding="utf-8").splitlines():
-    s = line.strip()
-    if not s or s.startswith("#") or "=" not in s:
-        continue
-    k, v = s.split("=", 1)
-    env[k] = v.strip().strip("'").strip('"')
-
-building = "新文科楼"  # 换成目标建筑名
-local = Path(f"/home/YLiF4/XJI/{building}.zip")  # 按本机路径改
-key = f"3dgs/raw/{building}.zip"
-auth = oss2.Auth(env["ECI_OSS_ACCESS_KEY"], env["ECI_OSS_SECRET_KEY"])
-bucket = oss2.Bucket(auth, "https://oss-cn-hangzhou.aliyuncs.com", env["ECI_OSS_BUCKET"])
-print(f"upload {local} -> oss://{env['ECI_OSS_BUCKET']}/{key}")
-bucket.put_object_from_file(key, str(local))
-info = bucket.head_object(key)
-print(f"ok content-length={info.content_length}")
-PY
-```
-
-期望：`content-length` 与本地 zip 一致。换建筑时，**本地 zip、OSS key、提交时的 `BUILDING` 三者同名**。
+上传后核对对象 key 和文件大小，再提交训练。容器通过服务签发的预签名 URL 下载 ZIP，无需在容器中配置上传账号的密钥。
 
 ---
 
 ## 3. 一键提交
 
 ```bash
-cd ~/XJI/XJICloud/eci-manager
+cd /path/to/XJICloud/eci-manager
+export GS_IMAGE='你的可达的3DGS镜像地址'
+export IMAGE_SNAPSHOT_ID='imc-你的同地域镜像缓存ID'
+export MAX_STEPS=15000
 ./scripts/submit-3dgs-standard.sh
 ```
 
-脚本会：组装与标准档一致的 `POST /api/v1/eci/tasks`（注入 `3dgs-bootstrap.py`）、打印 `TASK_ID`，并轮询到 `SUCCEEDED` / `FAILED` / `CANCELLED`。
+脚本会组装 `POST /api/v1/eci/tasks`（注入 `3dgs-bootstrap.py`）、打印 `TASK_ID` 并轮询状态。默认最多轮询约 5 小时；达到轮询上限或退出脚本不会取消云端任务，脚本退出码也不代表训练成功。应检查任务终态和 `cleanupConfirmed`，必要时继续查询或主动取消。
 
 ### 3.1 默认参数
 
 | 项 | 默认 |
 |----|------|
 | `BUILDING` | `新文科楼` |
-| `MAX_STEPS` | `15000` |
+| `MAX_STEPS` | `2000`；上面的标准档示例显式覆盖为 `15000` |
 | `DATA_FACTOR` | `1` |
 | `PACKED` / `ANTIALIASED` | `1` / `1` |
 | `MAX_LONG_EDGE` | `2048` |
 | `MAX_RUNTIME_SEC` | `21600`（6 小时） |
 | `SHM_SIZE` | `8Gi`（POST `shmSize`；Memory EmptyDir 挂 `/dev/shm`） |
-| `IMAGE_SNAPSHOT_ID` | `imc-bp15yiuttnxf8fh9n9fy` |
+| `IMAGE_SNAPSHOT_ID` | 脚本带有特定环境的联调默认值，交付使用时须显式覆盖 |
 | 轮询 | `POLL_SLEEP_SEC=15`，最多约 5 小时（`POLL_MAX=1200`） |
 
 ### 3.2 常用覆盖

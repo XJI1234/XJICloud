@@ -1,18 +1,20 @@
 # ECI 任务 OSS 对象存储集成 — 产品需求文档 (PRD)
 
+> 历史归档：本文保留原阶段的需求与草案，不代表当前实现。部署与调用请以 [README](../README.md) 和 [API 文档](../docs/API文档.md) 为准。
+
 | **文档版本** | **创建日期** | **状态** | **适用对象** |
 | ------------ | ------------ | -------- | ------------ |
 | **v1.0** | 2026-07-30 | 草案 / 待评审 | 后端开发、容器运维、测试、评审人 |
 | **产品定位** | eci-manager v2.1 增量：任务容器 OSS 读写能力 | 在现有任务驱动编排上增加 presigned URL 签发与容器 env 注入，实现「提交任务 → 容器写文件到 OSS」闭环 | |
-| **前置文档** | [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](ECI任务驱动容器编排服务产品需求文档(PRD).md) v2.0.3 | 本 PRD 为 v2.0.3 之上的增量需求；不替代前置 PRD | |
+| **前置文档** | [`ECI任务驱动容器编排服务产品需求文档(PRD).md`](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) v2.0.3 | 本 PRD 为 v2.0.3 之上的增量需求；不替代前置 PRD | |
 | **工程边界** | 只改 `eci-manager/` | **不修改**主仓 `backend/` 业务代码 | |
 
 **关联文档：**
 
-- 前置 PRD：[ECI任务驱动容器编排服务产品需求文档(PRD).md](ECI任务驱动容器编排服务产品需求文档(PRD).md)
-- 主项目 OSS 参考：[backend/src/main/java/com/xjicloud/oss/OssStorageService.java](backend/src/main/java/com/xjicloud/oss/OssStorageService.java)、[Deploy.md](Deploy.md) §5.5
-- 容器 OSS 客户端参考：[gpu-worker/oss_client.py](gpu-worker/oss_client.py)
-- 实现工程：[eci-manager/](eci-manager/)
+- 前置 PRD：[ECI任务驱动容器编排服务产品需求文档(PRD).md](../../ECI任务驱动容器编排服务产品需求文档(PRD).md)
+- 主项目 OSS 参考：[backend/src/main/java/com/xjicloud/oss/OssStorageService.java](../../services/backend/src/main/java/com/xjicloud/oss/OssStorageService.java)、[Deploy.md](../../docs/Deploy.md) §5.5
+- 容器 OSS 客户端参考：[gpu-worker/oss_client.py](../../services/gpu-worker/oss_client.py)
+- 实现工程：[eci-manager/](../)
 
 ---
 
@@ -214,7 +216,7 @@ eci:
 
 ### 4.1 OssStorageService（eci-manager 新增）
 
-从 [backend/OssStorageService.java](backend/src/main/java/com/xjicloud/oss/OssStorageService.java) 精简移植，至少包含：
+从 [backend/OssStorageService.java](../../services/backend/src/main/java/com/xjicloud/oss/OssStorageService.java) 精简移植，至少包含：
 
 | 方法 | 说明 |
 |------|------|
@@ -236,13 +238,13 @@ eci:
 </dependency>
 ```
 
-与 [backend/pom.xml](backend/pom.xml) 版本保持一致。
+与 [backend/pom.xml](../../services/backend/pom.xml) 版本保持一致。
 
 **说明：** eci-manager 一期不实现 `system_config` 热更新；配置变更需重启服务。后续可评估与 backend 抽取 `xjicloud-oss-common` 共享模块。
 
 ### 4.2 任务 API 扩展：`storage` 块
 
-在 [CreateTaskRequest.java](eci-manager/src/main/java/com/xjicloud/eci/task/dto/CreateTaskRequest.java) 新增可选字段 `storage`：
+在 [CreateTaskRequest.java](../src/main/java/com/xjicloud/eci/task/dto/CreateTaskRequest.java) 新增可选字段 `storage`：
 
 ```json
 {
@@ -288,7 +290,7 @@ eci:
 
 #### 4.2.4 env 合并规则
 
-在 [EciTaskService.create()](eci-manager/src/main/java/com/xjicloud/eci/task/EciTaskService.java) 中：
+在 [EciTaskService.create()](../src/main/java/com/xjicloud/eci/task/EciTaskService.java) 中：
 
 1. 解析 `storage`，生成 presigned URL 与元信息。
 2. 写入标准 OSS env 变量（见 §4.3）。
@@ -321,7 +323,7 @@ eci-manager 自动注入以下环境变量：
 ]
 ```
 
-容器脚本应使用 `downloadUrl` / `XJI_OUTPUT_UPLOAD_URL` 进行 HTTP 读写，**不得**依赖 AK/SK。可参考 [gpu-worker/oss_client.py](gpu-worker/oss_client.py)。
+容器脚本应使用 `downloadUrl` / `XJI_OUTPUT_UPLOAD_URL` 进行 HTTP 读写，**不得**依赖 AK/SK。可参考 [gpu-worker/oss_client.py](../../services/gpu-worker/oss_client.py)。
 
 ### 4.4 联调镜像 `eci-oss-test`
 
@@ -368,7 +370,7 @@ eci-manager 自动注入以下环境变量：
 
 ## 6. 对象存储路径约定
 
-与主项目 [OssStorageService](backend/src/main/java/com/xjicloud/oss/OssStorageService.java) 保持一致：
+与主项目 [OssStorageService](../../services/backend/src/main/java/com/xjicloud/oss/OssStorageService.java) 保持一致：
 
 | 用途 | Key 模板 | 使用方 |
 |------|----------|--------|
@@ -410,10 +412,10 @@ PRD 批准并开始实现后，需同步更新：
 
 | 文档 | 变更 |
 |------|------|
-| [eci-manager/docs/API文档.md](eci-manager/docs/API文档.md) | `storage` 字段、env 契约、错误码 |
-| [eci-manager/.env.example](eci-manager/.env.example) | `ECI_OSS_*` 环境变量 |
-| [eci-manager/docs/设计与使用说明.md](eci-manager/docs/设计与使用说明.md) | 实现进度、OSS 配置 § |
-| [ECI任务驱动容器编排服务产品需求文档(PRD).md](ECI任务驱动容器编排服务产品需求文档(PRD).md) | 关联本 PRD 链接 |
+| [eci-manager/docs/API文档.md](../docs/API文档.md) | `storage` 字段、env 契约、错误码 |
+| [eci-manager/.env.example](../.env.example) | `ECI_OSS_*` 环境变量 |
+| [eci-manager/docs/设计与使用说明.md](../docs/设计与使用说明.md) | 实现进度、OSS 配置 § |
+| [ECI任务驱动容器编排服务产品需求文档(PRD).md](../../ECI任务驱动容器编排服务产品需求文档(PRD).md) | 关联本 PRD 链接 |
 
 ---
 
@@ -454,7 +456,7 @@ eci:
     presign-expiration-minutes: 120
 ```
 
-与 [deploy/config/application-prod.yml.example](deploy/config/application-prod.yml.example) 中 `xjicloud.oss` 保持一致即可。
+与 [deploy/config/application-prod.yml.example](../../deploy/config/application-prod.yml.example) 中 `xjicloud.oss` 保持一致即可。
 
 ---
 
