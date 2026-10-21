@@ -29,6 +29,7 @@ function createMapHarness(pendingModels = false) {
     useDefaultRenderLoop: true,
     targetFrameRate: undefined as number | undefined,
     camera: {
+      viewMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
       positionCartographic: { height: 4000 },
       setView: vi.fn(),
       moveEnd: { addEventListener: (listener: () => void) => listeners.push(listener) },
@@ -62,6 +63,10 @@ function createMapHarness(pendingModels = false) {
       Credit: function () {},
       Color: { fromCssColorString: (color: string) => color },
       Cartesian3: { fromDegrees: vi.fn() },
+      Matrix4: {
+        clone: (value: number[], result: number[] = []) => Object.assign(result, value),
+        equalsEpsilon: (a: number[], b: number[], epsilon: number) => a.every((v, i) => Math.abs(v - b[i]!) <= epsilon),
+      },
       Cesium3DTileset: { fromUrl },
     },
   }) as {
@@ -98,22 +103,24 @@ describe('embedded operator map loading', () => {
     expect(ready).toBe(true)
   })
 
-  it('keeps full-detail buildings hidden in the initial overview and shows them after zooming', async () => {
+  it('keeps full-detail buildings enabled in the overview and after zooming', async () => {
     const harness = createMapHarness()
     await harness.api.ensureRouteMap(harness.host)
     await vi.waitFor(() => expect(harness.tilesets).toHaveLength(2))
-    expect(harness.tilesets.every((tileset) => !tileset.show)).toBe(true)
+    expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
 
     harness.moveToHeight(1000)
     expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
     harness.moveToHeight(4000)
-    expect(harness.tilesets.every((tileset) => !tileset.show)).toBe(true)
+    expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
   })
 
-  it('uses the latest zoom when city metadata finishes loading', async () => {
+  it('keeps late city metadata enabled even during overview interaction', async () => {
     const harness = createMapHarness()
     const ready = harness.api.ensureRouteMap(harness.host)
-    harness.moveToHeight(1000)
+    harness.api.setRouteMapVisible(true)
+    harness.startMoving()
+    harness.moveToHeight(4000)
     await ready
     await vi.waitFor(() => expect(harness.tilesets).toHaveLength(2))
     expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
@@ -124,7 +131,7 @@ describe('embedded operator map loading', () => {
     harness.fromUrl.mockRejectedValueOnce(new Error('city metadata unavailable'))
     await harness.api.ensureRouteMap(harness.host)
     await vi.waitFor(() => expect(harness.tilesets).toHaveLength(1))
-    expect(harness.tilesets[0]!.show).toBe(false)
+    expect(harness.tilesets[0]!.show).toBe(true)
     harness.moveToHeight(1000)
     expect(harness.tilesets[0]!.show).toBe(true)
   })
@@ -148,21 +155,21 @@ describe('embedded operator map loading', () => {
     expect(harness.requestRender).toHaveBeenCalledOnce()
   })
 
-  it('caps active map updates and avoids multisample rendering of building geometry', async () => {
+  it('allows 60 FPS interaction with the existing geometry rendering settings', async () => {
     const harness = createMapHarness()
     await harness.api.ensureRouteMap(harness.host)
-    expect(harness.options().targetFrameRate).toBe(30)
+    expect(harness.options().targetFrameRate).toBe(60)
     expect(harness.options().msaaSamples).toBe(1)
   })
 
-  it('suspends city geometry for the whole camera movement', async () => {
+  it('keeps city geometry enabled throughout camera movement', async () => {
     const harness = createMapHarness()
     await harness.api.ensureRouteMap(harness.host)
     await vi.waitFor(() => expect(harness.tilesets).toHaveLength(2))
     harness.moveToHeight(1000)
     expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
     harness.startMoving()
-    expect(harness.tilesets.every((tileset) => !tileset.show)).toBe(true)
+    expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
     harness.moveToHeight(1000)
     expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
   })
@@ -176,7 +183,7 @@ describe('embedded operator map loading', () => {
     await vi.advanceTimersByTimeAsync(1500)
     expect(harness.mapViewer.targetFrameRate).toBe(5)
     harness.host.dispatchEvent(new Event('wheel'))
-    expect(harness.mapViewer.targetFrameRate).toBe(30)
+    expect(harness.mapViewer.targetFrameRate).toBe(60)
     await vi.advanceTimersByTimeAsync(1500)
     expect(harness.mapViewer.targetFrameRate).toBe(5)
     harness.renderFrame()
@@ -197,7 +204,36 @@ describe('embedded operator map loading', () => {
     expect(harness.mapViewer.targetFrameRate).toBe(5)
   })
 
-  it('restores buildings after a click that does not move the camera', async () => {
+  it('does not prolong high-frequency updates for imagery redraws after a stationary click', async () => {
+    vi.useFakeTimers()
+    const harness = createMapHarness()
+    await harness.api.ensureRouteMap(harness.host)
+    harness.api.setRouteMapVisible(true)
+    harness.host.dispatchEvent(new Event('pointerdown'))
+    for (let i = 0; i < 6; i++) {
+      await vi.advanceTimersByTimeAsync(200)
+      harness.renderFrame()
+    }
+    expect(harness.mapViewer.targetFrameRate).toBe(5)
+  })
+
+  it('keeps long camera interactions smooth until actual motion stops', async () => {
+    vi.useFakeTimers()
+    const harness = createMapHarness()
+    await harness.api.ensureRouteMap(harness.host)
+    harness.api.setRouteMapVisible(true)
+    harness.startMoving()
+    for (let i = 0; i < 6; i++) {
+      await vi.advanceTimersByTimeAsync(400)
+      harness.mapViewer.camera.viewMatrix[12]! += 1
+      harness.renderFrame()
+      expect(harness.mapViewer.targetFrameRate).toBe(60)
+    }
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(harness.mapViewer.targetFrameRate).toBe(5)
+  })
+
+  it('keeps buildings enabled during a click that does not move the camera', async () => {
     vi.useFakeTimers()
     const harness = createMapHarness()
     await harness.api.ensureRouteMap(harness.host)
@@ -205,7 +241,7 @@ describe('embedded operator map loading', () => {
     harness.api.setRouteMapVisible(true)
     harness.moveToHeight(1000)
     harness.host.dispatchEvent(new Event('pointerdown'))
-    expect(harness.tilesets.every((tileset) => !tileset.show)).toBe(true)
+    expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
     await vi.advanceTimersByTimeAsync(1500)
     expect(harness.tilesets.every((tileset) => tileset.show)).toBe(true)
     expect(harness.mapViewer.targetFrameRate).toBe(5)

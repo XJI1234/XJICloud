@@ -6828,7 +6828,7 @@ ${failure3.message}` };
       skyBox: false,
       skyAtmosphere: false,
       baseLayer: false,
-      targetFrameRate: 30,
+      targetFrameRate: 60,
       msaaSamples: 1,
       requestRenderMode: true,
       maximumRenderTimeChange: Number.POSITIVE_INFINITY
@@ -6870,7 +6870,7 @@ ${failure3.message}` };
   }
   async function loadHangzhouCityModel(Cesium, viewer2, baseUrl = document.baseURI) {
     const tileset = await Cesium.Cesium3DTileset.fromUrl(hangzhouTilesetUrl(baseUrl), {
-      show: false,
+      show: true,
       maximumScreenSpaceError: 12,
       skipLevelOfDetail: true,
       preferLeaves: true,
@@ -6907,7 +6907,7 @@ ${failure3.message}` };
   }
   async function loadNanjingCityModel(Cesium, viewer2, baseUrl = document.baseURI) {
     const tileset = await Cesium.Cesium3DTileset.fromUrl(nanjingTilesetUrl(baseUrl), {
-      show: false,
+      show: true,
       maximumScreenSpaceError: 12,
       skipLevelOfDetail: true,
       preferLeaves: true,
@@ -6925,39 +6925,23 @@ ${failure3.message}` };
   };
   var positionOf = (Cesium, point) => Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude, point.altitude ?? 0);
   var viewer;
-  var cityTilesets = [];
   var mapVisible = false;
   var cameraMoving = false;
   var mapIdleTimer;
   function wakeRouteMap() {
     if (viewer === void 0 || viewer.isDestroyed() || !viewer.useDefaultRenderLoop) return;
-    viewer.targetFrameRate = 30;
+    viewer.targetFrameRate = 60;
     clearTimeout(mapIdleTimer);
     // Explicit rendering still runs scene updates; lower those while idle too.
     mapIdleTimer = setTimeout(() => {
       if (viewer === void 0 || viewer.isDestroyed()) return;
       cameraMoving = false;
-      updateCityModelVisibility();
       viewer.targetFrameRate = 5;
     }, 1000);
   }
-  function pauseRouteCityModels() {
+  function beginRouteMapInteraction() {
     cameraMoving = true;
-    updateCityModelVisibility();
     wakeRouteMap();
-  }
-  function updateCityModelVisibility() {
-    if (viewer === void 0 || viewer.isDestroyed()) return;
-    // These city datasets only have full-detail leaf geometry, with no coarse LOD.
-    // Keep the overview light; Cesium frustum-culls the buildings after zooming in.
-    const show = !cameraMoving && viewer.camera.positionCartographic.height < 2500;
-    let changed = false;
-    for (const tileset of cityTilesets) {
-      if (tileset.show === show) continue;
-      tileset.show = show;
-      changed = true;
-    }
-    if (changed) viewer.scene.requestRender();
   }
   var drawnRouteId = null;
   var drawnPositions = [];
@@ -6978,20 +6962,22 @@ ${failure3.message}` };
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = 20;
     viewer.scene.screenSpaceCameraController.enableTilt = true;
     setNanjingCamera(Cesium, viewer);
-    cityTilesets = [];
     cameraMoving = false;
     // Collision correction also emits camera events; only input/flight wakes the map.
     viewer.camera.moveEnd.addEventListener(() => {
       const wasMoving = cameraMoving;
       cameraMoving = false;
-      updateCityModelVisibility();
       if (wasMoving) wakeRouteMap();
     });
+    const previousCameraView = Cesium.Matrix4.clone(viewer.camera.viewMatrix);
     viewer.scene.postRender.addEventListener(() => {
-      if (cameraMoving) wakeRouteMap();
+      // Tile arrival also redraws the scene; only actual camera motion extends activity.
+      const currentCameraView = viewer.camera.viewMatrix;
+      if (cameraMoving && !Cesium.Matrix4.equalsEpsilon(currentCameraView, previousCameraView, 1e-7)) wakeRouteMap();
+      Cesium.Matrix4.clone(currentCameraView, previousCameraView);
     });
     for (const event of ["pointerdown", "wheel", "keydown", "touchstart"]) {
-      host.addEventListener(event, pauseRouteCityModels, { passive: true });
+      host.addEventListener(event, beginRouteMapInteraction, { passive: true });
     }
     document.addEventListener("visibilitychange", () => setRouteMapVisible(mapVisible));
     const imagery = provider === "tianditu" ? "\u5929\u5730\u56FE\u5F71\u50CF" : "Esri \u536B\u661F\u56FE";
@@ -7002,16 +6988,14 @@ ${failure3.message}` };
     const loaded = [];
     const failed = [];
     try {
-      cityTilesets.push(await loadNanjingCityModel(Cesium, routeViewer));
-      updateCityModelVisibility();
+      await loadNanjingCityModel(Cesium, routeViewer);
       loaded.push("\u5357\u4EAC\u4E09\u7EF4\u767D\u6A21");
     } catch (error) {
       failed.push(`\u5357\u4EAC\u4E09\u7EF4\u767D\u6A21\u52A0\u8F7D\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
     }
     if (routeViewer.isDestroyed()) return;
     try {
-      cityTilesets.push(await loadHangzhouCityModel(Cesium, routeViewer));
-      updateCityModelVisibility();
+      await loadHangzhouCityModel(Cesium, routeViewer);
       loaded.push("\u676D\u5DDE\u4E09\u7EF4\u767D\u6A21");
     } catch (error) {
       failed.push(`\u676D\u5DDE\u4E09\u7EF4\u767D\u6A21\u52A0\u8F7D\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
@@ -7093,7 +7077,7 @@ ${failure3.message}` };
       }
     });
     if (fly) {
-      pauseRouteCityModels();
+      beginRouteMapInteraction();
       viewer.camera.flyToBoundingSphere(Cesium.BoundingSphere.fromPoints(positions), {
         duration: 0.8,
         offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2.8, 0)
@@ -7104,7 +7088,7 @@ ${failure3.message}` };
   function locateDrawnRoute() {
     if (viewer === void 0 || viewer.isDestroyed() || drawnPositions.length < 2) return;
     const Cesium = cesium();
-    pauseRouteCityModels();
+    beginRouteMapInteraction();
     viewer.camera.flyToBoundingSphere(Cesium.BoundingSphere.fromPoints(drawnPositions), {
       duration: 0.8,
       offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2.8, 0)
