@@ -1,10 +1,13 @@
 package com.xjicloud.job;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -15,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.admin.EciManagerClient;
 import com.xjicloud.admin.EciManagerTaskRequest;
 import com.xjicloud.admin.EciManagerTaskResponse;
+import com.xjicloud.auth.UserAccount;
 import com.xjicloud.common.BusinessException;
 import com.xjicloud.config.EciManagerProperties;
 import com.xjicloud.oss.OssStorageService;
@@ -22,6 +26,7 @@ import com.xjicloud.project.ProjectService;
 import com.xjicloud.queue.RedisQueueService;
 import com.xjicloud.sse.JobProgressSseService;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -48,6 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.ResourceAccessException;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 
 @DataJpaTest
 @Import({TrainingDispatchService.class, TrainingJobService.class})
@@ -121,7 +127,7 @@ class TrainingDispatchServiceTest {
         dispatchService.dispatchNext();
 
         TrainingJob persisted = jobs.findById(jobId).orElseThrow();
-        assertThat(persisted.getStatus()).isEqualTo(JobStatus.RUNNING);
+        assertThat(persisted.getStatus()).isEqualTo(JobStatus.QUEUED);
         assertThat(persisted.getEciTaskId()).isEqualTo(taskId);
         assertThat(persisted.getOutputOssKey()).isEqualTo("outputs/" + jobId + "/model.ply");
         assertThat(persisted.getClientRequestId()).isEqualTo("request-key-1");
@@ -160,6 +166,65 @@ class TrainingDispatchServiceTest {
         );
         assertThat(request.getValue().storage().outputKey()).isEqualTo("outputs/" + jobId + "/model.ply");
         verify(eciManagerClient, times(1)).createTask(any());
+        verify(sseService, never()).publish(jobId, JobStatus.RUNNING, 0, "training", "算力容器已开始训练");
+    }
+
+    @Test
+    void boundQueuedTaskIsPolledAndOnlyBecomesRunningAfterEciReportsRunning() {
+        UUID jobId = queuedJob(1, "bound-while-starting");
+        UUID taskId = UUID.randomUUID();
+        TrainingJob queued = jobs.findById(jobId).orElseThrow();
+        queued.setEciTaskId(taskId);
+        jobs.saveAndFlush(queued);
+        when(eciManagerClient.getTask(taskId))
+                .thenReturn(new EciManagerTaskResponse(taskId, "STARTING"))
+                .thenReturn(new EciManagerTaskResponse(taskId, "RUNNING"));
+
+        dispatchService.pollBoundJobs();
+
+        assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(JobStatus.QUEUED);
+
+        dispatchService.pollBoundJobs();
+
+        assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(JobStatus.RUNNING);
+        verify(eciManagerClient, times(2)).getTask(taskId);
+    }
+
+    @Test
+    void startingSnapshotPersistsCloudStateAndPublishesLifecycleFieldsInRestResponse() {
+        UUID jobId = queuedJob(1, "starting-snapshot");
+        UUID taskId = UUID.randomUUID();
+        Instant beforePoll = Instant.now().minusSeconds(30);
+        TrainingJob queued = jobs.findById(jobId).orElseThrow();
+        queued.setEciTaskId(taskId);
+        queued.setUpdatedAt(beforePoll);
+        jobs.saveAndFlush(queued);
+        EciManagerTaskResponse startingSnapshot = snapshot(
+                taskId, "STARTING", "Pending", "CREATE_IN_PROGRESS", "Instance is being created", false, null
+        );
+        when(eciManagerClient.getTask(taskId)).thenReturn(startingSnapshot);
+
+        dispatchService.pollBoundJobs();
+
+        TrainingJob persisted = jobs.findById(jobId).orElseThrow();
+        assertThat(persisted.getStatus()).isEqualTo(JobStatus.QUEUED);
+        JsonNode entityJson = new ObjectMapper().findAndRegisterModules().valueToTree(persisted);
+        assertThat(entityJson.path("computeStatus").asText()).isEqualTo("STARTING");
+        assertThat(entityJson.path("cloudStatus").asText()).isEqualTo("CREATE_IN_PROGRESS");
+        assertThat(entityJson.path("computeStatusReason").asText()).isEqualTo("Instance is being created");
+        assertThat(entityJson.path("eciCleanupConfirmed").asBoolean()).isFalse();
+        assertThat(persisted.getUpdatedAt()).isAfter(beforePoll);
+
+        UserAccount owner = new UserAccount();
+        owner.setId(persisted.getUserId());
+        JsonNode restJson = new ObjectMapper().findAndRegisterModules()
+                .valueToTree(jobService.getJob(owner, jobId));
+        assertThat(restJson.path("computeStatus").asText()).isEqualTo("STARTING");
+        assertThat(restJson.path("cloudStatus").asText()).isEqualTo("CREATE_IN_PROGRESS");
+        assertThat(restJson.path("computeStatusReason").asText()).isEqualTo("Instance is being created");
+        assertThat(restJson.path("cancellationPending").asBoolean()).isFalse();
+        assertThat(restJson.path("cleanupPending").asBoolean()).isTrue();
+        assertThat(restJson.path("updatedAt").isMissingNode()).isFalse();
     }
 
     @Test
@@ -348,7 +413,9 @@ class TrainingDispatchServiceTest {
         assertThat(completed.getStatus()).isEqualTo(JobStatus.COMPLETED);
         assertThat(completed.getProgress()).isEqualTo(100);
         assertThat(completed.getOutputOssKey()).isEqualTo("outputs/" + jobId + "/model.ply");
-        verify(sseService).publish(jobId, JobStatus.COMPLETED, 100, "completed", "训练完成");
+        verify(sseService).publish(
+                eq(jobId), eq(JobStatus.COMPLETED), eq(100), eq("completed"), eq("训练完成"),
+                eq("SUCCEEDED"), isNull(), isNull(), eq(false), eq(true), any(Instant.class));
     }
 
     @ParameterizedTest
@@ -368,7 +435,8 @@ class TrainingDispatchServiceTest {
         dispatchService.pollBoundJobs();
 
         assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(expectedStatus);
-        verify(sseService).publish(any(), org.mockito.ArgumentMatchers.eq(expectedStatus), anyInt(), any(), any());
+        verify(sseService).publish(any(), eq(expectedStatus), anyInt(), any(), any(),
+                eq(eciStatus), isNull(), isNull(), eq(false), eq(true), any(Instant.class));
     }
 
     @Test
@@ -393,7 +461,7 @@ class TrainingDispatchServiceTest {
     }
 
     @Test
-    void cancelRacingAnAcceptedPostRecoversByTheOriginalKeyAndRetriesCancelUntilTerminal() {
+    void cancelRacingAnAcceptedPostKeepsCleanupPendingWhenConfirmationIsMissing() {
         UUID jobId = queuedJob(2, "accepted-before-cancel-key");
         UUID taskId = UUID.randomUUID();
         when(queueService.dequeueBlocking(anyLong())).thenReturn(jobId).thenReturn(jobId).thenReturn(null);
@@ -427,8 +495,121 @@ class TrainingDispatchServiceTest {
         TrainingJob converged = jobs.findById(jobId).orElseThrow();
         assertThat(converged.getStatus()).isEqualTo(JobStatus.CANCELLED);
         assertThat(converged.getEciTaskId()).isEqualTo(taskId);
+        assertThat(converged.isEciCancellationPending()).isTrue();
         verify(eciManagerClient, times(2)).createTask(any());
         verify(eciManagerClient, times(2)).cancelTask(taskId);
+    }
+
+    @Test
+    void failedTaskWithoutCleanupConfirmationCannotBeDeletedOrRetried() {
+        UUID jobId = queuedJob(1, "failed-with-live-cloud-resource");
+        UUID taskId = UUID.randomUUID();
+        TrainingJob running = jobs.findById(jobId).orElseThrow();
+        running.setStatus(JobStatus.RUNNING);
+        running.setEciTaskId(taskId);
+        jobs.saveAndFlush(running);
+        EciManagerTaskResponse failedSnapshot = snapshot(
+                taskId, "FAILED", "Stopped", "DELETE_IN_PROGRESS", "Waiting for instance cleanup", false,
+                "Insufficient capacity"
+        );
+        when(eciManagerClient.getTask(taskId)).thenReturn(failedSnapshot);
+
+        dispatchService.pollBoundJobs();
+
+        TrainingJob failed = jobs.findById(jobId).orElseThrow();
+        assertThat(failed.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(failed.getEciTaskId()).isEqualTo(taskId);
+        UserAccount owner = new UserAccount();
+        owner.setId(failed.getUserId());
+        assertThatThrownBy(() -> jobService.deleteOwnedJob(owner, jobId)).isInstanceOf(BusinessException.class);
+        assertThat(jobs.findById(jobId)).isPresent();
+        assertThatThrownBy(() -> jobService.retryJob(jobId)).isInstanceOf(BusinessException.class);
+        assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
+    }
+
+    @Test
+    void failedTaskContinuesPollingUntilCleanupIsConfirmedThenCanRetry() {
+        UUID jobId = queuedJob(2, "failed-cleanup-recovery");
+        UUID taskId = UUID.randomUUID();
+        TrainingJob running = jobs.findById(jobId).orElseThrow();
+        running.setStatus(JobStatus.RUNNING);
+        running.setEciTaskId(taskId);
+        jobs.saveAndFlush(running);
+        EciManagerTaskResponse cleaningSnapshot = snapshot(taskId, "FAILED", "Stopped", "DELETE_IN_PROGRESS",
+                "Cleanup pending", false, "Training failed");
+        EciManagerTaskResponse cleanedSnapshot = snapshot(taskId, "FAILED", "Deleted", "DELETE_COMPLETE",
+                "Instance removed", true, "Training failed");
+        when(eciManagerClient.getTask(taskId)).thenReturn(cleaningSnapshot).thenReturn(cleanedSnapshot);
+
+        dispatchService.pollBoundJobs();
+        TrainingJob stillCleaning = jobs.findById(jobId).orElseThrow();
+        assertThat(stillCleaning.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(stillCleaning.getEciTaskId()).isEqualTo(taskId);
+
+        dispatchService.pollBoundJobs();
+
+        TrainingJob cleaned = jobs.findById(jobId).orElseThrow();
+        JsonNode entityJson = new ObjectMapper().findAndRegisterModules().valueToTree(cleaned);
+        assertThat(entityJson.path("eciCleanupConfirmed").asBoolean()).isTrue();
+        assertThat(cleaned.getEciTaskId()).isEqualTo(taskId);
+        verify(eciManagerClient, times(2)).getTask(taskId);
+
+        jobService.retryJob(jobId);
+        TrainingJob retried = jobs.findById(jobId).orElseThrow();
+        assertThat(retried.getStatus()).isEqualTo(JobStatus.QUEUED);
+        assertThat(retried.getDispatchAttempt()).isEqualTo(3);
+        assertThat(retried.getEciTaskId()).isNull();
+    }
+
+    @Test
+    void acceptedCancellationSurvivesRedisFailureAndDuplicateCancel() {
+        UUID jobId = queuedJob(1, "cancel-with-redis-outage");
+        UUID taskId = UUID.randomUUID();
+        TrainingJob running = jobs.findById(jobId).orElseThrow();
+        running.setStatus(JobStatus.RUNNING);
+        running.setEciTaskId(taskId);
+        jobs.saveAndFlush(running);
+        org.mockito.Mockito.doThrow(new IllegalStateException("Redis unavailable"))
+                .doNothing().when(queueService).remove(jobId);
+
+        Throwable redisFailure = catchThrowable(() -> jobService.cancelJob(jobId));
+        TrainingJob cancelled = jobs.findById(jobId).orElseThrow();
+        assertThat(cancelled.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(cancelled.isEciCancellationPending()).isTrue();
+        assertThat(cancelled.getEciTaskId()).isEqualTo(taskId);
+        assertThat(redisFailure).isNull();
+
+        jobService.cancelJob(jobId);
+        TrainingJob duplicate = jobs.findById(jobId).orElseThrow();
+        assertThat(duplicate.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(duplicate.isEciCancellationPending()).isTrue();
+        assertThat(duplicate.getEciTaskId()).isEqualTo(taskId);
+    }
+
+    @Test
+    void stalePollFromAnOlderAttemptCannotReplaceTheCurrentAttempt() {
+        UUID jobId = queuedJob(4, "old-poll-attempt");
+        UUID taskId = UUID.randomUUID();
+        TrainingJob running = jobs.findById(jobId).orElseThrow();
+        running.setStatus(JobStatus.RUNNING);
+        running.setEciTaskId(taskId);
+        jobs.saveAndFlush(running);
+        when(eciManagerClient.getTask(taskId)).thenAnswer(invocation -> {
+            TrainingJob current = jobs.findById(jobId).orElseThrow();
+            current.setDispatchAttempt(5);
+            current.setClientRequestId("new-attempt");
+            current.setMessage("new attempt already accepted");
+            jobs.saveAndFlush(current);
+            return new EciManagerTaskResponse(taskId, "SUCCEEDED");
+        });
+
+        dispatchService.pollBoundJobs();
+
+        TrainingJob current = jobs.findById(jobId).orElseThrow();
+        assertThat(current.getDispatchAttempt()).isEqualTo(5);
+        assertThat(current.getStatus()).isEqualTo(JobStatus.RUNNING);
+        assertThat(current.getProgress()).isNotEqualTo(100);
+        assertThat(current.getMessage()).isEqualTo("new attempt already accepted");
     }
 
     @Test
@@ -462,8 +643,42 @@ class TrainingDispatchServiceTest {
 
         dispatchService.dispatchNext();
 
-        assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(JobStatus.RUNNING);
+        assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(JobStatus.QUEUED);
         verify(eciManagerClient).createTask(any());
+    }
+
+    private EciManagerTaskResponse snapshot(
+            UUID taskId,
+            String status,
+            String instanceStatus,
+            String cloudStatus,
+            String statusReason,
+            boolean cleanupConfirmed,
+            String failureReason
+    ) {
+        EciManagerTaskResponse response = Mockito.mock(EciManagerTaskResponse.class);
+        when(response.id()).thenReturn(taskId);
+        when(response.status()).thenReturn(status);
+        stubSnapshotValue(response, "instanceStatus", instanceStatus);
+        stubSnapshotValue(response, "cloudStatus", cloudStatus);
+        stubSnapshotValue(response, "statusReason", statusReason);
+        stubSnapshotValue(response, "cleanupConfirmed", cleanupConfirmed);
+        stubSnapshotValue(response, "failureReason", failureReason);
+        return response;
+    }
+
+    private void stubSnapshotValue(EciManagerTaskResponse response, String property, Object value) {
+        Method accessor;
+        try {
+            accessor = EciManagerTaskResponse.class.getMethod(property);
+        } catch (NoSuchMethodException ex) {
+            throw new AssertionError("Task response must expose " + property, ex);
+        }
+        try {
+            org.mockito.Mockito.when(accessor.invoke(response)).thenReturn(value);
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError("Cannot stub task response property " + property, ex);
+        }
     }
 
     private UUID queuedJob(int attempt, String clientRequestId) {

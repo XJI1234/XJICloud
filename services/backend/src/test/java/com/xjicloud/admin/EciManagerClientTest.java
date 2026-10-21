@@ -7,7 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.xjicloud.common.BusinessException;
 import com.xjicloud.config.EciManagerProperties;
+import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -183,5 +185,62 @@ class EciManagerClientTest {
         EciManagerClient.TestResult result = client.testRuntimeCredential("OSS", "LTAItestkey0001", FAKE_SK);
         assertFalse(result.ok());
         assertEquals("denied", result.detail());
+    }
+
+    @Test
+    void getTaskParsesInstanceCloudReasonCleanupAndFailureSnapshot() {
+        UUID taskId = UUID.randomUUID();
+        server.expect(MockRestRequestMatchers.requestTo(
+                        "http://127.0.0.1:8081/api/v1/eci/tasks/" + taskId))
+                .andExpect(MockRestRequestMatchers.method(HttpMethod.GET))
+                .andExpect(MockRestRequestMatchers.header("X-Api-Key", API_KEY))
+                .andRespond(MockRestResponseCreators.withSuccess(
+                        """
+                        {"success":true,"message":null,"data":{"id":"%s","status":"FAILED","instanceStatus":"Stopped","cloudStatus":"DELETE_IN_PROGRESS","statusReason":"Instance cleanup is running","cleanupConfirmed":false,"failureReason":"Instance did not become ready"}}
+                        """.formatted(taskId),
+                        MediaType.APPLICATION_JSON
+                ));
+
+        EciManagerTaskResponse response = client.getTask(taskId);
+
+        assertEquals(taskId, response.id());
+        assertEquals("FAILED", response.status());
+        assertEquals("Stopped", snapshotValue(response, "instanceStatus"));
+        assertEquals("DELETE_IN_PROGRESS", snapshotValue(response, "cloudStatus"));
+        assertEquals("Instance cleanup is running", snapshotValue(response, "statusReason"));
+        assertEquals(Boolean.FALSE, snapshotValue(response, "cleanupConfirmed"));
+        assertEquals("Instance did not become ready", snapshotValue(response, "failureReason"));
+    }
+
+    @Test
+    void getTaskDefaultsMissingCleanupConfirmationToFalse() {
+        UUID taskId = UUID.randomUUID();
+        server.expect(MockRestRequestMatchers.requestTo(
+                        "http://127.0.0.1:8081/api/v1/eci/tasks/" + taskId))
+                .andExpect(MockRestRequestMatchers.method(HttpMethod.GET))
+                .andRespond(MockRestResponseCreators.withSuccess(
+                        """
+                        {"success":true,"message":null,"data":{"id":"%s","status":"STARTING"}}
+                        """.formatted(taskId),
+                        MediaType.APPLICATION_JSON
+                ));
+
+        EciManagerTaskResponse response = client.getTask(taskId);
+
+        assertEquals(Boolean.FALSE, snapshotValue(response, "cleanupConfirmed"));
+    }
+
+    private Object snapshotValue(EciManagerTaskResponse response, String property) {
+        Method accessor;
+        try {
+            accessor = EciManagerTaskResponse.class.getMethod(property);
+        } catch (NoSuchMethodException ex) {
+            throw new AssertionError("Task response must expose " + property, ex);
+        }
+        try {
+            return accessor.invoke(response);
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError("Cannot read task response property " + property, ex);
+        }
     }
 }

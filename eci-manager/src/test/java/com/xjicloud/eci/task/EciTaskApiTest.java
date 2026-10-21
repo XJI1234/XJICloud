@@ -321,8 +321,8 @@ class EciTaskApiTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = TaskStatus.class, names = {"SUCCEEDED", "FAILED"})
-    void cancelRejectsTaskThatReachedTerminalStateFirst(TaskStatus terminalStatus) throws Exception {
+    @EnumSource(value = TaskStatus.class, names = {"SUCCEEDED"})
+    void cancelRejectsSucceededTask(TaskStatus terminalStatus) throws Exception {
         UUID taskId = UUID.randomUUID();
         taskRepository.saveAndFlush(terminalTask(taskId, terminalStatus));
 

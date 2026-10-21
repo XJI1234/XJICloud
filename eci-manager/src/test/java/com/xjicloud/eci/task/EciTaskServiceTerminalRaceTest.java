@@ -19,7 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * 任务终态条件更新：取消意图与 FAILED/SUCCEEDED 必须互斥。
+ * 任务终态条件更新：取消不能覆盖 FAILED/SUCCEEDED 的业务终态。
  */
 @SpringBootTest(properties = {
         "eci.mock=true",
@@ -72,13 +72,24 @@ class EciTaskServiceTerminalRaceTest {
     }
 
     @Test
-    void failedTaskCannotBeCancelled() {
-        UUID taskId = seedTask(TaskStatus.FAILED);
+    void failedTaskCancellationIsIdempotentAndPreservesTerminalEvidence() {
+        UUID instanceId = UUID.randomUUID();
+        UUID taskId = seedTask(TaskStatus.FAILED, instanceId);
+        EciTaskEntity failed = repository.findById(taskId).orElseThrow();
+        failed.setFailureReason("provider failure");
+        failed.setContainerLogTail("last container output");
+        repository.saveAndFlush(failed);
+        Instant endedAt = failed.getEndedAt();
+        when(instanceService.deleteForTaskCancel(instanceId)).thenReturn(stoppingInstanceResponse(taskId));
 
-        assertThatThrownBy(() -> taskService.cancel(taskId))
-                .isInstanceOf(BusinessException.class)
-                .extracting(exception -> ((BusinessException) exception).getStatus())
-                .isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+        assertThat(taskService.cancel(taskId).status()).isEqualTo(TaskStatus.FAILED);
+        assertThat(taskService.cancel(taskId).status()).isEqualTo(TaskStatus.FAILED);
+
+        EciTaskEntity unchanged = repository.findById(taskId).orElseThrow();
+        assertThat(unchanged.getStatus()).isEqualTo(TaskStatus.FAILED);
+        assertThat(unchanged.getFailureReason()).isEqualTo("provider failure");
+        assertThat(unchanged.getContainerLogTail()).isEqualTo("last container output");
+        assertThat(unchanged.getEndedAt()).isEqualTo(endedAt);
     }
 
     @Test
