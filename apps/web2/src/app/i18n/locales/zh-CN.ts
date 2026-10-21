@@ -196,6 +196,18 @@ export default {
     cancelFailed: '取消任务失败',
     deleteFailed: '删除任务失败',
     downloadModel: '下载模型',
+    cancellationAccepted: '已接受取消请求',
+    cancellationPending: '取消中',
+    cleanupPending: '正在清理云端资源',
+    compute: {
+      waiting: '等待算力任务创建',
+      starting: '算力实例启动中',
+      running: '算力任务运行中',
+      succeeded: '算力任务已完成',
+      failed: '算力任务失败',
+      cancelled: '算力任务已取消',
+      reason: '状态原因：{reason}',
+    },
     status: {
       pending: '待处理',
       uploading: '上传中',

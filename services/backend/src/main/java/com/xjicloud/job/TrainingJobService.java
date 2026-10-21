@@ -16,12 +16,20 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class TrainingJobService {
+
+    private static final Logger log = LoggerFactory.getLogger(TrainingJobService.class);
 
     private static final List<String> ALLOWED_IMAGE_TYPES = List.of(
             "image/jpeg", "image/jpg", "image/png", "image/webp"
@@ -40,7 +48,9 @@ public class TrainingJobService {
             ProjectService projectService,
             OssStorageService ossStorageService,
             RedisQueueService redisQueueService,
-            JobProgressSseService jobProgressSseService
+            JobProgressSseService jobProgressSseService,
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactions
     ) {
         this.trainingJobRepository = trainingJobRepository;
         this.datasetAssetRepository = datasetAssetRepository;
@@ -48,6 +58,7 @@ public class TrainingJobService {
         this.ossStorageService = ossStorageService;
         this.redisQueueService = redisQueueService;
         this.jobProgressSseService = jobProgressSseService;
+        TrainingJobSchemaUpgrade.applyH2LegacyEvidenceBackfill(jdbcTemplate, transactions);
     }
 
     @Transactional
@@ -216,6 +227,9 @@ public class TrainingJobService {
         if (job.isEciCancellationPending()) {
             throw new BusinessException("ECI 实例取消尚未收敛，暂不能重试");
         }
+        if (job.isEciCleanupPending()) {
+            throw new BusinessException("ECI 实例清理尚未确认，暂不能重试");
+        }
         job.setStatus(JobStatus.QUEUED);
         job.setProgress(0);
         job.setStage("queued");
@@ -228,9 +242,14 @@ public class TrainingJobService {
         job.setDispatchClaimActive(false);
         job.setDispatchClaimToken(null);
         job.setDispatchClaimedAt(null);
+        job.setDispatchRequestSentAt(null);
         job.setDispatchEnqueuedAt(Instant.now());
         job.setDispatchNextAttemptAt(null);
         job.setEciCancellationPending(false);
+        job.setComputeStatus(null);
+        job.setCloudStatus(null);
+        job.setComputeStatusReason(null);
+        job.setEciCleanupConfirmed(false);
         job.setUpdatedAt(Instant.now());
         trainingJobRepository.save(job);
         redisQueueService.enqueue(jobId);
@@ -245,18 +264,29 @@ public class TrainingJobService {
         if (job.getStatus() == JobStatus.COMPLETED) {
             throw new BusinessException("已完成的任务无法取消");
         }
-        if (job.getEciTaskId() != null || job.isDispatchClaimActive() || job.getDispatchClaimedAt() != null) {
+        if (job.isEciCleanupPending()) {
             job.setEciCancellationPending(true);
+        } else if (job.isEciCleanupConfirmed()) {
+            job.setEciCancellationPending(false);
         }
         if (!job.isEciCancellationPending()) {
             job.setDispatchNextAttemptAt(null);
         }
-        job.setStatus(JobStatus.CANCELLED);
-        job.setStage("cancelled");
-        job.setMessage("任务已取消");
+        if (job.getStatus() != JobStatus.FAILED) {
+            job.setStatus(JobStatus.CANCELLED);
+            job.setStage("cancelled");
+            job.setMessage(job.isEciCancellationPending() ? "正在取消 ECI 任务" : "任务已取消");
+        }
         job.setUpdatedAt(Instant.now());
         trainingJobRepository.save(job);
-        redisQueueService.remove(jobId);
+        afterCommit(() -> {
+            try {
+                redisQueueService.remove(jobId);
+            } catch (RuntimeException ex) {
+                log.warn("Unable to remove cancelled training job {} from Redis queue ({})",
+                        jobId, ex.getClass().getSimpleName());
+            }
+        });
         publishProgress(job);
         return toResponse(job);
     }
@@ -276,8 +306,8 @@ public class TrainingJobService {
         if (!job.getUserId().equals(user.getId())) {
             throw new BusinessException("无权访问该任务", HttpStatus.FORBIDDEN);
         }
-        if (job.isEciCancellationPending()) {
-            throw new BusinessException("ECI 实例取消尚未收敛，暂不能删除");
+        if (job.isEciCancellationPending() || job.isEciCleanupPending()) {
+            throw new BusinessException("ECI 实例清理尚未确认，暂不能删除");
         }
         if (job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.UPLOADING
                 || job.getStatus() == JobStatus.QUEUED || job.getStatus() == JobStatus.RUNNING) {
@@ -295,13 +325,21 @@ public class TrainingJobService {
     }
 
     private void publishProgress(TrainingJob job) {
-        jobProgressSseService.publish(
-                job.getId(),
-                job.getStatus(),
-                job.getProgress(),
-                job.getStage(),
-                job.getMessage()
-        );
+        TrainingJobProgress progress = TrainingJobProgress.from(job);
+        afterCommit(() -> progress.publish(jobProgressSseService));
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     private JobResponse toResponse(TrainingJob job) {
@@ -320,7 +358,12 @@ public class TrainingJobService {
                 downloadUrl,
                 job.getErrorMessage(),
                 job.getCreatedAt(),
-                job.getUpdatedAt()
+                job.getUpdatedAt(),
+                job.getComputeStatus(),
+                job.getCloudStatus(),
+                job.getComputeStatusReason(),
+                job.isEciCancellationPending(),
+                job.isEciCleanupPending()
         );
     }
 

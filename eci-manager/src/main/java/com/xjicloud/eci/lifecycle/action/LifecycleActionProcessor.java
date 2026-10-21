@@ -171,13 +171,14 @@ public class LifecycleActionProcessor {
             return;
         }
         if (view.isRunning() || view.isSucceeded()) {
-            actionService.completeCreateRunning(action.getId(), leaseToken, view.status());
+            actionService.completeCreateRunning(
+                    action.getId(), leaseToken, view.status(), view.statusDetail());
         } else if (view.isFailed()) {
             String reason = view.statusDetail() == null ? view.status() : view.statusDetail();
             actionService.completeCreateFailedAndRequestDelete(action.getId(), leaseToken, reason,
-                    fetchLogSafe(instance.getCloudInstanceId()));
+                    fetchLogSafe(instance.getCloudInstanceId()), view.status(), view.statusDetail());
         } else {
-            actionService.waitForRunning(action.getId(), leaseToken, view.status());
+            actionService.waitForRunning(action.getId(), leaseToken, view.status(), view.statusDetail());
         }
     }
 
@@ -278,6 +279,8 @@ public class LifecycleActionProcessor {
             actionService.completeInstanceTermination(action.getInstanceId(), action.getId(), leaseToken);
             return;
         }
+
+        actionService.recordProviderStatus(action.getInstanceId(), view.status(), view.statusDetail());
 
         Instant now = clock.instant();
         boolean timedOut = action.getCreatedAt() != null

@@ -59,6 +59,8 @@ public class TrainingJob {
 
     private Instant dispatchClaimedAt;
 
+    private Instant dispatchRequestSentAt;
+
     @Column(nullable = false)
     private boolean dispatchClaimActive;
 
@@ -70,6 +72,18 @@ public class TrainingJob {
 
     @Column(nullable = false)
     private boolean eciCancellationPending;
+
+    @Column(length = 128)
+    private String computeStatus;
+
+    @Column(length = 128)
+    private String cloudStatus;
+
+    @Column(length = 512)
+    private String computeStatusReason;
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean eciCleanupConfirmed;
 
     @Column(length = 1024)
     private String errorMessage;
@@ -208,6 +222,14 @@ public class TrainingJob {
         this.dispatchClaimedAt = dispatchClaimedAt;
     }
 
+    public Instant getDispatchRequestSentAt() {
+        return dispatchRequestSentAt;
+    }
+
+    public void setDispatchRequestSentAt(Instant dispatchRequestSentAt) {
+        this.dispatchRequestSentAt = dispatchRequestSentAt;
+    }
+
     public boolean isDispatchClaimActive() {
         return dispatchClaimActive;
     }
@@ -246,6 +268,42 @@ public class TrainingJob {
 
     public void setEciCancellationPending(boolean eciCancellationPending) {
         this.eciCancellationPending = eciCancellationPending;
+    }
+
+    public String getComputeStatus() {
+        return computeStatus;
+    }
+
+    public void setComputeStatus(String computeStatus) {
+        this.computeStatus = computeStatus;
+    }
+
+    public String getCloudStatus() {
+        return cloudStatus;
+    }
+
+    public void setCloudStatus(String cloudStatus) {
+        this.cloudStatus = cloudStatus;
+    }
+
+    public String getComputeStatusReason() {
+        return computeStatusReason;
+    }
+
+    public void setComputeStatusReason(String computeStatusReason) {
+        this.computeStatusReason = computeStatusReason;
+    }
+
+    public boolean isEciCleanupConfirmed() {
+        return eciCleanupConfirmed;
+    }
+
+    public void setEciCleanupConfirmed(boolean eciCleanupConfirmed) {
+        this.eciCleanupConfirmed = eciCleanupConfirmed;
+    }
+
+    public boolean isEciCleanupPending() {
+        return !eciCleanupConfirmed && (eciTaskId != null || dispatchRequestSentAt != null);
     }
 
     public String getErrorMessage() {

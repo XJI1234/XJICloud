@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -234,7 +235,7 @@ public class LifecycleActionService {
         }
         Instant now = clock.instant();
         instance.setCloudInstanceId(cloudInstanceId);
-        instance.setCloudStatus("Pending");
+        instance.recordCloudObservation("Pending", null);
         instance.setUpdatedAt(now);
         action.setPhase(LifecycleActionPhase.WAIT_RUNNING);
         action.setStatus(LifecycleActionStatus.WAITING);
@@ -272,6 +273,11 @@ public class LifecycleActionService {
 
     @Transactional
     public void waitForRunning(UUID actionId, UUID leaseToken, String cloudStatus) {
+        waitForRunning(actionId, leaseToken, cloudStatus, null);
+    }
+
+    @Transactional
+    public void waitForRunning(UUID actionId, UUID leaseToken, String cloudStatus, String statusReason) {
         LockedCreate locked = lockCreateInstanceAndAction(actionId);
         LifecycleActionEntity action = locked == null ? null : locked.action();
         EciInstanceEntity instance = locked == null ? null : locked.instance();
@@ -279,7 +285,12 @@ public class LifecycleActionService {
             return;
         }
         Instant now = clock.instant();
-        instance.setCloudStatus(cloudStatus);
+        if (instance.getStatus() == InstanceStatus.TERMINATED) {
+            completeAction(action, now);
+            repository.save(action);
+            return;
+        }
+        instance.recordCloudObservation(cloudStatus, statusReason);
         instance.setUpdatedAt(now);
         action.setStatus(LifecycleActionStatus.WAITING);
         action.setNextAttemptAt(now.plusMillis(properties.getPollIntervalMs()));
@@ -291,7 +302,23 @@ public class LifecycleActionService {
     }
 
     @Transactional
+    public void recordProviderStatus(UUID instanceId, String cloudStatus, String statusReason) {
+        EciInstanceEntity instance = instanceRepository.findForUpdateById(instanceId).orElse(null);
+        if (instance == null || instance.getStatus() == InstanceStatus.TERMINATED) {
+            return;
+        }
+        instance.recordCloudObservation(cloudStatus, statusReason);
+        instance.setUpdatedAt(clock.instant());
+        instanceRepository.save(instance);
+    }
+
+    @Transactional
     public void completeCreateRunning(UUID actionId, UUID leaseToken, String cloudStatus) {
+        completeCreateRunning(actionId, leaseToken, cloudStatus, null);
+    }
+
+    @Transactional
+    public void completeCreateRunning(UUID actionId, UUID leaseToken, String cloudStatus, String statusReason) {
         LockedCreate locked = lockCreateInstanceAndAction(actionId);
         LifecycleActionEntity action = locked == null ? null : locked.action();
         EciInstanceEntity instance = locked == null ? null : locked.instance();
@@ -299,17 +326,27 @@ public class LifecycleActionService {
             return;
         }
         Instant now = clock.instant();
+        if (instance.getStatus() == InstanceStatus.TERMINATED) {
+            completeAction(action, now);
+            repository.save(action);
+            return;
+        }
+        boolean ignoredSucceeded = instance.ignoresCloudSucceeded()
+                && "Succeeded".equalsIgnoreCase(cloudStatus);
+        instance.recordCloudObservation(cloudStatus, statusReason);
+        instance.setUpdatedAt(now);
         if (instance.getStatus() == InstanceStatus.CREATING) {
             instance.setStatus(InstanceStatus.RUNNING);
-            instance.setCloudStatus(cloudStatus);
             instance.setFailureReason(null);
-            instance.setUpdatedAt(now);
             instanceRepository.save(instance);
-            if (instance.getTaskId() != null) {
+            if (instance.getTaskId() != null && !ignoredSucceeded) {
                 taskService.onInstanceRunning(instance.getTaskId());
             }
         } else {
-            requestDelete(instance.getId(), now);
+            instanceRepository.save(instance);
+            if (instance.getStatus() != InstanceStatus.RUNNING) {
+                requestDelete(instance.getId(), now);
+            }
         }
         completeAction(action, now);
         repository.save(action);
@@ -337,6 +374,13 @@ public class LifecycleActionService {
 
     @Transactional
     public void completeCreateFailedAndRequestDelete(UUID actionId, UUID leaseToken, String reason, String logTail) {
+        completeCreateFailedAndRequestDelete(actionId, leaseToken, reason, logTail, null, null);
+    }
+
+    @Transactional
+    public void completeCreateFailedAndRequestDelete(
+            UUID actionId, UUID leaseToken, String reason, String logTail,
+            String cloudStatus, String statusReason) {
         LockedCreate locked = lockCreateInstanceAndAction(actionId);
         LifecycleActionEntity action = locked == null ? null : locked.action();
         EciInstanceEntity instance = locked == null ? null : locked.instance();
@@ -344,7 +388,15 @@ public class LifecycleActionService {
             return;
         }
         Instant now = clock.instant();
+        if (instance.getStatus() == InstanceStatus.TERMINATED) {
+            completeAction(action, now);
+            repository.save(action);
+            return;
+        }
         failBusinessInstance(instance, reason, logTail, now);
+        if (cloudStatus != null) {
+            instance.recordCloudObservation(cloudStatus, statusReason);
+        }
         instanceRepository.save(instance);
         if (hasText(instance.getCloudInstanceId())) {
             requestDelete(instance.getId(), now.plusSeconds(Math.max(0, properties.getFailureLogGraceSec())));
@@ -480,6 +532,7 @@ public class LifecycleActionService {
         if (createAction != null
                 && createAction.getPhase() == LifecycleActionPhase.CREATE_REQUEST
                 && createAction.getAttemptCount() == 0
+                && createAction.getCreateCallStartedAt() == null
                 && createAction.getStatus() != LifecycleActionStatus.IN_PROGRESS) {
             createAction.setStatus(LifecycleActionStatus.CANCELLED);
             createAction.setLeaseToken(null);
@@ -576,14 +629,10 @@ public class LifecycleActionService {
     }
 
     private EciInstanceEntity lockTaskThenInstance(UUID instanceId) {
-        EciInstanceEntity observed = instanceRepository.findById(instanceId).orElse(null);
-        if (observed == null) {
-            return null;
+        UUID taskId = instanceRepository.findTaskIdById(instanceId).orElse(null);
+        if (taskId != null) {
+            taskService.lockForDeleteCompletion(taskId);
         }
-        if (observed.getTaskId() == null) {
-            return instanceRepository.findForUpdateById(instanceId).orElse(null);
-        }
-        taskService.lockForDeleteCompletion(observed.getTaskId());
         return instanceRepository.findForUpdateById(instanceId).orElse(null);
     }
 
@@ -598,7 +647,9 @@ public class LifecycleActionService {
     }
 
     private void failBusinessInstance(EciInstanceEntity instance, String reason, String logTail, Instant now) {
-        if (instance.getStatus() == InstanceStatus.TERMINATED || instance.getStatus() == InstanceStatus.STOPPING) {
+        if (instance.getStatus() == InstanceStatus.TERMINATED
+                || instance.getStatus() == InstanceStatus.STOPPING
+                || instance.hasCloudSucceeded()) {
             return;
         }
         instance.setStatus(InstanceStatus.FAILED);
@@ -615,13 +666,20 @@ public class LifecycleActionService {
 
     /** Every CREATE mutation which also touches the instance locks in this order. */
     private LockedCreate lockCreateInstanceAndAction(UUID actionId) {
-        LifecycleActionEntity observed = repository.findById(actionId).orElse(null);
-        if (observed == null) {
+        UUID instanceId = repository.findInstanceIdById(actionId).orElse(null);
+        if (instanceId == null) {
             return null;
         }
-        EciInstanceEntity instance = instanceRepository.findForUpdateById(observed.getInstanceId()).orElse(null);
+        UUID taskId = instanceRepository.findTaskIdById(instanceId).orElse(null);
+        if (taskId != null && taskService != null) {
+            taskService.lockForDeleteCompletion(taskId);
+        }
+        EciInstanceEntity instance = instanceRepository.findForUpdateById(instanceId).orElse(null);
         LifecycleActionEntity action = repository.findForUpdateById(actionId).orElse(null);
-        if (instance == null || action == null || !instance.getId().equals(action.getInstanceId())) {
+        if (instance == null || action == null
+                || !instanceId.equals(instance.getId())
+                || !instanceId.equals(action.getInstanceId())
+                || !Objects.equals(taskId, instance.getTaskId())) {
             return null;
         }
         return new LockedCreate(instance, action);
@@ -656,8 +714,11 @@ public class LifecycleActionService {
 
     private static void terminateInstance(EciInstanceEntity instance, Instant now) {
         instance.setStatus(InstanceStatus.TERMINATED);
-        if (!"Succeeded".equalsIgnoreCase(instance.getCloudStatus())) {
-            instance.setCloudStatus("Deleted");
+        if (instance.hasCloudSucceeded()) {
+            String succeededReason = instance.getCloudSucceededReason();
+            instance.recordCloudObservation("Succeeded", succeededReason);
+        } else {
+            instance.recordCloudObservation("Deleted", instance.getStatusReason());
         }
         instance.setFailureReason(null);
         instance.setUpdatedAt(now);

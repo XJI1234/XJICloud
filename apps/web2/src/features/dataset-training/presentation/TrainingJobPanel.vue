@@ -19,6 +19,8 @@ const jobs = ref<TrainingJob[]>([])
 const loading = ref(false)
 const loadError = ref('')
 const actionError = ref('')
+const actionMessage = ref('')
+let loadGeneration = 0
 
 const statusLabel = computed<Record<JobStatus, string>>(() => ({
   PENDING: t('training.status.pending'),
@@ -45,13 +47,20 @@ function badgeClass(status: JobStatus) {
 }
 
 async function loadJobs() {
-  if (!props.projectId) {
+  const requestGeneration = ++loadGeneration
+  const requestedProjectId = props.projectId
+  if (!requestedProjectId) {
     jobs.value = []
+    loading.value = false
+    loadError.value = ''
     return
   }
   loading.value = true
   loadError.value = ''
-  const [error, data] = await training.list(props.projectId)
+  const [error, data] = await training.list(requestedProjectId)
+  if (requestGeneration !== loadGeneration || requestedProjectId !== props.projectId) {
+    return
+  }
   loading.value = false
   if (error) {
     loadError.value = formatDomainError(t, error)
@@ -60,9 +69,28 @@ async function loadJobs() {
   training.watchHub.replaceAll(data ?? [])
   jobs.value = training.watchHub.jobs()
   for (const job of jobs.value) {
-    if (training.isActiveJob(job.status)) {
+    if (training.shouldWatchJob(job)) {
       training.watchHub.watch(job.id)
     }
+  }
+}
+
+function computeStatusLabel(job: TrainingJob) {
+  switch (training.computeStatusCategory(job.computeStatus, job.cloudStatus)) {
+    case 'waiting':
+      return t('training.compute.waiting')
+    case 'starting':
+      return t('training.compute.starting')
+    case 'running':
+      return t('training.compute.running')
+    case 'succeeded':
+      return t('training.compute.succeeded')
+    case 'failed':
+      return t('training.compute.failed')
+    case 'cancelled':
+      return t('training.compute.cancelled')
+    default:
+      return ''
   }
 }
 
@@ -83,13 +111,19 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  loadGeneration += 1
   stopWatch()
   training.watchHub.clear()
 })
 
 async function mutate(job: TrainingJob) {
   actionError.value = ''
-  const confirmKey = training.isActiveJob(job.status) ? 'training.cancelConfirm' : 'training.deleteConfirm'
+  actionMessage.value = ''
+  const action = training.jobMutation(job)
+  if (!action) {
+    return
+  }
+  const confirmKey = action === 'cancel' ? 'training.cancelConfirm' : 'training.deleteConfirm'
   if (!window.confirm(t(confirmKey))) {
     return
   }
@@ -97,6 +131,9 @@ async function mutate(job: TrainingJob) {
   if (error) {
     actionError.value = formatDomainError(t, error)
     return
+  }
+  if (action === 'cancel') {
+    actionMessage.value = t('training.cancellationAccepted')
   }
   await loadJobs()
 }
@@ -118,14 +155,32 @@ async function mutate(job: TrainingJob) {
           <div>
             <strong>{{ job.name }}</strong>
             <p class="training-job-meta">{{ formatDateTime(job.createdAt) }}</p>
+            <p v-if="computeStatusLabel(job)" class="training-job-meta">
+              {{ computeStatusLabel(job) }}
+            </p>
           </div>
           <div class="training-job-item__header-actions">
-            <span class="cloud-badge" :class="badgeClass(job.status)">{{ statusLabel[job.status] }}</span>
-            <AppButton compact @click="mutate(job)">
-              {{ training.isActiveJob(job.status) ? t('training.cancelRecord') : t('training.deleteRecord') }}
+            <span class="cloud-badge" :class="badgeClass(job.status)">
+              {{ job.cancellationPending ? t('training.cancellationAccepted') : statusLabel[job.status] }}
+            </span>
+            <AppButton compact :disabled="!training.jobMutation(job)" @click="mutate(job)">
+              {{
+                training.isCleanupPending(job)
+                  ? t('training.cleanupPending')
+                  : job.cancellationPending
+                    ? t('training.cancellationPending')
+                    : training.isActiveJob(job.status)
+                      ? t('training.cancelRecord')
+                      : t('training.deleteRecord')
+              }}
             </AppButton>
           </div>
         </div>
+        <p v-if="job.cancellationPending" class="training-job-message">{{ t('training.cancellationPending') }}</p>
+        <p v-if="training.isCleanupPending(job)" class="training-job-message">{{ t('training.cleanupPending') }}</p>
+        <p v-if="job.computeStatusReason" class="training-job-message">
+          {{ t('training.compute.reason', { reason: job.computeStatusReason }) }}
+        </p>
         <div class="cloud-progress">
           <div class="cloud-progress-bar">
             <div class="cloud-progress-bar__fill" :style="{ width: `${job.progress}%` }" />
@@ -142,5 +197,6 @@ async function mutate(job: TrainingJob) {
       </article>
     </div>
     <p v-if="actionError" class="upload-error">{{ actionError }}</p>
+    <p v-if="actionMessage" class="upload-status">{{ actionMessage }}</p>
   </section>
 </template>

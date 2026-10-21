@@ -33,11 +33,8 @@ public record CloudInstanceView(
 
     /** 是否已删除或不存在。 */
     public boolean isTerminatedOrMissing() {
-        if (status == null) {
-            return true;
-        }
-        return "Deleted".equalsIgnoreCase(status)
+        return status != null && ("Deleted".equalsIgnoreCase(status)
                 || "Terminated".equalsIgnoreCase(status)
-                || "NotFound".equalsIgnoreCase(status);
+                || "NotFound".equalsIgnoreCase(status));
     }
 }

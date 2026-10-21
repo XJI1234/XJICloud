@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -32,7 +34,8 @@ public class TrainingDispatchService {
     private static final Duration CLAIM_LEASE = Duration.ofMinutes(2);
     private static final Duration RECOVERY_INTERVAL = Duration.ofSeconds(30);
     private static final Duration RETRY_BACKOFF = Duration.ofSeconds(30);
-    private static final List<JobStatus> BOUND = List.of(JobStatus.RUNNING, JobStatus.CANCELLED);
+    private static final List<JobStatus> BOUND = List.of(
+            JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED);
     private final TrainingJobRepository jobs;
     private final DatasetAssetRepository assets;
     private final RedisQueueService queue;
@@ -46,10 +49,12 @@ public class TrainingDispatchService {
     public TrainingDispatchService(TrainingJobRepository jobs, DatasetAssetRepository assets,
             RedisQueueService queue, EciManagerClient eci, OssStorageService oss,
             EciManagerProperties properties, JobProgressSseService sse,
-            Map<String, ResourceLoader> resourceLoaders, PlatformTransactionManager transactions) {
+            Map<String, ResourceLoader> resourceLoaders, PlatformTransactionManager transactions,
+            JdbcTemplate jdbcTemplate) {
         this(jobs, assets, queue, eci, oss, properties, sse,
                 resourceLoaders.values().stream().filter(r -> !(r instanceof ApplicationContext)).findFirst()
                         .orElseGet(DefaultResourceLoader::new), new TransactionTemplate(transactions));
+        TrainingJobSchemaUpgrade.applyH2LegacyEvidenceBackfill(jdbcTemplate, transactions);
     }
     public TrainingDispatchService(TrainingJobRepository jobs, DatasetAssetRepository assets,
             RedisQueueService queue, EciManagerClient eci, OssStorageService oss,
@@ -84,7 +89,7 @@ public class TrainingDispatchService {
             TrainingJob job = locked(id);
             Instant now = Instant.now();
             if (!dispatchable(job) || blocked(job, now)) return null;
-            Instant unresolvedRequestAt = !job.isDispatchClaimActive() ? job.getDispatchClaimedAt() : null;
+            Instant previousRequestSentAt = job.getDispatchRequestSentAt();
             if (job.getDispatchAttempt() < 1) job.setDispatchAttempt(1);
             if (job.getClientRequestId() == null || job.getClientRequestId().isBlank()) {
                 job.setClientRequestId(UUID.randomUUID().toString());
@@ -100,7 +105,7 @@ public class TrainingDispatchService {
             save(job, now);
             List<String> inputs = assets.findByJobIdOrderByFileNameAsc(id).stream().map(DatasetAsset::getOssKey).toList();
             return new DispatchClaim(id, job.getDispatchAttempt(), job.getClientRequestId(), token, inputs, output,
-                    unresolvedRequestAt);
+                    previousRequestSentAt);
         });
         if (claim == null) return;
         List<String> args;
@@ -117,6 +122,9 @@ public class TrainingDispatchService {
             retry(claim, false);
             return;
         }
+        TrainingJobProgress requestProgress = markCreateRequestSent(claim);
+        if (requestProgress == null) return;
+        requestProgress.publish(sse);
         EciManagerTaskResponse response;
         try {
             response = eci.createTask(new EciManagerTaskRequest("training-" + id.toString().substring(0, 8) + "-" + claim.attempt(),
@@ -134,35 +142,27 @@ public class TrainingDispatchService {
         DispatchResult result = transact(() -> {
             TrainingJob job = locked(claim.jobId());
             if (job == null || job.getDispatchAttempt() != claim.attempt()
-                    || !claim.clientRequestId().equals(job.getClientRequestId())) return new DispatchResult(true, 0);
+                    || !claim.clientRequestId().equals(job.getClientRequestId())) return new DispatchResult(true, null);
             if (job.getEciTaskId() != null) {
                 return job.getEciTaskId().equals(response.id())
-                        ? null : new DispatchResult(true, 0);
+                        ? new DispatchResult(false, null) : new DispatchResult(true, null);
             }
             if (!job.isDispatchClaimActive() || !claim.claimToken().equals(job.getDispatchClaimToken())
-                    || !dispatchable(job)) return null;
+                    || !dispatchable(job)) return new DispatchResult(false, null);
             job.setEciTaskId(response.id()); job.setDispatchClaimActive(false); job.setDispatchClaimToken(null); job.setDispatchClaimedAt(null);
-            if (job.getStatus() == JobStatus.CANCELLED || job.isEciCancellationPending()) {
-                job.setEciCancellationPending(true);
-                job.setStage("cancelled");
-                job.setMessage("正在取消 ECI 任务");
-            } else {
-                job.setStatus(JobStatus.RUNNING);
-                job.setStage("training");
-                job.setMessage("算力容器已开始训练");
-            }
             job.setDispatchEnqueuedAt(null); job.setDispatchNextAttemptAt(null);
+            applySnapshot(job, response);
             save(job, Instant.now());
-            return job.getStatus() == JobStatus.RUNNING ? new DispatchResult(false, job.getProgress()) : null;
+            return new DispatchResult(false, TrainingJobProgress.from(job));
         });
-        if (result != null && result.stale()) {
+        if (result != null && result.orphaned()) {
             try {
                 eci.cancelTask(response.id());
             } catch (RuntimeException ex) {
                 log.warn("Unable to cancel stale ECI task {} ({})", response.id(), ex.getClass().getSimpleName());
             }
-        } else if (result != null) {
-            sse.publish(id, JobStatus.RUNNING, result.progress(), "training", "算力容器已开始训练");
+        } else if (result != null && result.progress() != null) {
+            result.progress().publish(sse);
         }
     }
     public void recoverPendingJobs() {
@@ -197,62 +197,38 @@ public class TrainingDispatchService {
     public void pollBoundJobs() {
         for (TrainingJob snapshot : jobs.findByEciTaskIdNotNullAndStatusIn(BOUND)) {
             UUID taskId = snapshot.getEciTaskId();
-            if (snapshot.getStatus() == JobStatus.CANCELLED && snapshot.isEciCancellationPending()) {
-                EciManagerTaskResponse response;
-                try {
-                    response = eci.cancelTask(taskId);
-                } catch (RuntimeException ex) {
-                    try {
-                        response = eci.getTask(taskId);
-                    } catch (RuntimeException readFailure) {
-                        log.warn("Unable to confirm cancellation for ECI task {} (cancel={}, get={})", taskId,
-                                ex.getClass().getSimpleName(), readFailure.getClass().getSimpleName()); continue;
-                    }
-                }
-                if (response == null || !taskId.equals(response.id()) || !terminal(response.status())) continue;
-                transact(() -> {
-                    TrainingJob job = locked(snapshot.getId());
-                    if (job != null && taskId.equals(job.getEciTaskId())
-                            && job.getStatus() == JobStatus.CANCELLED && job.isEciCancellationPending()) {
-                        job.setEciCancellationPending(false);
-                        save(job, Instant.now());
-                    }
-                    return null;
-                });
-                continue;
-            }
-            if (snapshot.getStatus() != JobStatus.RUNNING) continue;
+            if (snapshot.isEciCleanupConfirmed() && snapshot.getStatus() != JobStatus.QUEUED
+                    && snapshot.getStatus() != JobStatus.RUNNING) continue;
             EciManagerTaskResponse response;
             try {
-                response = eci.getTask(taskId);
+                response = snapshot.isEciCancellationPending()
+                        ? eci.cancelTask(taskId)
+                        : eci.getTask(taskId);
             } catch (RuntimeException ex) {
-                log.warn("ECI status poll failed for training job {} ({})", snapshot.getId(), ex.getClass().getSimpleName());
-                continue;
+                if (!snapshot.isEciCancellationPending()) {
+                    log.warn("ECI status poll failed for training job {} ({})", snapshot.getId(),
+                            ex.getClass().getSimpleName());
+                    continue;
+                }
+                try {
+                    response = eci.getTask(taskId);
+                } catch (RuntimeException readFailure) {
+                    log.warn("Unable to confirm cancellation for ECI task {} (cancel={}, get={})", taskId,
+                            ex.getClass().getSimpleName(), readFailure.getClass().getSimpleName());
+                    continue;
+                }
             }
-            if (response == null || response.id() == null || !taskId.equals(response.id()) || !terminal(response.status())) continue;
-            Projection projection = transact(() -> {
+            if (response == null || response.id() == null || !taskId.equals(response.id())
+                    || response.status() == null) continue;
+            EciManagerTaskResponse polledResponse = response;
+            TrainingJobProgress progress = transact(() -> {
                 TrainingJob job = locked(snapshot.getId());
-                if (job == null || job.getStatus() != JobStatus.RUNNING || !taskId.equals(job.getEciTaskId())) return null;
-                JobStatus status = switch (response.status().toUpperCase()) {
-                    case "SUCCEEDED" -> JobStatus.COMPLETED;
-                    case "FAILED" -> JobStatus.FAILED;
-                    case "CANCELLED" -> JobStatus.CANCELLED;
-                    default -> null;
-                };
-                job.setStatus(status);
-                job.setStage(status == JobStatus.COMPLETED ? "completed" : status == JobStatus.CANCELLED ? "cancelled" : "failed");
-                job.setMessage(status == JobStatus.COMPLETED ? "训练完成" : status == JobStatus.CANCELLED ? "任务已取消" : "训练失败");
-                if (status == JobStatus.COMPLETED) {
-                    job.setProgress(100);
-                    if (job.getOutputOssKey() != null) job.setOutputDownloadUrl(oss.presignGetUrl(job.getOutputOssKey()));
-                } else if (status == JobStatus.FAILED) job.setErrorMessage("ECI 训练任务失败");
+                if (job == null || !matchesSnapshot(job, snapshot, taskId)) return null;
+                applySnapshot(job, polledResponse);
                 save(job, Instant.now());
-                return new Projection(job);
+                return TrainingJobProgress.from(job);
             });
-            if (projection != null) {
-                sse.publish(projection.id(), projection.status(), projection.progress(),
-                        projection.stage(), projection.message());
-            }
+            if (progress != null) progress.publish(sse);
         }
     }
     private void retry(DispatchClaim claim, boolean requestMayHaveBeenAccepted) {
@@ -264,8 +240,9 @@ public class TrainingDispatchService {
             Instant now = Instant.now();
             job.setDispatchClaimActive(false); job.setDispatchClaimToken(null);
             if (!requestMayHaveBeenAccepted) {
-                job.setDispatchClaimedAt(claim.unresolvedRequestAt());
-                if (claim.unresolvedRequestAt() == null) job.setEciCancellationPending(false);
+                job.setDispatchClaimedAt(null);
+                job.setDispatchRequestSentAt(claim.previousRequestSentAt());
+                if (claim.previousRequestSentAt() == null) job.setEciCancellationPending(false);
             }
             job.setDispatchEnqueuedAt(null);
             boolean retry = dispatchable(job);
@@ -276,6 +253,116 @@ public class TrainingDispatchService {
             return null;
         });
     }
+    private TrainingJobProgress markCreateRequestSent(DispatchClaim claim) {
+        return transact(() -> {
+            TrainingJob job = locked(claim.jobId());
+            if (job == null || job.getDispatchAttempt() != claim.attempt()
+                    || !claim.clientRequestId().equals(job.getClientRequestId())
+                    || !job.isDispatchClaimActive() || !claim.claimToken().equals(job.getDispatchClaimToken())) {
+                return null;
+            }
+            if (!dispatchable(job)) {
+                job.setDispatchClaimActive(false);
+                job.setDispatchClaimToken(null);
+                job.setDispatchClaimedAt(null);
+                save(job, Instant.now());
+                return null;
+            }
+            job.setDispatchRequestSentAt(Instant.now());
+            save(job, Instant.now());
+            return TrainingJobProgress.from(job);
+        });
+    }
+    private boolean matchesSnapshot(TrainingJob job, TrainingJob snapshot, UUID taskId) {
+        return taskId.equals(job.getEciTaskId())
+                && job.getDispatchAttempt() == snapshot.getDispatchAttempt()
+                && Objects.equals(job.getClientRequestId(), snapshot.getClientRequestId());
+    }
+    private void applySnapshot(TrainingJob job, EciManagerTaskResponse response) {
+        String computeStatus = response.status().toUpperCase(java.util.Locale.ROOT);
+        boolean locallyCancelled = job.getStatus() == JobStatus.CANCELLED;
+        boolean locallyFailed = job.getStatus() == JobStatus.FAILED;
+        boolean locallyCompleted = job.getStatus() == JobStatus.COMPLETED;
+        boolean locallyRunning = job.getStatus() == JobStatus.RUNNING;
+        boolean cancellationPending = job.isEciCancellationPending();
+
+        job.setComputeStatus(response.status());
+        job.setCloudStatus(response.cloudStatus());
+        String reason = nonBlank(response.statusReason()) ? response.statusReason() : null;
+        job.setComputeStatusReason(reason);
+        if (response.cleanupConfirmed()) job.setEciCleanupConfirmed(true);
+        if (job.isEciCleanupConfirmed()) job.setEciCancellationPending(false);
+
+        if (locallyCancelled) {
+            markCancelled(job, job.isEciCancellationPending() ? "正在确认 ECI 任务清理" : "任务已取消");
+            return;
+        }
+        if (locallyFailed) {
+            job.setStage("failed");
+            job.setMessage("训练失败");
+            if ("FAILED".equals(computeStatus)) {
+                job.setErrorMessage(nonBlank(reason) ? reason : "训练失败");
+            }
+            return;
+        }
+        if (locallyCompleted) return;
+
+        switch (computeStatus) {
+            case "RUNNING" -> {
+                job.setStatus(JobStatus.RUNNING);
+                job.setStage("training");
+                job.setMessage("算力容器已开始训练");
+            }
+            case "SUCCEEDED" -> {
+                job.setStatus(JobStatus.COMPLETED);
+                job.setProgress(100);
+                job.setStage("completed");
+                job.setMessage("训练完成");
+                if (job.getOutputOssKey() != null) {
+                    job.setOutputDownloadUrl(oss.presignGetUrl(job.getOutputOssKey()));
+                }
+            }
+            case "FAILED" -> {
+                job.setStatus(JobStatus.FAILED);
+                job.setStage("failed");
+                job.setMessage("训练失败");
+                job.setErrorMessage(nonBlank(reason) ? reason : "训练失败");
+            }
+            case "CANCELLED" -> {
+                markCancelled(job, job.isEciCancellationPending() ? "正在确认 ECI 任务清理" : "任务已取消");
+            }
+            case "QUEUED", "PENDING", "STARTING" -> {
+                if (cancellationPending) {
+                    markCancelled(job, "正在取消 ECI 任务");
+                } else if (locallyRunning) {
+                    return;
+                } else {
+                    job.setStatus(JobStatus.QUEUED);
+                    job.setStage("STARTING".equals(computeStatus) ? "starting" : "queued");
+                    job.setMessage("STARTING".equals(computeStatus)
+                            ? (nonBlank(reason) ? reason : "算力实例正在启动")
+                            : "已入队，等待算力容器");
+                }
+            }
+            default -> {
+                if (cancellationPending) {
+                    markCancelled(job, "正在确认 ECI 任务清理");
+                } else if (job.getStatus() != JobStatus.RUNNING) {
+                    job.setStatus(JobStatus.QUEUED);
+                    job.setStage("starting");
+                    job.setMessage(nonBlank(reason) ? reason : "正在确认云端任务状态");
+                }
+            }
+        }
+    }
+    private boolean nonBlank(String value) {
+        return value != null && !value.isBlank();
+    }
+    private void markCancelled(TrainingJob job, String message) {
+        job.setStatus(JobStatus.CANCELLED);
+        job.setStage("cancelled");
+        job.setMessage(message);
+    }
     private boolean dispatchable(TrainingJob job) {
         return job != null && job.getEciTaskId() == null && ((job.getStatus() == JobStatus.QUEUED && !job.isEciCancellationPending())
                 || (job.getStatus() == JobStatus.CANCELLED && job.isEciCancellationPending()));
@@ -284,12 +371,10 @@ public class TrainingDispatchService {
         return (job.getDispatchNextAttemptAt() != null && job.getDispatchNextAttemptAt().isAfter(now))
                 || (job.isDispatchClaimActive() && job.getDispatchClaimedAt() != null && job.getDispatchClaimedAt().isAfter(now.minus(CLAIM_LEASE)));
     }
-    private boolean terminal(String status) { return status != null && switch (status.toUpperCase()) { case "SUCCEEDED", "FAILED", "CANCELLED" -> true; default -> false; }; }
     private TrainingJob locked(UUID id) { return tx == null ? jobs.findById(id).orElse(null) : jobs.findForUpdateById(id).orElse(null); }
     private void save(TrainingJob job, Instant now) { job.setUpdatedAt(now); jobs.save(job); }
     private <T> T transact(Supplier<T> action) { return tx == null ? action.get() : tx.execute(status -> action.get()); }
-    private record DispatchResult(boolean stale, int progress) { }
-    private record Projection(UUID id, JobStatus status, int progress, String stage, String message) { Projection(TrainingJob job) { this(job.getId(), job.getStatus(), job.getProgress(), job.getStage(), job.getMessage()); } }
+    private record DispatchResult(boolean orphaned, TrainingJobProgress progress) { }
     private record DispatchClaim(UUID jobId, int attempt, String clientRequestId, UUID claimToken,
-            List<String> inputKeys, String outputOssKey, Instant unresolvedRequestAt) { }
+            List<String> inputKeys, String outputOssKey, Instant previousRequestSentAt) { }
 }

@@ -18,6 +18,9 @@ public interface EciInstanceRepository extends JpaRepository<EciInstanceEntity, 
     @Query("select instance from EciInstanceEntity instance where instance.id = :id")
     Optional<EciInstanceEntity> findForUpdateById(@Param("id") UUID id);
 
+    @Query("select instance.taskId from EciInstanceEntity instance where instance.id = :id")
+    Optional<UUID> findTaskIdById(@Param("id") UUID id);
+
     List<EciInstanceEntity> findByStatusOrderByCreatedAtDesc(InstanceStatus status);
 
     List<EciInstanceEntity> findAllByOrderByCreatedAtDesc();

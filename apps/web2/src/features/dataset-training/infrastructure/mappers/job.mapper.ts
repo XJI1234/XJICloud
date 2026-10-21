@@ -12,6 +12,11 @@ export type JobResponseDto = {
   errorMessage?: string | null
   createdAt?: string
   updatedAt?: string
+  computeStatus?: string | null
+  cloudStatus?: string | null
+  computeStatusReason?: string | null
+  cancellationPending?: boolean
+  cleanupPending?: boolean
 }
 
 export type CreateDatasetResponseDto = {
@@ -31,6 +36,12 @@ export type JobProgressEventDto = {
   progress?: number
   stage?: string
   message?: string
+  computeStatus?: string | null
+  cloudStatus?: string | null
+  computeStatusReason?: string | null
+  cancellationPending?: boolean
+  cleanupPending?: boolean
+  updatedAt?: string
 }
 
 export function mapJobFromDto(dto: JobResponseDto): TrainingJob {
@@ -46,6 +57,11 @@ export function mapJobFromDto(dto: JobResponseDto): TrainingJob {
     errorMessage: dto.errorMessage ?? null,
     createdAt: dto.createdAt ?? '',
     updatedAt: dto.updatedAt ?? '',
+    computeStatus: dto.computeStatus ?? null,
+    cloudStatus: dto.cloudStatus ?? null,
+    computeStatusReason: dto.computeStatusReason ?? null,
+    cancellationPending: dto.cancellationPending ?? false,
+    cleanupPending: dto.cleanupPending ?? false,
   }
 }
 
@@ -69,5 +85,11 @@ export function mapProgressEventFromDto(dto: JobProgressEventDto): JobProgressEv
     progress: dto.progress ?? 0,
     stage: dto.stage ?? '',
     message: dto.message ?? '',
+    computeStatus: dto.computeStatus ?? null,
+    cloudStatus: dto.cloudStatus ?? null,
+    computeStatusReason: dto.computeStatusReason ?? null,
+    cancellationPending: dto.cancellationPending ?? false,
+    cleanupPending: dto.cleanupPending ?? false,
+    updatedAt: dto.updatedAt ?? '',
   }
 }

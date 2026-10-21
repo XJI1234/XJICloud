@@ -159,7 +159,11 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
    → COMPLETED 后 GET /api/v1/jobs/{id} 拿 presigned 下载 URL
 ```
 
+8081 的 `STARTING` / `QUEUED` 与实例启动阶段在 8080 保持业务 `QUEUED`，只有明确收到 `RUNNING` 才进入业务 `RUNNING`。任务详情与 SSE 同时带 `computeStatus`、`cloudStatus`、`computeStatusReason`、`cancellationPending`、`cleanupPending` 和 `updatedAt`。`cleanupPending` 只在该 attempt 可能已请求云端且 8081 尚未确认清理时为 true；旧记录及缺失 `cleanupConfirmed` 的响应均按未确认处理。活动 `QUEUED` / `RUNNING` 即使已确认清理仍继续轮询任务终态；FAILED/CANCELLED/COMPLETED 的云端任务则在清理确认前继续轮询，删除和重试也会等待确认。
+
 ECI 派发失败或配置缺失时，backend 将 `dispatch_next_attempt_at` 持久化为 30 秒后的重试时间；恢复扫描和实际 claim 都受该时间约束。取消中的任务若 ECI task ID 尚未绑定，也会沿同一退避与恢复路径收敛。
+
+新 attempt 发出 ECI 创建请求前，backend 先持久化 `dispatch_request_sent_at`。它与绑定的 `eci_task_id` 一起标识可能存在云资源的 attempt；单独的活动 claim 不代表请求已发出。升级迁移会把旧 `dispatch_claimed_at`（包括缺少 claim 时间的活动旧 claim）保守回填为请求证据；迁移后 `dispatch_claimed_at` 仅在 `dispatch_claim_active` 为 true 时用于判断 lease 是否过期。已知请求未发出的 claim 释放时清空该时间；请求结果不明时保留时间戳供兼容，但清理责任只由 `dispatch_request_sent_at` 表达。取消的本地意向先提交，再尝试从 Redis 队列移除，Redis 故障不会撤销意向。已有 `dispatch_request_sent_at` 的重试继续使用同一 `client_request_id` 解析创建结果。
 
 调度责任留在主 backend：链路为用户上传 → Redis → 主 backend `TrainingDispatchScheduler` → eci-manager → ECI。真云 ECI OSS 预签名 URL 有效期须配置为至少 1440 分钟，以覆盖最长 21600 秒任务和余量。独立 3DGS 标准任务样例见 [`eci-manager/scripts/submit-3dgs-standard.sh`](../eci-manager/scripts/submit-3dgs-standard.sh)，不改变上述应用派发链路。
 
@@ -238,6 +242,14 @@ CREATE TABLE model_versions (
   CONSTRAINT uk_model_versions_model_version UNIQUE (model_id, version)
 );
 ```
+
+本地 H2 启动时，Hibernate 为 `eci_cleanup_confirmed` 添加 `DEFAULT FALSE`，backend 在派发和任务服务初始化期间以事务执行旧 claim 证据回填，并在既有 `system_config` 表写入一次性标记，重启不会把新 claim 误认成旧数据。升级已有 PostgreSQL `training_jobs` 表时，先应用此前的训练派发迁移，再应用云端状态字段迁移；这些 SQL 由部署流程显式执行，生产 `ddl-auto: validate` 不会自动补列：
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V20261019_01__training_cloud_status_fields.sql
+```
+
+该迁移为请求发出时间、实例/云端状态、状态原因和清理确认添加字段，并将旧 claim 时间回填为 `dispatch_request_sent_at`；无 claim 时间的活动旧 claim 使用任务创建时间作为保守证据。历史记录的 `eci_cleanup_confirmed` 默认 `false`；旧 claim 或绑定旧 ECI task 的任务因此必须在新接口返回清理证据后，才能删除或重试。H2 使用相同回填规则，并由启动初始化自动执行一次。
 
 ### 6.2 Worker（Bearer worker JWT + 注册时 X-Worker-Secret）
 

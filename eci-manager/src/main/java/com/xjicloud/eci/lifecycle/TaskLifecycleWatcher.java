@@ -97,7 +97,8 @@ public class TaskLifecycleWatcher {
         log.debug("task poll taskId={} instanceId={} cloudInstanceId={} taskStatus={} instanceStatus={}",
                 taskId, instanceId, cloudInstanceId, task.getStatus(), instance.status());
 
-        if (isTimedOut(task, clock.instant())) {
+        boolean cloudSucceeded = hasCloudSucceeded(task, instance);
+        if (isTimedOut(task, clock.instant()) && !cloudSucceeded) {
             log.info("task timeout taskId={} instanceId={} cloudInstanceId={} maxRuntimeSec={}",
                     taskId, instanceId, cloudInstanceId, task.getMaxRuntimeSec());
             failPersistThenDelete(taskId, instance, cloudInstanceId, TIMEOUT_REASON);
@@ -105,6 +106,10 @@ public class TaskLifecycleWatcher {
         }
 
         if (instance.status() == InstanceStatus.FAILED) {
+            if (cloudSucceeded) {
+                instanceService.deleteForTaskCancel(instanceId);
+                return;
+            }
             String reason = StringUtils.hasText(instance.failureReason())
                     ? instance.failureReason()
                     : "实例失败";
@@ -113,7 +118,7 @@ public class TaskLifecycleWatcher {
         }
 
         if (instance.status() == InstanceStatus.TERMINATED) {
-            if (isCloudSucceeded(instance.cloudStatus())) {
+            if (cloudSucceeded) {
                 taskService.markSucceeded(taskId);
             } else {
                 taskService.onInstanceFailed(taskId, ORPHAN_TERMINATED_REASON);
@@ -152,6 +157,7 @@ public class TaskLifecycleWatcher {
             } catch (Exception e) {
                 log.warn("succeeded cleanup failed taskId={} instanceId={}", taskId, instanceId, e);
             }
+            instanceService.recordProviderStatus(instanceId, view.status(), view.statusDetail());
             return;
         }
 
@@ -162,6 +168,7 @@ public class TaskLifecycleWatcher {
                         : "云侧状态: " + view.status();
                 failPersistThenDelete(taskId, instance, cloudInstanceId, reason);
             }
+            instanceService.recordProviderStatus(instanceId, view.status(), view.statusDetail());
             // OnFailure/Always：云侧 Failed 可能随后重启，等待 Succeeded / 超时 / cancel，勿标 RUNNING
             return;
         }
@@ -170,6 +177,7 @@ public class TaskLifecycleWatcher {
         if (view.isRunning()) {
             taskService.onInstanceRunning(taskId);
         }
+        instanceService.recordProviderStatus(instanceId, view.status(), view.statusDetail());
     }
 
     /**
@@ -213,8 +221,9 @@ public class TaskLifecycleWatcher {
         return elapsedSec > maxRuntimeSec;
     }
 
-    private static boolean isCloudSucceeded(String cloudStatus) {
-        return cloudStatus != null && "Succeeded".equalsIgnoreCase(cloudStatus);
+    private boolean hasCloudSucceeded(EciTaskEntity task, InstanceResponse instance) {
+        return TaskSuccessEvidence.isSatisfied(
+                task, instance, instanceService.hasCloudSucceeded(instance.id()));
     }
 
 }

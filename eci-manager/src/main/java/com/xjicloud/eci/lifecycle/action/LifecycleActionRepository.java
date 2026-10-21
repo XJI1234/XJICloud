@@ -34,6 +34,9 @@ public interface LifecycleActionRepository extends JpaRepository<LifecycleAction
             UUID instanceId,
             LifecycleActionType actionType);
 
+    @Query("select action.instanceId from LifecycleActionEntity action where action.id = :id")
+    Optional<UUID> findInstanceIdById(@Param("id") UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select action from LifecycleActionEntity action "
             + "where action.instanceId = :instanceId and action.actionType = :actionType")

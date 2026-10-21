@@ -144,13 +144,17 @@ public class StartupCompensationRunner implements ApplicationRunner {
         }
 
         if (instance.status() == InstanceStatus.FAILED) {
+            if (hasCloudSucceeded(task, instance)) {
+                instanceService.deleteForTaskCancel(instanceId);
+                return false;
+            }
             String reason = instance.failureReason() != null ? instance.failureReason() : "实例失败";
             taskService.onInstanceFailed(taskId, reason);
             return true;
         }
 
         if (instance.status() == InstanceStatus.TERMINATED) {
-            if (instance.cloudStatus() != null && "Succeeded".equalsIgnoreCase(instance.cloudStatus())) {
+            if (hasCloudSucceeded(task, instance)) {
                 taskService.markSucceeded(taskId);
             } else {
                 taskService.onInstanceFailed(taskId, ORPHAN_TERMINATED_REASON);
@@ -159,5 +163,10 @@ public class StartupCompensationRunner implements ApplicationRunner {
         }
 
         return false;
+    }
+
+    private boolean hasCloudSucceeded(EciTaskEntity task, InstanceResponse instance) {
+        return TaskSuccessEvidence.isSatisfied(
+                task, instance, instanceService.hasCloudSucceeded(instance.id()));
     }
 }

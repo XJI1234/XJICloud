@@ -30,6 +30,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -51,6 +52,7 @@ public class EciInstanceService {
     private final LifecycleActionService lifecycleActionService;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    private final EciInstanceService self;
     /** 任务状态回写；单测可传 null。 */
     private final EciTaskService taskService;
     private final EciTaskRepository taskRepository;
@@ -64,7 +66,8 @@ public class EciInstanceService {
             @Lazy EciTaskService taskService,
             LifecycleActionService lifecycleActionService,
             Clock clock,
-            EciTaskRepository taskRepository) {
+            EciTaskRepository taskRepository,
+            @Lazy EciInstanceService self) {
         this.repository = repository;
         this.properties = properties;
         this.eciProvider = eciProvider;
@@ -73,6 +76,7 @@ public class EciInstanceService {
         this.objectMapper = objectMapper;
         this.taskService = taskService;
         this.taskRepository = taskRepository;
+        this.self = self;
     }
 
     /** Retained for the focused service tests that construct this service without Spring. */
@@ -87,7 +91,7 @@ public class EciInstanceService {
             LifecycleActionService lifecycleActionService,
             Clock clock) {
         this(repository, properties, eciProvider, objectMapper, taskService,
-                lifecycleActionService, clock, null);
+                lifecycleActionService, clock, null, ignoredSelf);
     }
 
     /**
@@ -213,8 +217,8 @@ public class EciInstanceService {
         }
 
         if (status == InstanceStatus.STOPPING) {
-            if (!"Succeeded".equalsIgnoreCase(entity.getCloudStatus())) {
-                entity.setCloudStatus("Succeeded");
+            if (!entity.hasCloudSucceeded()) {
+                entity.recordCloudObservation("Succeeded", entity.getStatusReason());
                 entity.setUpdatedAt(clock.instant());
                 repository.save(entity);
             }
@@ -227,7 +231,7 @@ public class EciInstanceService {
                     "实例状态不允许记录云侧 Succeeded: " + status, HttpStatus.CONFLICT);
         }
 
-        entity.setCloudStatus("Succeeded");
+        entity.recordCloudObservation("Succeeded", entity.getStatusReason());
         Instant now = clock.instant();
         entity.setUpdatedAt(now);
         repository.save(entity);
@@ -244,7 +248,7 @@ public class EciInstanceService {
             throw new BusinessException(
                     "实例状态不允许记录云侧 Succeeded: " + status, HttpStatus.CONFLICT);
         }
-        entity.setCloudStatus("Succeeded");
+        entity.recordCloudObservation("Succeeded", entity.getStatusReason());
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
     }
@@ -262,8 +266,13 @@ public class EciInstanceService {
         return toResponse(findEntity(id));
     }
 
-    /** 按云侧 Describe 结果回写本地状态（含 CREATING/FAILED 时云侧已消失 → TERMINATED）。 */
     @Transactional
+    public void recordProviderStatus(UUID id, String cloudStatus, String statusReason) {
+        lifecycleActionService.recordProviderStatus(id, cloudStatus, statusReason);
+    }
+
+    /** 按云侧 Describe 结果回写本地状态（含 CREATING/FAILED 时云侧已消失 → TERMINATED）。 */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public InstanceResponse refresh(UUID id) {
         EciInstanceEntity entity = findEntity(id);
 
@@ -275,8 +284,28 @@ public class EciInstanceService {
             return toResponse(entity);
         }
 
-        CloudInstanceView view = eciProvider.describe(entity.getCloudInstanceId());
-        entity.setCloudStatus(view.status());
+        String describedCloudInstanceId = entity.getCloudInstanceId();
+        CloudInstanceView view = eciProvider.describe(describedCloudInstanceId);
+        return self == null
+                ? applyRefresh(id, describedCloudInstanceId, view)
+                : self.applyRefresh(id, describedCloudInstanceId, view);
+    }
+
+    @Transactional
+    public InstanceResponse applyRefresh(UUID id, String describedCloudInstanceId, CloudInstanceView view) {
+        if (self != null) {
+            UUID taskId = repository.findTaskIdById(id).orElse(null);
+            if (taskId != null && taskService != null) {
+                taskService.lockForDeleteCompletion(taskId);
+            }
+        }
+        EciInstanceEntity entity = self == null ? findEntity(id) : findEntityForUpdate(id);
+        if (entity.getStatus() == InstanceStatus.TERMINATED
+                || !Objects.equals(describedCloudInstanceId, entity.getCloudInstanceId())) {
+            return toResponse(entity);
+        }
+
+        entity.recordCloudObservation(view.status(), view.statusDetail());
         entity.setUpdatedAt(Instant.now());
 
         InstanceStatus previous = entity.getStatus();
@@ -284,7 +313,8 @@ public class EciInstanceService {
             // Succeeded 可能跳过 Running（短任务）；本地先对齐 RUNNING，终态清理留给任务轮询器
             entity.setStatus(InstanceStatus.RUNNING);
             entity.setFailureReason(null);
-        } else if (view.isFailed() && entity.getStatus() != InstanceStatus.TERMINATED) {
+        } else if (view.isFailed() && entity.getStatus() != InstanceStatus.TERMINATED
+                && !entity.hasCloudSucceeded()) {
             entity.setStatus(InstanceStatus.FAILED);
             entity.setFailureReason(view.statusDetail() != null ? view.statusDetail() : view.status());
         } else if (view.isTerminatedOrMissing()
@@ -298,8 +328,15 @@ public class EciInstanceService {
         }
 
         repository.save(entity);
-        notifyTaskOnStatusChange(entity, previous);
+        if (!(view.isSucceeded() && entity.ignoresCloudSucceeded())) {
+            notifyTaskOnStatusChange(entity, previous);
+        }
         return toResponse(entity);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasCloudSucceeded(UUID id) {
+        return repository.findById(id).map(EciInstanceEntity::hasCloudSucceeded).orElse(false);
     }
 
     /** Short candidate scan; startup work is applied in separate per-row transactions. */

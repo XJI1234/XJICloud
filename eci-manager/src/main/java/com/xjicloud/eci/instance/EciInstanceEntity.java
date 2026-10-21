@@ -1,5 +1,6 @@
 package com.xjicloud.eci.instance;
 
+import com.xjicloud.eci.provider.CloudStatusReason;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -45,6 +46,18 @@ public class EciInstanceEntity {
     /** 最近一次 Describe 得到的云侧状态字符串。 */
     @Column(length = 64)
     private String cloudStatus;
+
+    /** 最近一次云侧状态说明，敏感内容已替换为安全文案。 */
+    @Column(length = 1024)
+    private String statusReason;
+
+    /** 云侧曾确认 Succeeded；删除期间的其他状态不能抹掉任务成功证据。 */
+    @Column(name = "cloud_succeeded", nullable = false)
+    private boolean cloudSucceeded;
+
+    /** 云侧 Succeeded 时的安全状态说明，供清理完成后的任务快照使用。 */
+    @Column(name = "cloud_succeeded_reason", length = 1024)
+    private String cloudSucceededReason;
 
     @Lob
     @Column
@@ -152,7 +165,53 @@ public class EciInstanceEntity {
     }
 
     public void setCloudStatus(String cloudStatus) {
+        recordCloudObservation(cloudStatus, statusReason);
+    }
+
+    public void recordCloudObservation(String cloudStatus, String statusReason) {
+        String safeReason = CloudStatusReason.safe(statusReason);
+        if (hasCloudSucceeded()) {
+            cloudSucceeded = true;
+            if (cloudSucceededReason == null) {
+                cloudSucceededReason = CloudStatusReason.safe(this.statusReason);
+            }
+        }
         this.cloudStatus = cloudStatus;
+        this.statusReason = safeReason;
+        if (isSucceeded(cloudStatus) && !ignoresCloudSucceeded()) {
+            this.cloudSucceeded = true;
+            this.cloudSucceededReason = safeReason;
+        }
+    }
+
+    public String getStatusReason() {
+        return statusReason;
+    }
+
+    public void setStatusReason(String statusReason) {
+        recordCloudObservation(cloudStatus, statusReason);
+    }
+
+    public boolean hasCloudSucceeded() {
+        return !ignoresCloudSucceeded() && (cloudSucceeded || isSucceeded(cloudStatus));
+    }
+
+    public String getCloudSucceededReason() {
+        if (!hasCloudSucceeded()) {
+            return null;
+        }
+        if (cloudSucceededReason != null) {
+            return cloudSucceededReason;
+        }
+        return isSucceeded(cloudStatus) ? statusReason : null;
+    }
+
+    public boolean ignoresCloudSucceeded() {
+        return "Always".equalsIgnoreCase(restartPolicy);
+    }
+
+    private static boolean isSucceeded(String status) {
+        return status != null && "Succeeded".equalsIgnoreCase(status);
     }
 
     public String getEnvJson() {

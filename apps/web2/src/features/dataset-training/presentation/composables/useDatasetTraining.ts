@@ -2,7 +2,13 @@ import { inject } from 'vue'
 import { CONTAINER_KEY } from '@/shared/di'
 import { buildDatasetArchive } from '../../domain/services/dataset-archive.service'
 import { cancelOrDeleteJobUseCase, submitDatasetUseCase } from '../../application/use-cases/submit-dataset.usecase'
-import { isActiveJob } from '../../domain/services/job-policy.service'
+import {
+  computeStatusCategory,
+  isActiveJob,
+  isCleanupPending,
+  jobMutation,
+  shouldWatchJob,
+} from '../../domain/services/job-policy.service'
 
 export function useDatasetTraining() {
   const container = inject(CONTAINER_KEY)!
@@ -16,5 +22,9 @@ export function useDatasetTraining() {
       cancelOrDeleteJobUseCase({ jobs: container.jobs }, job),
     watchHub: container.jobWatch,
     isActiveJob,
+    computeStatusCategory,
+    isCleanupPending,
+    jobMutation,
+    shouldWatchJob,
   }
 }

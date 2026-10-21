@@ -137,7 +137,15 @@ public class EciManagerClient {
             if (status.isBlank()) {
                 throw new BusinessException("eci-manager 返回的任务状态为空", HttpStatus.BAD_GATEWAY);
             }
-            return new EciManagerTaskResponse(id, status);
+            return new EciManagerTaskResponse(
+                    id,
+                    status,
+                    optionalText(data, "instanceStatus"),
+                    optionalText(data, "cloudStatus"),
+                    optionalText(data, "statusReason"),
+                    data.path("cleanupConfirmed").asBoolean(false),
+                    optionalText(data, "failureReason")
+            );
         } catch (BusinessException ex) {
             throw ex;
         } catch (ResourceAccessException ex) {
@@ -153,6 +161,11 @@ public class EciManagerClient {
         if (!properties.hasApiKey()) {
             throw new BusinessException("eci-manager API key 未配置", HttpStatus.BAD_GATEWAY);
         }
+    }
+
+    private String optionalText(JsonNode object, String field) {
+        JsonNode value = object.get(field);
+        return value == null || value.isNull() ? null : value.asText();
     }
 
     private TestResult parseTestResult(String responseBody, String resource, String accessKeyId, String accessKeySecret) {

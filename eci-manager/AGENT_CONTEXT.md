@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见仓库根目录 [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-10-04（旧 H2 任务状态 ENUM 启动升级）
+**最后更新：** 2026-10-19（任务云端状态快照与安全取消契约）
 
 **3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`，默认 `shmSize=8Gi`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → 持久化 not-before → DELETE；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
@@ -44,6 +44,8 @@
   - ✅ P0 CREATE 使用本地实例 UUID ClientToken 与 `xjicloud-local-instance-id` Tag；未知结果继续用同 token 恢复
   - ✅ pre-P0 无 token CREATE 只创建 `Legacy CREATE outcome unknown` 隔离标记，禁止自动重放或云侧猜测；首次处理记录安全 ERROR，需人工核对后恢复
   - ✅ 任务取消状态为 `CANCELLING → CANCELLED`；仅实例 `TERMINATED`/`NotFound` 后写 `CANCELLED`
+  - ✅ TaskResponse 暴露 `instanceStatus`、`cloudStatus`、安全 `statusReason` 与 `cleanupConfirmed`；状态说明落在 `eci_instance.status_reason`，清理仅在实例 `TERMINATED` 时确认
+  - ✅ FAILED cancel 幂等登记 DELETE 并保留失败证据；已发出但未收响应的 CREATE 以原 client token 恢复，未知旧 CREATE 仍隔离
   - ✅ H2 启动时幂等扩展旧 `eci_task.status` ENUM，先于 Hibernate 与生命周期恢复；升级前应停服务并备份数据库
   - ✅ Mock 覆盖崩溃/未知 CREATE、DELETE 重试/超时、取消收敛；真云验证须明确授权
 - **已交付（主后端训练派发，2026-09-23）：**
@@ -132,7 +134,7 @@ eci-manager/
 ├── test-images/oss-smoke/           # eci-oss-test 联调镜像（Dockerfile/run.py）
 ├── docs/
 │   ├── 设计与使用说明.md            # §4.4 eci.oss
-│   ├── API文档.md                   # §3.1 storage；TaskResponse.containerLogTail
+│   ├── API文档.md                   # §3.1 storage；TaskResponse 生命周期快照字段
 │   ├── 测试说明.md
 │   └── 3dgs-ECI使用说明.md          # 3DGS 真云一键提交与注意事项
 └── src/
@@ -211,7 +213,7 @@ RUNNING  → STOPPING → TERMINATED
 CREATING|RUNNING|STOPPING|FAILED + 云侧已删/NotFound → TERMINATED（refresh）
 ```
 
-短任务云侧可能 Pending→Succeeded（未见 Running）：`LifecycleActionProcessor` 将 Succeeded 对齐为本地 `RUNNING`，再登记 DELETE；实例终止后任务才 `SUCCEEDED`。
+短任务云侧可能 Pending→Succeeded（未见 Running）：非 `Always` 策略下，`LifecycleActionProcessor` 将 Succeeded 对齐为本地 `RUNNING`，再登记 DELETE；实例终止后任务才 `SUCCEEDED`。`Always` 下 Succeeded 不作为任务成功证据。
 
 ### 任务状态机（P0）
 
@@ -280,15 +282,19 @@ HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把�
 |------|------|------|
 | POST | `/tasks` | **`image` 必填**；可选 `storage`、`shmSize`；立即返回 taskId + STARTING + instanceId |
 | GET | `/tasks?status=` | 列表 |
-| GET | `/tasks/{id}` | 详情（失败时含 `failureReason` + `containerLogTail`） |
+| GET | `/tasks/{id}` | 详情（实例/云状态快照、清理证据；失败时含 `failureReason` + `containerLogTail`） |
 | GET | `/tasks/{id}/logs?tailLines=` | 运行中走 `fetchContainerLog`；终态走 `containerLogTail`；尚无 cloudId → 200 空日志 |
-| POST | `/tasks/{id}/cancel` | 幂等 CANCELLING → CANCELLED + 持久化删关联实例 |
+| POST | `/tasks/{id}/cancel` | 幂等 CANCELLING → CANCELLED；FAILED 保留终态并持久化删关联实例 |
 
 未传规格/重启/超时 → 用配置默认值，**实际值写入任务行**。
 
 有 `storage`：须 `eci.oss.enabled` 且配置完整，否则 **400 不落库**；注入 `XJI_OUTPUT_UPLOAD_URL` 等（禁止 AK/SK 进容器）。契约见 [docs/API文档.md](docs/API文档.md) §3.1。
 
 失败取证字段：`failureReason` 仍为短文案（≤1000）；容器日志尾部落独立字段 **`containerLogTail`**（`@Lob`），实例删除后仍可从 `GET /tasks/{id}` 读取。
+
+TaskResponse 新增 `instanceStatus`、`cloudStatus`、`statusReason`、`cleanupConfirmed`，字段名与主 backend 消费端一致。`statusReason` 只取 provider 状态说明，经 URL、凭据字段、环境变量赋值检测后限长；命中敏感格式时返回固定安全文案，不复制 SDK 异常消息。`cleanupConfirmed` 只有关联实例状态为 `TERMINATED` 才为 true；缺失实例、未知 CREATE、空/未知云状态或仍待删除时为 false，DELETE 受理不作为清理证据。
+
+数据库升级：`schema.sql` 以幂等语句为 `eci_instance` 增加可空 `status_reason VARCHAR(1024)`、`cloud_succeeded_reason VARCHAR(1024)` 和 `cloud_succeeded BOOLEAN NOT NULL DEFAULT FALSE`。非 `Always` 任务的现有 `cloudStatus=Succeeded` 记录仍按成功证据处理；H2 默认 `spring.sql.init.mode=always` 会在 Hibernate 启动前应用，关闭 SQL 初始化的部署须在升级前执行等价 `ALTER TABLE`，无需数据回填。
 
 ### 当前云钥与 HTTP Api-Key
 
@@ -331,7 +337,7 @@ HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把�
 | P0 范围 | Task 1–8 完成；动作恢复、删除重试、取消收敛与 Mock 验证已纳入 |
 | `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 `TaskLifecycleWatcher` 在 Describe=Succeeded 且实例 TERMINATED 后写入 |
 | 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
-| Always/OnFailure | 忽略云 Failed/Succeeded 时**不**误调 `onInstanceRunning`（Watcher 2026-07-28 修正） |
+| Always/OnFailure | 忽略相应策略下的云 Failed 时**不**误调 `onInstanceRunning`；`Always` 下云 Succeeded 不作为任务成功证据 |
 | 测试文档 | `docs/测试说明.md` §0.3 自动化覆盖表 |
 | `/dev/shm` | 可选 `shmSize` 挂 Memory EmptyDir；默认不挂（64Mi）；3dgs 标准档 `8Gi`；计入实例内存，须小于 `memory` |
 

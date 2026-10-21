@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/presentation/components/AppButton.vue'
 import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
@@ -30,8 +30,22 @@ const wait = useWaitSession()
 const { waitView } = wait
 const statusMessage = ref('')
 const errorMessage = ref('')
+let uploadGeneration = 0
 
 const totalUploadBytes = computed(() => (archive.value ? totalArchiveBytes(archive.value) : 0))
+
+watch(() => props.projectId, () => {
+  uploadGeneration += 1
+  pending.value = false
+  uploadProgress.value = 0
+  statusMessage.value = ''
+  errorMessage.value = ''
+  wait.hide()
+})
+
+onBeforeUnmount(() => {
+  uploadGeneration += 1
+})
 
 function defaultDatasetName() {
   return t('dataset.defaultName', { time: formatDateTime(new Date()) })
@@ -63,6 +77,9 @@ async function uploadArchive() {
     errorMessage.value = t('dataset.selectFolderFirst')
     return
   }
+  const requestGeneration = ++uploadGeneration
+  const requestProjectId = props.projectId
+  const hubGeneration = training.watchHub.generation()
   pending.value = true
   uploadProgress.value = 0
   resetSpeed()
@@ -70,16 +87,33 @@ async function uploadArchive() {
   statusMessage.value = t('dataset.requestingUrls')
   wait.showBusy(t('wait.uploading'), true)
   const [error, job] = await training.submit({
-    projectId: props.projectId,
+    projectId: requestProjectId,
     name: datasetName.value.trim() || defaultDatasetName(),
     archive: archive.value,
     onProgress: (progress: { percent: number; loaded: number }) => {
+      if (
+        requestGeneration !== uploadGeneration
+        || requestProjectId !== props.projectId
+        || hubGeneration !== training.watchHub.generation()
+      ) {
+        return
+      }
       uploadProgress.value = progress.percent
       noteLoaded(progress.loaded)
       statusMessage.value = t('dataset.uploadingOss')
       wait.showProgress(t('wait.uploading'), progress.percent, speedLabel.value, true)
     },
   })
+  if (requestGeneration !== uploadGeneration || requestProjectId !== props.projectId) {
+    return
+  }
+  if (hubGeneration !== training.watchHub.generation()) {
+    pending.value = false
+    uploadProgress.value = 0
+    statusMessage.value = ''
+    wait.hide()
+    return
+  }
   pending.value = false
   if (error || !job) {
     errorMessage.value = formatDomainError(t, error)

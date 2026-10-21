@@ -1,5 +1,6 @@
 package com.xjicloud.eci.task.dto;
 
+import com.xjicloud.eci.instance.InstanceStatus;
 import com.xjicloud.eci.task.TaskStatus;
 
 import java.time.Instant;
@@ -15,6 +16,10 @@ public record TaskResponse(
         String name,
         TaskStatus status,
         UUID instanceId,
+        InstanceStatus instanceStatus,
+        String cloudStatus,
+        String statusReason,
+        boolean cleanupConfirmed,
         String image,
         List<String> command,
         List<String> args,

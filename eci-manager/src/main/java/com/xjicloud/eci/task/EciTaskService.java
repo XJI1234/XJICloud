@@ -5,10 +5,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.common.BusinessException;
 import com.xjicloud.eci.config.EciProperties;
+import com.xjicloud.eci.instance.EciInstanceEntity;
+import com.xjicloud.eci.instance.EciInstanceRepository;
 import com.xjicloud.eci.instance.InstanceStatus;
 import com.xjicloud.eci.instance.EciInstanceService;
 import com.xjicloud.eci.instance.dto.CreateInstanceRequest;
 import com.xjicloud.eci.instance.dto.InstanceResponse;
+import com.xjicloud.eci.provider.CloudStatusReason;
 import com.xjicloud.eci.provider.ShmSize;
 import com.xjicloud.eci.task.dto.CreateTaskRequest;
 import com.xjicloud.eci.task.dto.TaskResponse;
@@ -42,6 +45,7 @@ public class EciTaskService {
             EnumSet.of(TaskStatus.PENDING, TaskStatus.STARTING, TaskStatus.RUNNING);
 
     private final EciTaskRepository repository;
+    private final EciInstanceRepository instanceRepository;
     private final EciInstanceService instanceService;
     private final EciProperties properties;
     private final ObjectMapper objectMapper;
@@ -50,12 +54,14 @@ public class EciTaskService {
 
     public EciTaskService(
             EciTaskRepository repository,
+            EciInstanceRepository instanceRepository,
             EciInstanceService instanceService,
             EciProperties properties,
             ObjectMapper objectMapper,
             TaskStorageResolver taskStorageResolver,
             PlatformTransactionManager transactionManager) {
         this.repository = repository;
+        this.instanceRepository = instanceRepository;
         this.instanceService = instanceService;
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -186,11 +192,15 @@ public class EciTaskService {
         if (entity.getStatus() == TaskStatus.CANCELLING || entity.getStatus() == TaskStatus.CANCELLED) {
             return toResponse(entity);
         }
-        if (entity.getStatus() == TaskStatus.SUCCEEDED || entity.getStatus() == TaskStatus.FAILED) {
+        if (entity.getStatus() == TaskStatus.SUCCEEDED) {
             throw new BusinessException("任务已终态，无法取消: " + entity.getStatus(), HttpStatus.CONFLICT);
         }
         if (entity.getInstanceId() == null) {
             throw new BusinessException("任务未关联实例，无法取消", HttpStatus.CONFLICT);
+        }
+        if (entity.getStatus() == TaskStatus.FAILED) {
+            instanceService.deleteForTaskCancel(entity.getInstanceId());
+            return toResponse(findEntity(id));
         }
 
         Instant now = Instant.now();
@@ -269,6 +279,17 @@ public class EciTaskService {
         if (taskId == null) {
             return;
         }
+        EciTaskEntity task = repository.findForUpdateById(taskId).orElse(null);
+        if (task == null || !ACTIVE_STATUSES.contains(task.getStatus()) || task.getInstanceId() == null) {
+            return;
+        }
+        EciInstanceEntity instance = instanceRepository.findForUpdateById(task.getInstanceId()).orElse(null);
+        if (instance == null
+                || !taskId.equals(instance.getTaskId())
+                || instance.getStatus() != InstanceStatus.TERMINATED
+                || !instance.hasCloudSucceeded()) {
+            return;
+        }
         repository.markSucceededIfActive(
                 taskId, TaskStatus.SUCCEEDED, Instant.now(), ACTIVE_STATUSES);
     }
@@ -283,11 +304,11 @@ public class EciTaskService {
 
     /** DELETE completion is the only cancellation terminalization point. */
     @Transactional
-    public void onInstanceTerminated(UUID taskId, String cloudStatus) {
+    public void onInstanceTerminated(UUID taskId, String ignoredCloudStatus) {
         if (taskId == null) {
             return;
         }
-        EciTaskEntity task = repository.findById(taskId).orElse(null);
+        EciTaskEntity task = repository.findForUpdateById(taskId).orElse(null);
         if (task == null) {
             return;
         }
@@ -295,10 +316,8 @@ public class EciTaskService {
         if (task.getStatus() == TaskStatus.CANCELLING) {
             repository.markCancelledIfCancelling(
                     taskId, TaskStatus.CANCELLED, now, TaskStatus.CANCELLING);
-        } else if (ACTIVE_STATUSES.contains(task.getStatus())
-                && cloudStatus != null && "Succeeded".equalsIgnoreCase(cloudStatus)) {
-            repository.markSucceededIfActive(
-                    taskId, TaskStatus.SUCCEEDED, now, ACTIVE_STATUSES);
+        } else if (ACTIVE_STATUSES.contains(task.getStatus())) {
+            markSucceeded(taskId);
         }
     }
 
@@ -354,11 +373,28 @@ public class EciTaskService {
     }
 
     private TaskResponse toResponse(EciTaskEntity entity) {
+        EciInstanceEntity instance = entity.getInstanceId() == null
+                ? null
+                : instanceRepository.findById(entity.getInstanceId()).orElse(null);
+        String statusReason = instance == null ? null : CloudStatusReason.safe(instance.getStatusReason());
+        if (isTerminal(entity.getStatus())) {
+            if (entity.getStatus() == TaskStatus.SUCCEEDED && instance != null && instance.hasCloudSucceeded()) {
+                statusReason = CloudStatusReason.safe(instance.getCloudSucceededReason());
+            } else if (instance != null && isTerminalCloudStatus(instance.getCloudStatus())) {
+                statusReason = CloudStatusReason.safe(instance.getStatusReason());
+            } else {
+                statusReason = CloudStatusReason.safe(entity.getFailureReason());
+            }
+        }
         return new TaskResponse(
                 entity.getId(),
                 entity.getName(),
                 entity.getStatus(),
                 entity.getInstanceId(),
+                instance == null ? null : instance.getStatus(),
+                instance == null ? null : instance.getCloudStatus(),
+                statusReason,
+                instance != null && instance.getStatus() == InstanceStatus.TERMINATED,
                 entity.getImage(),
                 parseStringList(entity.getCommandJson()),
                 parseStringList(entity.getArgsJson()),
@@ -377,6 +413,20 @@ public class EciTaskService {
                 entity.getEndedAt(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
+    }
+
+    private static boolean isTerminal(TaskStatus status) {
+        return status == TaskStatus.SUCCEEDED || status == TaskStatus.FAILED || status == TaskStatus.CANCELLED;
+    }
+
+    private static boolean isTerminalCloudStatus(String cloudStatus) {
+        return "Succeeded".equalsIgnoreCase(cloudStatus)
+                || "Failed".equalsIgnoreCase(cloudStatus)
+                || "ScheduleFailed".equalsIgnoreCase(cloudStatus)
+                || "CreateFailed".equalsIgnoreCase(cloudStatus)
+                || "Deleted".equalsIgnoreCase(cloudStatus)
+                || "Terminated".equalsIgnoreCase(cloudStatus)
+                || "NotFound".equalsIgnoreCase(cloudStatus);
     }
 
     private String toJson(Object value) {

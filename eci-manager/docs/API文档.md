@@ -295,6 +295,10 @@ OSS 联调（`mode=test` + 联调镜像）：
 | `name` | string | 名称 |
 | `status` | enum | 见 §2.4 |
 | `instanceId` | UUID | 关联实例；创建成功后非空 |
+| `instanceStatus` | enum \| null | 本地关联实例状态；实例缺失时为 `null` |
+| `cloudStatus` | string \| null | 最近一次确认的云侧状态 |
+| `statusReason` | string \| null | 最近一次云侧状态说明；凭据、环境变量或 URL 内容统一替换为安全文案，不返回原始 SDK 异常 |
+| `cleanupConfirmed` | boolean | 仅关联实例已确认进入 `TERMINATED` 时为 `true`；缺少实例或清理仍在进行时为 `false` |
 | `image` | string | 实际镜像 |
 | `command` / `args` | array | 启动命令 |
 | `cpu` / `memory` | number | 实际规格 |
@@ -374,7 +378,10 @@ OSS 联调（`mode=test` + 联调镜像）：
 - DELETE 确认云侧 `TERMINATED` 或 `NotFound` 后才标为 `CANCELLED`
 - 已是 `CANCELLING` → **幂等**成功，继续返回当前任务并由后台轮询
 - 已是 `CANCELLED` → **幂等**成功，仍返回当前任务  
-- 已是 `SUCCEEDED` / `FAILED` → **409**，不可取消  
+- 已是 `FAILED` → 保留 `FAILED`、`failureReason`、日志和 `endedAt`，幂等登记关联 DELETE 清理
+- 已是 `SUCCEEDED` → **409**，不可取消
+
+`cleanupConfirmed` 仅表示本地生命周期已有实例清理证据；DELETE 请求受理本身不算确认。无 cloudId 时，只有能证明 CREATE 未发出才可本地收敛；已发出的 CREATE 使用同一 `clientToken` 恢复，未知旧 CREATE 保持隔离。
 
 ---
 

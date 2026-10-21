@@ -15,6 +15,11 @@ public record JobResponse(
         String downloadUrl,
         String errorMessage,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String computeStatus,
+        String cloudStatus,
+        String computeStatusReason,
+        boolean cancellationPending,
+        boolean cleanupPending
 ) {
 }

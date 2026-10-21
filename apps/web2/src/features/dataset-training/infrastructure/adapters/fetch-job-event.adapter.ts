@@ -13,7 +13,7 @@ export function createFetchJobEventAdapter(options: {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis)
 
   return {
-    subscribe(jobId, onEvent) {
+    subscribe(jobId, onEvent, onDisconnect) {
       const controller = new AbortController()
       const token = options.tokenProvider.getToken()
 
@@ -44,6 +44,10 @@ export function createFetchJobEventAdapter(options: {
         } catch (error) {
           if (!(error instanceof DOMException && error.name === 'AbortError')) {
             console.error(error)
+          }
+        } finally {
+          if (!controller.signal.aborted) {
+            onDisconnect?.()
           }
         }
       })()

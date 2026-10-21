@@ -19,6 +19,11 @@ export type TrainingJob = {
   errorMessage: string | null
   createdAt: string
   updatedAt: string
+  computeStatus?: string | null
+  cloudStatus?: string | null
+  computeStatusReason?: string | null
+  cancellationPending?: boolean
+  cleanupPending?: boolean
 }
 
 export type JobProgressEvent = {
@@ -27,6 +32,12 @@ export type JobProgressEvent = {
   progress: number
   stage: string
   message: string
+  computeStatus?: string | null
+  cloudStatus?: string | null
+  computeStatusReason?: string | null
+  cancellationPending?: boolean
+  cleanupPending?: boolean
+  updatedAt?: string
 }
 
 export type ArchivedImageFile = {

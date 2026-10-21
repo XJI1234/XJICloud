@@ -196,6 +196,18 @@ export default {
     deleteFailed: 'Failed to delete job',
     deleteRecordFeature: 'Delete Upload Record',
     downloadModel: 'Download Model',
+    cancellationAccepted: 'Cancellation request accepted',
+    cancellationPending: 'Cancellation in progress',
+    cleanupPending: 'Cleaning up cloud resources',
+    compute: {
+      waiting: 'Waiting for compute task creation',
+      starting: 'Compute instance starting',
+      running: 'Compute task running',
+      succeeded: 'Compute task completed',
+      failed: 'Compute task failed',
+      cancelled: 'Compute task cancelled',
+      reason: 'Status reason: {reason}',
+    },
     status: {
       pending: 'Pending',
       uploading: 'Uploading',

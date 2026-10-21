@@ -164,11 +164,13 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 | 实体 | `training-job.entity` |
 | 领域服务 | `dataset-archive.service`（过滤 jpg/png/webp、四位序号、manifest）、`job-policy.service`（能否取消/删除）、`sse-buffer.service` |
 | Ports | `TrainingJobRepository`、`JobEventPort`、`ObjectStoragePort` |
-| 应用 | `submit-dataset.usecase`、`job-watch-hub`（进程内订阅，401 时清空） |
-| 适配器 | `xhr-object-storage`（OSS presigned PUT 进度）、`fetch-job-event`（SSE，不能走普通 JSON client） |
+| 应用 | `submit-dataset.usecase`、`job-watch-hub`（进程内订阅，SSE + 30 秒 REST 快照补漏，401 时清空） |
+| 适配器 | `xhr-object-storage`（OSS presigned PUT 进度）、`fetch-job-event`（SSE，断流后重连，不能走普通 JSON client） |
 | UI | `UploadView`、`DatasetUploadPanel`、`TrainingJobPanel`、`useDatasetTraining` |
 
 归档 **不是** zip。与全仓 AGENT_CONTEXT 第 4 节同一条流水线。PLY 上传不属于本 BC。
+
+训练任务快照与进度事件都映射 `computeStatus`、`cloudStatus`、`computeStatusReason`、`cancellationPending`、`cleanupPending` 和 `updatedAt`。旧响应缺少取消/清理布尔字段时按 `false` 处理；快照同版本时允许 REST 补全或更新完整任务详情（包括签名下载地址），较旧事件或快照不会覆盖当前任务。版本比较保留 Instant 纳秒精度，并按时区偏移比较时间。终态事件会独立补全 REST 详情；旧请求不覆盖 SSE 终态，后续 REST 轮询重取详情，临时失败后继续轮询恢复。创建等待、实例启动和任务运行状态的原始分类位于 domain policy，展示文案由 presentation 映射到 i18n；取消或资源清理未完成时继续同步，并禁用删除操作，直到清理确认。
 
 ### 6.4 Model-asset（模型资产）
 
