@@ -5425,6 +5425,8 @@
     const previewOnly = format === "kml" || classification === "preview-only";
     const executable = classification === "upload-candidate";
     const blockedReason = previewOnly ? format === "kml" ? "KML \u53EA\u80FD\u9884\u89C8\uFF0C\u4E0D\u80FD\u63D0\u4EA4\u7ED9\u98DE\u673A" : "\u8BE5 KMZ \u672A\u901A\u8FC7\u4E0E\u624B\u673A\u7AEF\u4E00\u81F4\u7684\u63D0\u4EA4\u68C0\u67E5\uFF08\u9700 wpmz/waylines.wpml\u3001\u914D\u5957\u6A21\u677F\u3001\u6070\u597D\u4E00\u6761\u822A\u7EBF\uFF09\uFF0C\u4EC5\u53EF\u9884\u89C8" : executable ? null : "\u5C1A\u672A\u53D6\u5F97\u8BE5\u822A\u7EBF\u7684\u53EF\u6267\u884C\u6027\u4E8B\u5B9E";
+    const count = read(row, "waypointCount");
+    const waypointCount = typeof count === "number" && Number.isSafeInteger(count) && count > 0 && count <= 1e5 ? count : null;
     return freeze4({
       routeId,
       displayName: text(read(row, "displayName")) ?? routeId,
@@ -5432,7 +5434,8 @@
       classification,
       executable,
       previewable: true,
-      blockedReason
+      blockedReason,
+      ...waypointCount === null ? {} : { waypointCount }
     });
   };
   var routesOf = (snapshot2) => {
@@ -5600,6 +5603,43 @@
     if (msdk !== void 0) return msdk === "ready" ? null : "\u624B\u673A\u5C1A\u672A\u5C31\u7EEA";
     return read(connection, "sdk") === "ready" ? null : "\u624B\u673A\u5C1A\u672A\u5C31\u7EEA";
   };
+  var REMOTE_ONCE_REASON = "\u8BF7\u5148\u8FDE\u63A5\u4E00\u6B21\u9065\u63A7\u5668\u3002\u8FDE\u8FC7\u4E00\u6B21\u540E\u62D4\u4E0B\u4ECD\u53EF\u64CD\u4F5C";
+  var remoteControllerSeen = /* @__PURE__ */ new Set();
+  var REMOTE_ONCE_STORAGE = "sky-operator-remote-once";
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(REMOTE_ONCE_STORAGE) ?? "[]");
+    if (Array.isArray(stored)) {
+      for (const deviceId of stored) {
+        if (typeof deviceId === "string" && deviceId.length > 0) remoteControllerSeen.add(deviceId);
+      }
+    }
+  } catch {
+    // 浏览器禁止会话存储时，仍保留本次页面里的连接记录。
+  }
+  var rememberRemoteController = (deviceId) => {
+    if (remoteControllerSeen.has(deviceId)) return;
+    remoteControllerSeen.add(deviceId);
+    try {
+      sessionStorage.setItem(REMOTE_ONCE_STORAGE, JSON.stringify([...remoteControllerSeen]));
+    } catch {
+      // 写不进会话存储时，本次页面仍按已连接处理。
+    }
+  };
+  var noteRemoteControllers = (devices) => {
+    for (const device of devices) {
+      const deviceId = text(read(device, "deviceId"));
+      const connection = invocationConnection(device);
+      if (deviceId !== null && (read(connection, "remoteController") === "connected" || read(connection, "remoteControllerHasConnectedOnce") === true)) rememberRemoteController(deviceId);
+    }
+  };
+  var remoteControllerEverConnected = (device) => {
+    const deviceId = text(read(device, "deviceId"));
+    const connection = invocationConnection(device);
+    if (read(connection, "remoteControllerHasConnectedOnce") === true || read(connection, "remoteController") === "connected") return true;
+    return deviceId !== null && remoteControllerSeen.has(deviceId);
+  };
+  var FLIGHT_CONTROLLER_REASON = "\u8BF7\u5148\u8FDE\u63A5\u98DE\u63A7";
+  var flightControllerConnected = (device) => read(invocationConnection(device), "flightController") === "connected";
   var deviceById = (view, deviceId) => view.devices.flatMap((item) => {
     const row = record(item);
     return row !== null && read(row, "deviceId") === deviceId ? [row] : [];
@@ -5811,6 +5851,7 @@
     const snapshot2 = source === null ? null : read(source, "snapshot");
     const selection = record(source === null ? null : read(source, "selection"));
     const devices = devicesOf(snapshot2);
+    noteRemoteControllers(devices);
     const missionDeviceId = resolveSelection(devices, text(read(selection, "missionDeviceId")));
     const streamDeviceId = resolveSelection(devices, text(read(selection, "streamDeviceId")));
     const playingVideoDeviceId = stillOnline(devices, text(read(read(snapshot2, "workflow"), "selectedVideoDeviceId")));
@@ -5860,6 +5901,7 @@
     const name = text(action);
     const current = record(view);
     if (name === null || current === null) return reject("\u64CD\u4F5C\u65E0\u6548");
+    if (Array.isArray(current.devices)) noteRemoteControllers(current.devices);
     if (name === "pairing-start" || name === "pairing-stop") {
       if (current.workspace !== "devices") return reject("\u8BF7\u5230\u8BBE\u5907\u9875\u64CD\u4F5C\u5BF9\u9891");
       const device2 = deviceById(current, current.missionDeviceId);
@@ -5886,6 +5928,12 @@
       if (name === "stream-stop" && streamSourceUnavailableOf(device)) return reject("\u56FE\u4F20\u6E90\u5DF2\u65AD\u5F00\uFF0C\u624B\u673A\u5DF2\u81EA\u52A8\u505C\u6B62\u56FE\u4F20");
       return accept();
     }
+    if (name === "photo-fetch-stop") {
+      const connection = invocationConnection(device);
+      const msdk = read(connection, "msdk");
+      const sdkReady = msdk === void 0 ? read(connection, "sdk") === "ready" : msdk === "ready";
+      return sdkReady ? accept() : reject("\u624B\u673A\u5C1A\u672A\u5C31\u7EEA\uFF0C\u65E0\u6CD5\u505C\u6B62\u56DE\u4F20");
+    }
     if (name === "photo-capture" || name === "photo-fetch") {
       const issue2 = photoIssueOf(device);
       return issue2 === null ? accept() : reject(issue2);
@@ -5908,7 +5956,9 @@
       const phase2 = text(read(current.mission, "phase"));
       if (phase2 !== "staged") return reject("\u8BF7\u5148\u5C06\u822A\u7EBF\u4F20\u8F93\u5230\u624B\u673A");
       const msdkIssue2 = msdkInvocationIssue(device);
-      return msdkIssue2 === null ? accept() : reject(msdkIssue2);
+      if (msdkIssue2 !== null) return reject(msdkIssue2);
+      if (!remoteControllerEverConnected(device)) return reject(REMOTE_ONCE_REASON);
+      return flightControllerConnected(device) ? accept() : reject(FLIGHT_CONTROLLER_REASON);
     }
     if (name === "mission-pause") {
       if (text(read(current.mission, "phase")) !== "running" && text(read(current.mission, "phase")) !== "starting") return reject("\u5F53\u524D\u9636\u6BB5\u4E0D\u80FD\u6682\u505C");
@@ -6043,6 +6093,29 @@
     if (input.code === null && input.description === null) return EMPTY_STATUS;
     return [input.code, input.description].filter((part) => part !== null).join(" ");
   }
+  function waypointProgress(index, total) {
+    const count = typeof total === "number" && Number.isSafeInteger(total) && total > 0 && total <= 1e5 ? total : null;
+    const current = typeof index === "number" && Number.isSafeInteger(index) && index >= 0 ? index : null;
+    if (current !== null && count !== null && current < count) {
+      const position = current + 1;
+      return freeze6({ label: `${position} / ${count}`, caption: `\u822A\u70B9 ${position} / ${count}`, value: position, max: count });
+    }
+    if (current !== null) return freeze6({ label: `\u822A\u70B9 ${current}`, caption: `\u822A\u70B9 ${current}`, value: null, max: null });
+    if (count !== null) return freeze6({ label: `\u5171 ${count} \u4E2A`, caption: `\u5171 ${count} \u4E2A\u822A\u70B9`, value: null, max: null });
+    return null;
+  }
+  function missionRunPhase(dji, phone) {
+    if (phone === "FAILED") return "\u5DF2\u4E2D\u65AD";
+    if (dji === "FINISHED" || phone === "FINISHED") return "\u5DF2\u5B8C\u6210";
+    if (dji === "RETURN_TO_START_POINT") return "\u8FD4\u56DE\u8D77\u70B9";
+    if (dji === "ENTER_WAYLINE") return "\u8FDB\u5165\u9996\u822A\u70B9";
+    if (dji === "EXECUTING") return "\u6267\u884C\u4E2D";
+    if (dji === "INTERRUPTED" || dji === "PAUSED" || phone === "PAUSED") return "\u5DF2\u6682\u505C";
+    if (phone === "EXECUTING") return "\u6267\u884C\u4E2D";
+    if (dji === "STOPPING" || phone === "STOPPING") return "\u6B63\u5728\u505C\u6B62";
+    if (dji === "PREPARING" || dji === "RECOVERING" || phone === "STARTING") return "\u542F\u52A8\u4E2D";
+    return null;
+  }
   function missionExecutionNowStatus(input) {
     if (!input.selected) return "\u672A\u9009\u62E9\u624B\u673A";
     const parts = [input.execution, input.waypoint, input.fileName].filter((part) => part !== null && part.length > 0);
@@ -6105,8 +6178,8 @@
   var LAND_MODES = /* @__PURE__ */ new Set(["AUTO_LANDING", "FORCE_LANDING", "CONFIRM_LANDING"]);
   var HOME_MODES = /* @__PURE__ */ new Set(["GO_HOME", "AUTO_RETURN"]);
   var PHONE_MISSION = /* @__PURE__ */ new Set(["STARTING", "EXECUTING", "PAUSED"]);
-  var DJI_MISSION = /* @__PURE__ */ new Set(["PREPARING", "RECOVERING", "ENTER_WAYLINE", "EXECUTING", "PAUSED", "RETURN_TO_START_POINT"]);
-  var DJI_MISSION_IDLE = /* @__PURE__ */ new Set(["IDLE", "READY", "UPLOADING", "FINISHED", "INTERRUPTED", "DISCONNECTED", "NOT_SUPPORTED", "UNKNOWN"]);
+  var DJI_MISSION = /* @__PURE__ */ new Set(["PREPARING", "RECOVERING", "ENTER_WAYLINE", "EXECUTING", "PAUSED", "INTERRUPTED", "RETURN_TO_START_POINT"]);
+  var DJI_MISSION_IDLE = /* @__PURE__ */ new Set(["IDLE", "READY", "UPLOADING", "FINISHED", "DISCONNECTED", "NOT_SUPPORTED", "UNKNOWN"]);
   function landingProtectionNotice(input) {
     if (input.flightController !== "connected" || input.flying === "grounded" && input.motorsOn === false || input.landingConfirmationNeeded === true || input.landingProtectionState === "SAFE_TO_LAND") return null;
     const current = input.landingProtectionState === "NOT_SAFE_TO_LAND";
@@ -6121,12 +6194,16 @@
     const djiActive = input.djiMissionState !== null && DJI_MISSION.has(input.djiMissionState);
     const djiIdle = input.djiMissionState !== null && DJI_MISSION_IDLE.has(input.djiMissionState);
     const phoneActive = input.missionExecution !== null && PHONE_MISSION.has(input.missionExecution);
-    const missionActive = djiActive || phoneActive && !djiIdle;
+    const phoneTerminal = input.missionExecution === "FINISHED" || input.missionExecution === "FAILED";
+    const djiExited = input.djiMissionState === "FINISHED" || input.djiMissionState === "READY" || input.djiMissionState === "IDLE";
+    const activeWhenDjiExits = input.missionExecution === "PAUSED" || input.missionExecution === "EXECUTING" || input.missionExecution === "STOPPING";
+    const missionActive = !phoneTerminal && !(djiExited && activeWhenDjiExits) && (djiActive || phoneActive && !djiIdle);
     const aircraftExecuting = input.djiMissionState === "EXECUTING" || input.djiMissionState === "ENTER_WAYLINE" || input.djiMissionState === "RETURN_TO_START_POINT";
-    const paused = input.djiMissionState === "PAUSED" || input.missionExecution === "PAUSED" && !aircraftExecuting;
+    const paused = input.djiMissionState === "PAUSED" || input.djiMissionState === "INTERRUPTED" || input.missionExecution === "PAUSED" && !aircraftExecuting;
     const starting = !paused && (input.djiMissionState === "PREPARING" || input.djiMissionState === "RECOVERING" || input.djiMissionState === "ENTER_WAYLINE" || input.missionExecution === "STARTING" && !aircraftExecuting && input.djiMissionState !== "PAUSED");
     const protection = input.landingProtectionState === "NOT_SAFE_TO_LAND" ? "\u5F53\u524D\u4E0D\u9002\u5408\u964D\u843D" : "";
-    const waypoint = typeof input.waypointIndex === "number" && Number.isSafeInteger(input.waypointIndex) && input.waypointIndex >= 0 ? `\u822A\u70B9 ${input.waypointIndex}` : "";
+    const progressed = waypointProgress(input.waypointIndex, input.waypointTotal);
+    const waypoint = progressed === null ? "" : progressed.caption;
     const returningHome = mode !== null && HOME_MODES.has(mode) || flying === "flying" && input.lowBatteryRthState === "COUNTING_DOWN";
     if (flying === "grounded" && input.motorsOn === false) {
       return { label: "\u5730\u9762", detail: "" };
@@ -6156,13 +6233,15 @@
     }
     return { label: "\u672A\u786E\u8BA4", detail: "" };
   }
-  var WAYLINE_STOP_DJI = /* @__PURE__ */ new Set(["PREPARING", "RECOVERING", "ENTER_WAYLINE", "EXECUTING", "PAUSED", "RETURN_TO_START_POINT"]);
+  var WAYLINE_STOP_DJI = /* @__PURE__ */ new Set(["PREPARING", "RECOVERING", "ENTER_WAYLINE", "EXECUTING", "PAUSED", "INTERRUPTED", "RETURN_TO_START_POINT"]);
   var WAYLINE_STOP_PHONE = /* @__PURE__ */ new Set(["STARTING", "EXECUTING", "PAUSED", "STOPPING"]);
   function monitorHoverCommand(input) {
     if (input.flightController === "disconnected") return freeze6({ kind: "none", state: "failed", detail: "\u98DE\u63A7\u672A\u8FDE\u63A5" });
     const mode = input.flightMode;
     const flying = input.flying === "flying" || input.flying === "grounded" ? input.flying : null;
-    const wayline = input.djiMissionState !== null && WAYLINE_STOP_DJI.has(input.djiMissionState) || input.missionExecution !== null && WAYLINE_STOP_PHONE.has(input.missionExecution);
+    const phoneTerminal = input.missionExecution === "FINISHED" || input.missionExecution === "FAILED";
+    const djiExited = input.djiMissionState === "FINISHED" || input.djiMissionState === "READY" || input.djiMissionState === "IDLE";
+    const wayline = !phoneTerminal && !djiExited && (input.djiMissionState !== null && WAYLINE_STOP_DJI.has(input.djiMissionState) || input.missionExecution !== null && WAYLINE_STOP_PHONE.has(input.missionExecution));
     const returningHome = mode !== null && HOME_MODES.has(mode) || flying === "flying" && input.lowBatteryRthState === "COUNTING_DOWN";
     if (flying === "grounded" && input.motorsOn === false) return freeze6({ kind: "none", state: "done", detail: "\u98DE\u673A\u5728\u5730\u9762" });
     if (input.landingConfirmationNeeded === true || mode === "CONFIRM_LANDING") return freeze6({ kind: "flight", action: "stop-auto-landing", detail: "\u6B63\u5728\u505C\u6B62\u81EA\u52A8\u964D\u843D\uFF0C\u98DE\u673A\u60AC\u505C" });
@@ -6178,8 +6257,12 @@
     const phase = input.missionPhase;
     const dji = input.djiMissionState;
     const phone = input.missionExecution;
+    if (phase === "failed" || phase === "completed") return "choose";
+    if ((phone === "FAILED" || phone === "FINISHED") && phase !== "starting") return "choose";
+    const djiExited = dji === "FINISHED" || dji === "READY" || dji === "IDLE";
+    if (djiExited && phase !== "starting") return "choose";
     const djiExecuting = dji !== null && ROUTE_EXECUTING_DJI.has(dji);
-    const aircraftPaused = dji === "PAUSED" || phone === "PAUSED" && !djiExecuting;
+    const aircraftPaused = dji === "PAUSED" || dji === "INTERRUPTED" || phone === "PAUSED" && !djiExecuting;
     const aircraftExecuting = djiExecuting || phone === "EXECUTING";
     if (phase === "stopping" || phone === "STOPPING") return "stopping";
     if (phase === "resuming") return aircraftExecuting ? "pause" : "resume";
@@ -6209,20 +6292,10 @@
     if (heldByPhone || session) return { label: "\u505C\u6B62\u56FE\u4F20", enabled: true, mode: "stop", title: "\u505C\u6B62\u56FE\u4F20" };
     if (!input.sdkReady) return { label: "\u542F\u52A8\u56FE\u4F20", enabled: false, mode: "idle", title: "\u624B\u673A\u5C1A\u672A\u5C31\u7EEA\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" };
     if (input.airLink !== "connected") {
-      return {
-        label: "\u542F\u52A8\u56FE\u4F20",
-        enabled: false,
-        mode: "idle",
-        title: input.airLink === "disconnected" ? "AirLink \u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "AirLink \u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20"
-      };
+      return { label: "\u542F\u52A8\u56FE\u4F20", enabled: false, mode: "idle", title: input.airLink === "disconnected" ? "AirLink \u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "AirLink \u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" };
     }
     if (input.camera !== "connected") {
-      return {
-        label: "\u542F\u52A8\u56FE\u4F20",
-        enabled: false,
-        mode: "idle",
-        title: input.camera === "disconnected" ? "\u4E3B\u76F8\u673A\u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "\u4E3B\u76F8\u673A\u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20"
-      };
+      return { label: "\u542F\u52A8\u56FE\u4F20", enabled: false, mode: "idle", title: input.camera === "disconnected" ? "\u4E3B\u76F8\u673A\u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "\u4E3B\u76F8\u673A\u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" };
     }
     return { label: "\u542F\u52A8\u56FE\u4F20", enabled: true, mode: "start", title: "\u542F\u52A8\u8FD9\u67B6\u98DE\u673A\u7684\u56FE\u4F20" };
   }
@@ -6232,6 +6305,8 @@
     streamPushStatus,
     streamPaintStatus,
     streamErrorStatus,
+    waypointProgress,
+    missionRunPhase,
     missionExecutionNowStatus,
     missionUploadOrActionStatus,
     interruptStatus,
@@ -6382,6 +6457,9 @@ ${failure3.message}` };
     }
     if (code === "CAPTURED") return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess", ["\u8BF4\u660E\uFF1A\u5DF2\u62CD\u4E0B\u539F\u56FE\uFF0C\u7535\u8111\u5C1A\u672A\u6536\u9F50\u6587\u4EF6"]);
     if (code === "NOTHING_TO_FETCH") return { source: "relay", outcome: "completed", message: "\u98DE\u673A\u4E0A\u6CA1\u6709\u7535\u8111\u7F3A\u5C11\u7684\u7167\u7247" };
+    if ((code === "STOPPED" || code === "NOT_RUNNING") && (action === "photo-fetch" || action === "photo-fetch-stop")) {
+      return { source: "relay", outcome: "completed", message: code === "NOT_RUNNING" ? "\u5F53\u524D\u6CA1\u6709\u6B63\u5728\u56DE\u4F20\u7684\u7167\u7247" : "\u56DE\u4F20\u5DF2\u505C\u6B62\uFF0C\u5DF2\u8BF7\u6C42\u5927\u7586\u505C\u6B62\u4E0B\u8F7D\u5E76\u9000\u51FA\u56DE\u653E" };
+    }
     const reason = text3(read2(inner, "reason")) ?? text3(read2(value, "reason"));
     if (code === "PREFLIGHT_BLOCKED") {
       const blockers = read2(inner, "blockers");
@@ -6396,7 +6474,7 @@ ${failure3.message}` };
       const landing = confirmedAction === "land" || confirmedAction === "confirm-landing" || action === "flight-land" || action === "flight-confirm-landing";
       return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess", landing ? ["\u8BF4\u660E\uFF1A\u964D\u843D\u63A5\u53E3\u8C03\u7528\u5DF2\u53D7\u7406\uFF1B\u662F\u5426\u6B63\u5728\u4E0B\u964D\u3001\u662F\u5426\u843D\u5730\u8BF7\u4EE5\u98DE\u63A7\u72B6\u6001\u4E3A\u51C6"] : []);
     }
-    if (code === "SUCCEEDED" && action.startsWith("mission-")) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
+    if (action.startsWith("mission-") && (code === "SUCCEEDED" || code === null && read(inner, "ok") === true)) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
     if (code === "SUCCEEDED" && action.startsWith("stream-")) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
     if (code === "SUCCEEDED" && action === "photo-fetch") {
       const count = read2(inner, "count");
@@ -6550,7 +6628,7 @@ ${failure3.message}` };
   }
 
   // src/production/operator-console/renderer/action-requests.ts
-  var cameraActions = /* @__PURE__ */ new Set(["stream-start", "stream-stop", "photo-capture", "photo-fetch"]);
+  var cameraActions = /* @__PURE__ */ new Set(["stream-start", "stream-stop", "photo-capture", "photo-fetch", "photo-fetch-stop"]);
   var missionActions = /* @__PURE__ */ new Set(["mission-stage", "mission-upload", "mission-start", "mission-pause", "mission-resume", "mission-stop"]);
   function createActionRequests() {
     const devices = /* @__PURE__ */ new Map();
@@ -6560,7 +6638,7 @@ ${failure3.message}` };
       const active = devices.get(deviceId);
       if (active === void 0) return null;
       if (active.has(action)) return "\u8FD9\u6761\u547D\u4EE4\u6B63\u5728\u5904\u7406\uFF0C\u8BF7\u7A0D\u5019";
-      if (cameraActions.has(action) && action !== "stream-stop" && [...active.keys()].some((key) => cameraActions.has(key))) {
+      if (cameraActions.has(action) && action !== "stream-stop" && action !== "photo-fetch-stop" && [...active.keys()].some((key) => cameraActions.has(key))) {
         return "\u76F8\u673A\u64CD\u4F5C\u6B63\u5728\u5904\u7406\uFF0C\u5B8C\u6210\u540E\u518D\u6267\u884C\u6B64\u64CD\u4F5C";
       }
       if (missionActions.has(action) && action !== "mission-pause" && action !== "mission-stop" && [...active.keys()].some((key) => missionActions.has(key))) {
@@ -6607,7 +6685,7 @@ ${failure3.message}` };
   }
 
   // src/production/operator-console/renderer/photo-progress.ts
-  var stages = ["preparing", "listing", "downloading", "receiving", "verifying", "saving", "saved", "completed", "empty", "failed", "disconnected"];
+  var stages = ["preparing", "listing", "downloading", "receiving", "verifying", "saving", "saved", "completed", "empty", "failed", "stopped", "disconnected"];
   var read3 = (source, key) => {
     if (source === null || typeof source !== "object" || Array.isArray(source)) return void 0;
     try {
@@ -6620,7 +6698,7 @@ ${failure3.message}` };
   var integer = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
   var safeText = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= 4096 && !/[\p{Cc}]/u.test(value) ? value : null;
   var stageOf = (value) => typeof value === "string" && stages.includes(value) ? value : null;
-  var terminal = (stage) => stage === "completed" || stage === "empty" || stage === "failed" || stage === "disconnected";
+  var terminal = (stage) => stage === "completed" || stage === "empty" || stage === "failed" || stage === "stopped" || stage === "disconnected";
   var stageText = (stage, index) => {
     const current = index > 0 ? `\u7B2C ${index} \u5F20\uFF1A` : "";
     switch (stage) {
@@ -6644,6 +6722,8 @@ ${failure3.message}` };
         return "\u98DE\u673A\u4E0A\u6CA1\u6709\u7535\u8111\u7F3A\u5C11\u7684\u7167\u7247";
       case "failed":
         return "\u56DE\u4F20\u5931\u8D25";
+      case "stopped":
+        return "\u56DE\u4F20\u5DF2\u505C\u6B62";
       case "disconnected":
         return "\u8FDE\u63A5\u5DF2\u65AD\u5F00\uFF0C\u56DE\u4F20\u4E2D\u65AD";
     }
@@ -6666,7 +6746,26 @@ ${failure3.message}` };
         if (read3(read3(device, "connection"), "relay") !== "offline") online.add(deviceId);
         const photo = read3(device, "photo");
         const incoming = photoProgressView(photo, nowMs);
-        if (incoming === null) continue;
+        if (incoming === null) {
+          const phase = safeText(read3(photo, "phase"));
+          const code = safeText(read3(photo, "code"));
+          const cached = photos.get(deviceId);
+          const cachedProgress = cached?.progress;
+          const cachedStage = stageOf(read3(cachedProgress, "stage"));
+          if (online.has(deviceId) && cached !== void 0 && cachedStage !== null && !terminal(cachedStage) && phase !== null && phase !== "fetching" && phase !== "capturing") {
+            const atMs = Math.max(nonnegative(read3(cachedProgress, "updatedAtMs")) ?? nowMs, nowMs);
+            const history = Array.isArray(read3(cachedProgress, "history")) ? read3(cachedProgress, "history") : [];
+            const stage = code === "STOPPED" ? "stopped" : phase === "stored" ? "completed" : "failed";
+            const event = { stage, photoIndex: read3(cachedProgress, "photoIndex"), completedCount: read3(cachedProgress, "completedCount"), fileName: read3(cachedProgress, "fileName"), atMs };
+            photos.set(deviceId, {
+              ...cached,
+              phase,
+              code,
+              progress: { ...cachedProgress, stage, updatedAtMs: atMs, finishedAtMs: atMs, history: [...history, event].slice(-8) }
+            });
+          }
+          continue;
+        }
         if (!online.has(deviceId) && incoming.active && photos.has(deviceId)) continue;
         const progress = read3(photo, "progress");
         const history = read3(progress, "history");
@@ -7345,19 +7444,74 @@ ${failure3.message}` };
       description: text4(read4(runtimeError, "description"))
     }));
   }
-  function renderMissionFlightStatus(missionDevice) {
+  function waypointTotalFor(device, routes) {
+    if (device === void 0) return null;
+    const routeId = text4(read4(read4(device, "mission"), "routeId"));
+    const listed = Array.isArray(routes) ? routes : [];
+    const byId = routeId === null ? void 0 : listed.find((route) => route.routeId === routeId);
+    if (typeof byId?.waypointCount === "number") return byId.waypointCount;
+    const fileName = text4(read4(connectionOf(device), "waylineExecutingMissionFileName"));
+    const byName = fileName === null ? void 0 : listed.find((route) => route.displayName === fileName);
+    if (typeof byName?.waypointCount === "number") return byName.waypointCount;
+    const points = routeId !== null && lastRoutePreview !== null && lastRoutePreview.routeId === routeId ? lastRoutePreview.preview?.polyline : null;
+    return Array.isArray(points) && points.length > 0 ? points.length : null;
+  }
+  function renderMissionRun(missionDevice, routes) {
+    const host = document.querySelector("[data-mission-run]");
+    if (!(host instanceof HTMLElement)) return;
+    const connection = connectionOf(missionDevice);
+    const dji = text4(read4(connection, "missionDjiExecutionState"));
+    const phone = text4(read4(connection, "missionExecution"));
+    const phase = missionDevice === void 0 ? null : missionRunPhase(dji, phone);
+    const index = read4(connection, "currentWaypointIndex");
+    const progress = phase === null && !(typeof index === "number" && index >= 0) ? null : waypointProgress(index, waypointTotalFor(missionDevice, routes));
+    const visible = phase !== null || progress !== null && progress.max !== null;
+    host.hidden = !visible;
+    const label = host.querySelector("[data-mission-run-label]");
+    const count = host.querySelector("[data-mission-run-count]");
+    const meter = host.querySelector("[data-mission-run-meter]");
+    const detail = host.querySelector("[data-mission-run-detail]");
+    if (!visible) return;
+    if (label instanceof HTMLElement) label.textContent = phase ?? "\u6267\u884C\u8FDB\u5EA6";
+    if (count instanceof HTMLElement) count.textContent = progress?.label ?? "\u2014";
+    if (meter instanceof HTMLProgressElement) {
+      const measured = progress !== null && progress.max !== null && progress.value !== null;
+      meter.hidden = !measured;
+      if (measured) {
+        meter.max = progress.max;
+        meter.value = progress.value;
+      }
+    }
+    const fileName = knownStatus(missionExecutingFileStatus(missionDevice));
+    const action = knownStatus(missionWaypointActionStatus(missionDevice));
+    const note = [fileName, action].filter((part) => part !== null).join(" \xB7 ");
+    if (detail instanceof HTMLElement) {
+      detail.hidden = note.length === 0;
+      detail.textContent = note;
+      detail.title = note;
+    }
+  }
+  function renderMissionFlightStatus(missionDevice, routes) {
     const missionConnection = connectionOf(missionDevice);
     renderFlightStatus("mission-reach", commandReachStatus({
       selected: missionDevice !== void 0,
       relayOnline: relayStatus(missionDevice) === "\u5728\u7EBF",
       msdkReady: msdkStatus(missionDevice) === "\u5DF2\u5C31\u7EEA"
     }));
-    renderFlightStatus("mission-execution-now", missionExecutionNowStatus({
+    const executionDetail = missionExecutionNowStatus({
       selected: missionDevice !== void 0,
       execution: knownStatus(missionDjiExecutionStatus(missionDevice)),
       waypoint: knownStatus(missionWaypointIndexStatus(missionDevice)),
       fileName: knownStatus(missionExecutingFileStatus(missionDevice))
-    }));
+    });
+    const phase = missionDevice === void 0 ? null : missionRunPhase(text4(read4(missionConnection, "missionDjiExecutionState")), text4(read4(missionConnection, "missionExecution")));
+    const progress = waypointProgress(read4(missionConnection, "currentWaypointIndex"), waypointTotalFor(missionDevice, routes));
+    const fraction = progress !== null && progress.max !== null ? progress.label : progress?.caption ?? null;
+    const summary = phase === null ? "" : [phase, fraction].filter((part) => part !== null && part.length > 0).join(" \xB7 ");
+    const executionNode = document.querySelector('[data-flight-status="mission-execution-now"]');
+    renderFlightStatus("mission-execution-now", summary.length > 0 ? summary : executionDetail);
+    if (executionNode instanceof HTMLElement) executionNode.title = summary.length > 0 && executionDetail !== summary ? executionDetail : "";
+    renderMissionRun(missionDevice, routes);
     const uploadRaw = read4(missionConnection, "missionUploadProgress");
     renderFlightStatus("mission-upload-or-action", missionUploadOrActionStatus({
       selected: missionDevice !== void 0,
@@ -7411,7 +7565,7 @@ ${failure3.message}` };
     const streamDevice = selectedFlightDevice(view, view.streamDeviceId);
     const missionDevice = selectedFlightDevice(view, view.missionDeviceId);
     renderStreamFlightStatus(streamDevice);
-    renderMissionFlightStatus(missionDevice);
+    renderMissionFlightStatus(missionDevice, view.routes);
     renderDirectFlightStatus(missionDevice);
   }
   function renderFlightPanelVisibility() {
@@ -7473,7 +7627,11 @@ ${failure3.message}` };
     hint.hidden = message.length === 0;
   };
   var feedbackForDevice = (action, deviceId, connectionEpoch, feedback) => {
-    feedbackByAction.set(action, Object.freeze({ deviceId, connectionEpoch, feedback }));
+    const devices = feedbackByAction.get(action) ?? /* @__PURE__ */ new Map();
+    const previousEpoch = devices.get(deviceId)?.connectionEpoch;
+    if (deviceId !== null && typeof previousEpoch === "number" && (connectionEpoch === null || connectionEpoch < previousEpoch)) return;
+    devices.set(deviceId, Object.freeze({ deviceId, connectionEpoch, feedback }));
+    feedbackByAction.set(action, devices);
   };
   var feedbackDeviceEpoch = (view, deviceId) => {
     if (deviceId === null) return null;
@@ -7489,7 +7647,7 @@ ${failure3.message}` };
   var renderOperationFeedback = (action, deviceId, connectionEpoch) => {
     const node = document.querySelector(`[data-operation-feedback="${action}"]`);
     if (!(node instanceof HTMLElement)) return;
-    const record3 = feedbackByAction.get(action);
+    const record3 = feedbackByAction.get(action)?.get(deviceId);
     const visible = record3 !== void 0 && record3.deviceId === deviceId && (deviceId === null || record3.connectionEpoch === connectionEpoch);
     node.textContent = visible ? record3.feedback.message : "";
     if (visible) {
@@ -8666,13 +8824,7 @@ ${failure3.message}` };
   async function projectView(signal) {
     const snapshotResult = unwrap2(await awaitCurrentRender(bridge().invoke("state-snapshot"), signal));
     lastSnapshot = unwrap2(snapshotResult) ?? lastSnapshot;
-    try {
-      const hintResult = unwrap2(await awaitCurrentRender(bridge().invoke("network-hint"), signal));
-      const listed = read4(hintResult, "hints");
-      const liveHints = Array.isArray(listed) ? listed.filter((item) => typeof item === "string" && item.startsWith("ws://")) : [];
-      if (liveHints.length > 0) lastRelayHint = liveHints.join(" \u6216 ");
-    } catch {
-    }
+    refreshNetworkHint();
     const view = projectCached();
     state.missionDeviceId = view.missionDeviceId;
     state.streamDeviceId = view.streamDeviceId;
@@ -8935,15 +9087,29 @@ ${failure3.message}` };
     }
     renderOperationFeedback("stream-start", view.streamDeviceId, feedbackDeviceEpoch(view, view.streamDeviceId));
     renderOperationFeedback("stream-stop", view.streamDeviceId, feedbackDeviceEpoch(view, view.streamDeviceId));
-    for (const action of ["photo-capture", "photo-fetch"]) {
-      const button = document.querySelector(`button[data-action="${action}"]`);
-      if (!(button instanceof HTMLButtonElement)) continue;
+    const photoFetchButton = document.querySelector('button[data-action="photo-fetch"], button[data-action="photo-fetch-stop"]');
+    if (photoFetchButton instanceof HTMLButtonElement) {
+      const fetching = photoFetchActive(view.streamDeviceId);
+      const action = fetching ? "photo-fetch-stop" : "photo-fetch";
+      photoFetchButton.dataset.action = action;
+      photoFetchButton.textContent = fetching ? "\u505C\u6B62\u56DE\u4F20" : "\u56DE\u4F20\u7167\u7247";
       const decision = OperatorConsole.evaluate(action, view);
-      button.disabled = !decision.ok;
-      button.title = decision.ok ? button.textContent ?? "" : decision.reason ?? "\u5F53\u524D\u72B6\u6001\u4E0D\u5141\u8BB8\u6B64\u64CD\u4F5C";
+      photoFetchButton.disabled = !decision.ok;
+      photoFetchButton.title = !decision.ok ? decision.reason ?? "\u5F53\u524D\u72B6\u6001\u4E0D\u5141\u8BB8\u6B64\u64CD\u4F5C" : fetching ? "\u505C\u6B62\u56DE\u4F20\uFF0C\u5E76\u8BA9\u5927\u7586\u505C\u6B62\u4E0B\u8F7D\u3001\u9000\u51FA\u56DE\u653E" : "\u56DE\u4F20\u7167\u7247";
       renderOperationFeedback(action, view.streamDeviceId, feedbackDeviceEpoch(view, view.streamDeviceId));
     }
+    const captureButton = document.querySelector('button[data-action="photo-capture"]');
+    if (captureButton instanceof HTMLButtonElement) {
+      const decision = OperatorConsole.evaluate("photo-capture", view);
+      captureButton.disabled = !decision.ok;
+      captureButton.title = decision.ok ? captureButton.textContent ?? "" : decision.reason ?? "\u5F53\u524D\u72B6\u6001\u4E0D\u5141\u8BB8\u6B64\u64CD\u4F5C";
+      renderOperationFeedback("photo-capture", view.streamDeviceId, feedbackDeviceEpoch(view, view.streamDeviceId));
+    }
     renderFlightPhotoProgress(view);
+  }
+  function photoFetchActive(deviceId) {
+    if (deviceId === null) return false;
+    return actionRequests.pending(deviceId, "photo-fetch") || photoProgressView(photoProgressCache.get(deviceId), Date.now())?.active === true;
   }
   function renderFlightPhotoProgress(view) {
     const progress = photoProgressView(photoProgressCache.get(photoDisplayDeviceId(view)), Date.now());
@@ -9092,10 +9258,18 @@ ${failure3.message}` };
       return;
     }
     const chosen = picking && plan.routeId !== null;
+    const remoteReady = remoteControllerEverConnected(device);
+    if (!remoteReady && !picking) {
+      button.textContent = "\u822A\u7EBF\u9009\u62E9";
+      button.disabled = true;
+      button.title = REMOTE_ONCE_REASON;
+      button.dataset.monitorRouteMode = "choose";
+      return;
+    }
     button.textContent = chosen ? "\u4E00\u952E\u6267\u884C" : picking ? "\u9000\u51FA\u9009\u62E9" : "\u822A\u7EBF\u9009\u62E9";
     button.dataset.monitorRouteMode = chosen ? "execute" : picking ? "exit" : "choose";
-    button.disabled = false;
-    button.title = button.textContent ?? "";
+    button.disabled = !remoteReady && chosen;
+    button.title = button.disabled ? REMOTE_ONCE_REASON : button.textContent ?? "";
   };
   var paintMonitorPhotoButton = (slot, view, deviceId) => {
     const button = slot.querySelector("[data-monitor-photo]");
@@ -9108,10 +9282,11 @@ ${failure3.message}` };
     }
     const decision = OperatorConsole.evaluate("photo-fetch", { ...view, workspace: "flight", streamDeviceId: deviceId });
     const progress = photoProgressView(photoProgressCache.get(deviceId), Date.now());
-    const busy = monitorPhotoBusy.has(deviceId) || actionRequests.reason(deviceId, "photo-fetch") !== null;
-    button.disabled = busy || !decision.ok;
-    button.textContent = progress?.active === true ? "\u56DE\u4F20\u4E2D" : "\u56DE\u4F20\u7167\u7247";
-    button.title = progress?.active === true ? `${progress.heading} \xB7 ${progress.count}` : decision.ok ? "\u56DE\u4F20\u7167\u7247" : decision.reason ?? "\u5F53\u524D\u72B6\u6001\u4E0D\u5141\u8BB8\u6B64\u64CD\u4F5C";
+    const fetching = progress?.active === true || actionRequests.pending(deviceId, "photo-fetch");
+    button.disabled = fetching ? actionRequests.pending(deviceId, "photo-fetch-stop") : !decision.ok;
+    button.textContent = fetching ? "\u505C\u6B62\u56DE\u4F20" : "\u56DE\u4F20\u7167\u7247";
+    button.title = fetching ? "\u505C\u6B62\u56DE\u4F20\uFF0C\u5E76\u8BA9\u5927\u7586\u505C\u6B62\u4E0B\u8F7D\u3001\u9000\u51FA\u56DE\u653E" : decision.ok ? "\u56DE\u4F20\u7167\u7247" : decision.reason ?? "\u5F53\u524D\u72B6\u6001\u4E0D\u5141\u8BB8\u6B64\u64CD\u4F5C";
+    button.dataset.monitorPhotoMode = fetching ? "stop" : "fetch";
   };
   var paintMonitorHoldButton = (slot, deviceId) => {
     const button = slot.querySelector("[data-monitor-hold]");
@@ -9277,6 +9452,9 @@ ${failure3.message}` };
       }
     }
     if (deviceId === null || plan === void 0) return;
+    const railDevice = view.devices.find((item) => text4(read4(item, "deviceId")) === deviceId);
+    const railProgress = railDevice === void 0 ? null : waypointProgress(read4(connectionOf(railDevice), "currentWaypointIndex"), waypointTotalFor(railDevice, view.routes));
+    const railFraction = railProgress !== null && railProgress.max !== null ? railProgress.caption : null;
     const route = plan.routeId === null ? void 0 : view.routes.find((item) => item.routeId === plan.routeId);
     const head = document.createElement("div");
     head.className = "monitor-rail-head";
@@ -9322,9 +9500,17 @@ ${failure3.message}` };
         const label = document.createElement("span");
         label.textContent = name;
         const value = document.createElement("small");
-        value.textContent = monitorRouteStepText[state2];
+        value.textContent = name === "\u6267\u884C\u822A\u7EBF" && railFraction !== null && (state2 === "running" || state2 === "done") ? `${monitorRouteStepText[state2]} \xB7 ${railFraction}` : monitorRouteStepText[state2];
         row.append(label, value);
         body.append(row);
+        if (name === "\u6267\u884C\u822A\u7EBF" && railProgress !== null && railProgress.max !== null && (state2 === "running" || state2 === "done")) {
+          const meter = document.createElement("progress");
+          meter.className = "monitor-rail-meter";
+          meter.max = railProgress.max;
+          meter.value = railProgress.value;
+          meter.setAttribute("aria-label", railProgress.caption);
+          body.append(meter);
+        }
       }
       if (plan.failure !== null) {
         const note = document.createElement("p");
@@ -9380,7 +9566,7 @@ ${failure3.message}` };
       const motorsRaw = read4(connection, "motorsOn");
       const motorsOn = motorsRaw === true ? true : motorsRaw === false ? false : null;
       const pose = read4(connection, "pose");
-      const status = monitorAircraftStatus(monitorFactsOf(device));
+      const status = monitorAircraftStatus({ ...monitorFactsOf(device), waypointTotal: waypointTotalFor(device, view.routes) });
       if (stateNode instanceof HTMLElement) stateNode.textContent = status.label;
       if (detailNode instanceof HTMLElement) detailNode.textContent = status.detail;
       setHud("flying", hudFlying(flying));
@@ -9438,24 +9624,35 @@ ${failure3.message}` };
       return void 0;
     }
   };
+  var auxiliaryRefreshes = /* @__PURE__ */ new Set();
+  var refreshInBackground = (name, input, update) => {
+    if (auxiliaryRefreshes.has(name)) return;
+    auxiliaryRefreshes.add(name);
+    void settledInvoke(name, input).then(update).catch((error) => {
+      console.error("[sky-render]", error);
+    }).finally(() => auxiliaryRefreshes.delete(name));
+  };
+  var refreshNetworkHint = () => refreshInBackground("network-hint", void 0, (result) => {
+    const listed = read4(unwrap2(result), "hints");
+    const liveHints = Array.isArray(listed) ? listed.filter((item) => typeof item === "string" && item.startsWith("ws://")) : [];
+    if (liveHints.length > 0) lastRelayHint = liveHints.join(" \u6216 ");
+  });
   async function fetchOnce(signal) {
-    const snapshotTask = settledInvoke("state-snapshot", void 0, signal);
-    const hintTask = settledInvoke("network-hint", void 0, signal);
-    const streamTask = settledInvoke("stream-refresh", void 0, signal);
-    const [snapshotResult, hintResult] = await Promise.all([snapshotTask, hintTask, streamTask]);
+    refreshNetworkHint();
+    refreshInBackground("stream-refresh", void 0, () => void 0);
+    const snapshotResult = await settledInvoke("state-snapshot", void 0, signal);
     if (signal.aborted) return;
     const snapshot2 = unwrap2(unwrap2(snapshotResult));
     if (snapshot2 !== void 0 && snapshot2 !== null) lastSnapshot = snapshot2;
-    const listed = read4(unwrap2(hintResult), "hints");
-    const liveHints = Array.isArray(listed) ? listed.filter((item) => typeof item === "string" && item.startsWith("ws://")) : [];
-    if (liveHints.length > 0) lastRelayHint = liveHints.join(" \u6216 ");
     const view = projectCached();
     state.missionDeviceId = view.missionDeviceId;
     state.streamDeviceId = view.streamDeviceId;
     const routeId = view.selectedRoute?.routeId ?? null;
     if (state.workspace === "routes" && routeId !== null && lastRoutePreview?.routeId !== routeId) {
-      const preview = previewGeometry(await settledInvoke("route-preview", { routeId }, signal));
-      if (preview !== null) lastRoutePreview = { routeId, preview };
+      refreshInBackground("route-preview", { routeId }, (result) => {
+        const preview = previewGeometry(result);
+        if (preview !== null) lastRoutePreview = { routeId, preview };
+      });
     }
   }
   function applyRouteMap(view) {
@@ -9786,6 +9983,18 @@ ${failure3.message}` };
       plan.phone = "done";
       plan.aircraft = "running";
       await paint();
+      let uploadView;
+      try {
+        uploadView = projectCached();
+      } catch {
+        await fail("aircraft", FLIGHT_CONTROLLER_REASON);
+        return;
+      }
+      const uploadDevice = monitorDevices(uploadView).find((item) => text4(read4(item, "deviceId")) === deviceId);
+      if (uploadDevice === void 0 || !flightControllerConnected(uploadDevice)) {
+        await fail("aircraft", FLIGHT_CONTROLLER_REASON);
+        return;
+      }
       const uploaded = await bridge().invoke("mission-upload", { deviceId });
       const uploadFeedback = captureFeedback("mission-upload", deviceId, epoch, uploaded);
       if (!monitorStepSucceeded(uploadFeedback)) {
@@ -9838,6 +10047,10 @@ ${failure3.message}` };
       const deviceId = device === void 0 ? null : text4(read4(device, "deviceId"));
       if (deviceId === null) return;
       const mode = button.dataset.monitorRouteMode;
+      if (mode !== "pause" && mode !== "resume" && mode !== "exit" && device !== void 0 && !remoteControllerEverConnected(device)) {
+        show(REMOTE_ONCE_REASON);
+        return;
+      }
       if (mode === "pause" || mode === "resume") {
         if (monitorRouteActionBusy.has(deviceId)) return;
         const action = mode === "pause" ? "mission-pause" : "mission-resume";
@@ -9945,7 +10158,38 @@ ${failure3.message}` };
       }
       const device = monitorDevices(view)[slot];
       const deviceId = device === void 0 ? null : text4(read4(device, "deviceId"));
-      if (deviceId === null || monitorPhotoBusy.has(deviceId)) return;
+      if (deviceId === null) return;
+      const progressNow = photoProgressView(photoProgressCache.get(deviceId), Date.now());
+      const fetchRunning = button.dataset.monitorPhotoMode === "stop" || button.textContent === "\u505C\u6B62\u56DE\u4F20" || actionRequests.pending(deviceId, "photo-fetch") || progressNow?.active === true;
+      if (fetchRunning) {
+        const detail = tile instanceof HTMLElement ? tile.querySelector("[data-monitor-detail]") : null;
+        const stopReservation = actionRequests.reserve(deviceId, "photo-fetch-stop");
+        if (!stopReservation.ok) {
+          if (detail instanceof HTMLElement) detail.textContent = stopReservation.reason;
+          show(`${callSign(deviceId)}\uFF1A${stopReservation.reason}`);
+          return;
+        }
+        button.disabled = true;
+        button.textContent = "\u6B63\u5728\u505C\u6B62";
+        if (detail instanceof HTMLElement) detail.textContent = "\u6B63\u5728\u505C\u6B62\u56DE\u4F20";
+        show(`${callSign(deviceId)}\uFF1A\u6B63\u5728\u505C\u6B62\u56DE\u4F20`);
+        try {
+          const result = await bridge().invoke("photo-fetch-stop", { deviceId });
+          const feedback = captureFeedback("photo-fetch-stop", deviceId, feedbackDeviceEpoch(view, deviceId), result);
+          if (detail instanceof HTMLElement) detail.textContent = feedback.message;
+          show(`${callSign(deviceId)}\uFF1A${feedback.message}`);
+        } catch {
+          if (detail instanceof HTMLElement) detail.textContent = "\u6682\u65F6\u65E0\u6CD5\u505C\u6B62\u56DE\u4F20\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5";
+          show(`${callSign(deviceId)}\uFF1A\u6682\u65F6\u65E0\u6CD5\u505C\u6B62\u56DE\u4F20\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5`);
+        } finally {
+          stopReservation.release();
+          try {
+            await render();
+          } catch {
+          }
+        }
+        return;
+      }
       const decision = OperatorConsole.evaluate("photo-fetch", { ...view, workspace: "flight", streamDeviceId: deviceId });
       if (!decision.ok) {
         show(`${callSign(deviceId)}\uFF1A${decision.reason ?? "\u5F53\u524D\u72B6\u6001\u4E0D\u5141\u8BB8\u6B64\u64CD\u4F5C"}`);
@@ -9958,7 +10202,9 @@ ${failure3.message}` };
       }
       renderActionRequests(view);
       monitorPhotoBusy.add(deviceId);
-      button.disabled = true;
+      button.disabled = false;
+      button.textContent = "\u505C\u6B62\u56DE\u4F20";
+      button.dataset.monitorPhotoMode = "stop";
       monitorPhotoProgress.set(deviceId, { state: "running", detail: "\u6B63\u5728\u8BF7\u6C42\u7167\u7247\u56DE\u4F20\uFF0C\u7B49\u5F85\u8FDB\u5EA6" });
       monitorRailDeviceId = deviceId;
       monitorRailKind = "photo";
@@ -10311,6 +10557,7 @@ ${failure3.message}` };
           "stream-stop": "stream-stop",
           "photo-capture": "photo-capture",
           "photo-fetch": "photo-fetch",
+          "photo-fetch-stop": "photo-fetch-stop",
           "flight-confirm-landing": "flight-request",
           "flight-stop-takeoff": "flight-request",
           "flight-stop-auto-landing": "flight-request"

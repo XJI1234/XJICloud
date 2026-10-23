@@ -310,11 +310,11 @@ LoginView
 
 图传端到端延迟验收上限为 1.5 秒，网页积压读数不能代替相机到显示的实测。飞行与监控页关闭额外接收 stash，共用 0.3 秒缓冲目标、1 秒积压追帧线及 250ms 前台检查；回到前台先追最新缓冲再恢复播放。播放延迟修复不得改变手机推流、飞控、任务或地图，详细契约见 Sky-Command `operator-console/CONTRACT.md`。
 
-图传排查沿用 Sky-Command 的 `operator-console/CONTRACT.md` 与 `electron-host/CONTRACT.md`：先更新契约再改实现。Web 桥保留最近 128 条脱敏播放诊断供只读检查；本机 `diagnostics-record` 对播放诊断真实异步记录，不能伪报成功。浏览器播放事件、HTTP-FLV 连接开闭、RTMP 视频包间隔以及发布开始/结束、观看者背压事件写入 `%TEMP%/sky-command-web/diagnostics/playback.ndjson`，避免只能看见观看连接中断而丢失上游终态；新增发布/背压事件只接受生产适配器的固定文案，不接收任意异常、URL 或路径。单写入器最多保留 512 条等待记录与一批 512 条正在写入的记录；文件达到 8 MiB 后轮换，只保留当前与 `.previous` 两份。日志仅观察播放器，不改变飞控、任务、航线、照片或降落提示；更新嵌入包必须保留本节所述地图优化。
+图传排查沿用 Sky-Command 的 `operator-console/CONTRACT.md` 与 `electron-host/CONTRACT.md`：先更新契约再改实现。Web 桥保留最近 128 条脱敏播放诊断供只读检查；本机 `diagnostics-record` 对播放诊断真实异步记录，不能伪报成功。浏览器播放事件、HTTP-FLV 连接开闭、RTMP 视频包间隔以及发布开始/结束、观看者背压事件写入 `%TEMP%/sky-command-web/diagnostics/playback.ndjson`，避免只能看见观看连接中断而丢失上游终态；新增发布/背压事件只接受生产适配器的固定文案，不接收任意异常、URL 或路径。单写入器最多保留 512 条等待记录与一批 512 条正在写入的记录；文件达到 8 MiB 后轮换，只保留当前与 `.previous` 两份。日志仅观察播放器，不改变飞控、任务、航线、照片或降落提示；更新嵌入包必须保留本节所述地图优化。航线进入执行、暂停、启动或结束时，飞行页「现在」和监控栏用航线资料里的航点总数显示「第几个 / 一共几个」及细进度条；手机上报的航点序号从 0 计，界面加 1。没有总数或序号超出总数时只显示当前序号，不估算比例。更新嵌入包必须保留这段进度展示。
 
-`mission-ops` 通过 `LocalBridgePort` 接到独立 Sky-Command 托盘进程（默认 `127.0.0.1:17890`）。网页仅处理状态、航线与本机 HTTP-FLV 显示，手机 MSDK Relay 和 RTMP 继续由本机程序提供。宿主必须校验浏览器 Origin；`skycommand://open` 只负责唤起已安装的本机程序。开发来源为 `localhost:5176`，部署需要 `SKYCOMMAND_CLOUD_ORIGIN` 与实际 HTTPS 站点完全一致；HTTPS 页面访问本机 HTTP 必须实机验证浏览器 Private Network Access 支持。返航沿用原网关的 `flight.request` → 用户确认 → `flight.confirm`；取消则调用 `flight.cancel`，不以网页布尔值替代 DJI 确认 ID。
+任务执行页只嵌入 `/sky-operator/index.html`。操作按钮在嵌入包 `public/sky-operator/console.js` 里判断，经 `desktop-operator-host.ts` 调用 `http://127.0.0.1:8767/invoke`。组合根的 `createSdkLocalBridge` 连同一网关，当前路由没有挂 Vue 任务控件。`createHttpLocalBridge` 仍默认 `http://127.0.0.1:17890`，不是这次组合根。开发来源为 `localhost:5176`。返航仍走网关的 `flight.request`，确认后再 `flight.confirm`，取消则 `flight.cancel`，不以网页布尔值替代 DJI 确认 ID。
 
-当前本地开发另由 Vite 自动启动 `apps/web2/scripts/sky-command-gateway.mjs`，使用 vendored SDK 0.2.6（同一飞机的 HTTP-FLV 观看连接相互隔离，带开闭和 RTMP 包间隔诊断；确认降落仅在原始请求标志为 true 时下发；Node WebSocket 收包逐条让出事件循环，避免航线上传进度与成功回执在 TCP 合包时触发 16 条入站队列溢出断连，队列上限保持不变）：控制接口仅监听 `127.0.0.1:8767/invoke`，手机 Relay 为 `8080`，RTMP 为 `19500`，HTTP-FLV 为 `18080`。Relay 与控制接口就绪后，在物理 WLAN 上每秒向 UDP `39082` 广播自动发现公告，并监听该端口的 `SKY_COMMAND_RELAY_DISCOVER_V1` 请求，向同子网手机单播回复原公告；Windows 入站规则只需允许对应程序的 LocalSubnet UDP 39082。手机在未 ACTIVE 时每秒请求，ACTIVE 后停止，仍保留 3 秒唯一候选观察和多电脑冲突检查。网关退出时停止发现来源。`serverId` 保存在系统临时目录的 `sky-command-web/discovery-server-id`，同目录存在时重启复用，`instanceId` 每次启动更新。广播不可用时保留手动连接入口；电脑与手机发现/会话已实机验证，飞行器业务仍需独立验收。
+当前本地开发由 Vite 自动启动 `apps/web2/scripts/sky-command-gateway.mjs`，使用 `package.json` 里的 vendored SDK 0.2.17（同一飞机的 HTTP-FLV 观看连接相互隔离，带开闭和 RTMP 包间隔诊断；确认降落仅在原始请求标志为 true 时下发；Node WebSocket 收包逐条让出事件循环，避免航线上传进度与成功回执在 TCP 合包时触发 16 条入站队列溢出断连，队列上限保持不变）：控制接口仅监听 `127.0.0.1:8767/invoke`，手机 Relay 为 `8080`，RTMP 为 `19500`，HTTP-FLV 为 `18080`。Relay 与控制接口就绪后，在物理 WLAN 上每秒向 UDP `39082` 广播自动发现公告，并监听该端口的 `SKY_COMMAND_RELAY_DISCOVER_V1` 请求，向同子网手机单播回复原公告；Windows 入站规则只需允许对应程序的 LocalSubnet UDP 39082。手机在未 ACTIVE 时每秒请求，ACTIVE 后停止，仍保留 3 秒唯一候选观察和多电脑冲突检查。网关退出时停止发现来源。`serverId` 保存在系统临时目录的 `sky-command-web/discovery-server-id`，同目录存在时重启复用，`instanceId` 每次启动更新。广播不可用时保留手动连接入口；电脑与手机发现/会话已实机验证，飞行器业务仍需独立验收。
 
 手机还会记住上次 AUTO 合法连接的电脑 IPv4，在同 WLAN 子网内优先单播询问以减少校园网广播延迟；它只用于获取新公告，不直接重连旧 endpoint，仍保留 3 秒观察与多电脑冲突保护。首次配对、换子网或电脑 IP 改变时回退广播。
 
@@ -323,6 +323,14 @@ LoginView
 嵌入操作台的 `public/sky-operator/cesium` 与 `city-tiles` 静态资源随代码保存，保证 `index.html` 的相对地址在构建产物中可用；现有 prebuild 不会生成这两套资源。地图契约见 `apps/web2/public/sky-operator/MAP.CONTRACT.md`：白模不因交互或相机高度隐藏，活动更新上限 60 FPS，静止按需绘制并降低更新频率，后台暂停循环。地图性能优化目前保存在 `public/sky-operator/console.js`，尚未同步到 Sky-Command 的地图 TS 源码。更新该嵌入包时应保留地图模块，并执行 operator-map 回归测试，避免整包重编译覆盖优化。
 
 监控页左栏显示各机的“不适合降落”提示。本地网关订阅应用快照，在 `state-snapshot` 的设备连接信息中附加只供展示的 `landingProtectionNoticeAtMs`，保留最近 20 秒内收到的 `NOT_SAFE_TO_LAND`，避免页面每秒轮询漏掉短暂状态；原始状态不变。状态退回时明确标为“刚才曾判定”，适合降落、等待确认、落地停桨、飞控失联、手机重连或移除时清除；该历史提示不参与任何指令或确认门禁。
+
+监控栏位宽度不超过 440px 时，状态、航点进度、操作按钮分三行显示，按钮不再抢占状态列；按栏位自身宽度响应，桌面四栏和窄屏采用同一规则。各栏位继续按设备 ID 独立读取 DJI 状态与航点，不得借用第一栏数据，也不得从启动成功或飞行模式推算航点进度。
+
+飞机状态快照独立刷新，不等待网络提示、图传刷新或航线预览。辅助读取各自最多保留一个在途请求，返回后再允许下一次读取，不能因超时反复堆积请求；操作前读取设备快照也不等待网络提示。四机共用操作和状态投影规则，任务、命令等待与航点按设备隔离；同设备的互斥和 DJI 原始门禁继续有效。
+
+操作回执按操作类型和设备分别保留，切换设备后仍可查看该机结果；旧连接的迟到回执不得覆盖新连接结果，连接代次不匹配的历史回执不显示。
+
+开发网关采用 Sky Command SDK 0.2.17：重复执行同名航线不再复用上一轮缓存里程碑，匹配任务的终态可在等待暂停、继续或停止回执时立即收敛。断线后的新航线不接收旧暂存回执；被抢占的启动超时不算成功；停止被拒绝时恢复已确认的暂停或继续。四个监控栏位共用终态按钮规则，结束/失败后返回航线选择；重选、上传和启动须由操作者发起。飞行页「上传至飞机」和监控页「航线选择」在 MSDK 就绪后，还要求该手机曾经确认遥控器已连接；连过一次后拔下仍可操作，记录保存在当前浏览器会话键 `sky-operator-remote-once`。准备航线、暂停、继续和停止不使用这条记录。飞行页「上传至飞机」要求当前飞控已连接，未连接时按钮不可点，提示「请先连接飞控」。监控页「一键执行」不因飞控禁用；传到手机后、上传飞机前再检查，未连接则停在上传步骤并提示同一句原因。航线选择、准备、暂停、继续、停止和飞行页执行航线不使用这条飞控门禁。「启动图传」和「回传照片」再次要求 AirLink 与主相机已连接；主相机未连接时拍照同样拒绝。手机在调用 DJI 前用同一图传源条件拒绝，源断开时取消尚未结束的图传。DJI `onSuccess` 后，启动和停止结果仍带 `SUCCEEDED`，按钮下方显示 `MSDK 回调：成功` 与 `原始类型：onSuccess`。这只说明接口回调，不代替源门禁。活动图传进入推流或停止后，源断开仍清理且不自动重启。回传进行中的「停止回传」由生产装配把 `stopFetch` 交给工作流，再下发 `camera.photo.fetch.stop`；手机调用大疆停止原图下载、停止拉列表并退出回放。停止后的进度阶段是 `stopped`，按钮回到「回传照片」。这是中继请求，不是 DJI `onSuccess`。嵌入包保留既有地图、航点进度修复，相关 TS 源码位于 Sky Command 操作台。
 
 ## 12. 已知产品事实（避免 Agent 回退）
 

@@ -396,6 +396,52 @@
        overflow: hidden;
        text-overflow: ellipsis;
      }
+     .mission-run {
+       display: grid;
+       gap: 6px;
+       padding: 10px 0 2px;
+     }
+     .mission-run[hidden] { display: none !important; }
+     .mission-run-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+     .mission-run-top span { color: var(--ink-muted); font-size: 11px; font-weight: 600; }
+     .mission-run-top strong {
+       color: var(--ink);
+       font-size: 18px;
+       font-weight: 650;
+       font-variant-numeric: tabular-nums;
+       letter-spacing: -0.02em;
+       text-align: right;
+     }
+     .mission-run progress,
+     .monitor-rail-meter {
+       display: block;
+       width: 100%;
+       height: 4px;
+       margin: 0;
+       overflow: hidden;
+       border: 0;
+       border-radius: 999px;
+       background: var(--line);
+       accent-color: var(--accent);
+       appearance: none;
+     }
+     .mission-run progress::-webkit-progress-bar,
+     .monitor-rail-meter::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+     .mission-run progress::-webkit-progress-value,
+     .monitor-rail-meter::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
+     .mission-run progress::-moz-progress-bar,
+     .monitor-rail-meter::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
+     .mission-run progress[hidden] { display: none !important; }
+     .mission-run p {
+       margin: 0;
+       overflow: hidden;
+       color: var(--ink-muted);
+       font-size: 12px;
+       line-height: 1.4;
+       text-overflow: ellipsis;
+       white-space: nowrap;
+     }
+     .mission-run p[hidden] { display: none !important; }
      .flight-panel-actions { min-width: 0; min-height: 0; margin-top: 12px; overflow-x: hidden; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding-bottom: 8px; }
      .photo-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 2px; }
      .photo-batch-progress { min-width: 0; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
@@ -596,7 +642,8 @@
       border-bottom: 1px solid var(--line);
       font-size: 13px;
     }
-    .monitor-step small { color: var(--ink-muted); }
+    .monitor-step small { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+    .monitor-rail-meter { margin: 0 4px 8px; }
     .monitor-step.is-done small { color: var(--ok); }
     .monitor-step.is-failed small { color: var(--danger); }
     .monitor-rail-note { margin: 8px 4px 0; color: var(--ink-muted); font-size: 12px; line-height: 1.45; white-space: pre-line; }
@@ -618,6 +665,7 @@
     #workspace-monitor.is-single .monitor-tile.is-focused { display: flex; }
     .monitor-tile {
       display: flex;
+      container-type: inline-size;
       flex-direction: column;
       min-width: 0;
       min-height: 0;
@@ -723,19 +771,11 @@
       background: var(--surface);
     }
     .monitor-foot {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-rows: 22px 22px;
-      align-items: center;
-      column-gap: 6px;
-      row-gap: 3px;
       flex: 0 0 auto;
       padding: 3px 8px;
       border-top: 1px solid var(--line);
     }
     .monitor-state {
-      grid-column: 1;
-      grid-row: 1;
       min-width: 0;
       margin: 0;
       overflow: hidden;
@@ -746,8 +786,6 @@
       white-space: nowrap;
     }
     .monitor-detail {
-      grid-column: 1;
-      grid-row: 2;
       min-width: 0;
       overflow: hidden;
       color: var(--ink-muted);
@@ -756,8 +794,8 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .monitor-actions { display: flex; flex-direction: column; gap: 3px; grid-column: 2; grid-row: 1 / span 2; }
-    .monitor-action-row { display: grid; grid-template-columns: repeat(3, minmax(64px, 1fr)); gap: 4px; }
+    .monitor-actions { display: flex; flex-direction: column; gap: 3px; }
+    .monitor-action-row { display: grid; grid-template-columns: 5em repeat(3, minmax(0, 1fr)); gap: 4px; align-items: center; }
     .monitor-actions button {
       display: inline-flex;
       align-items: center;
@@ -779,19 +817,26 @@
     #workspace-monitor.is-single .monitor-tile .flight-hud span { padding: 6px 8px 8px; }
     #workspace-monitor.is-single .monitor-tile .flight-hud small { font-size: 12px; }
     #workspace-monitor.is-single .monitor-tile .flight-hud strong { font-size: 16px; }
-    #workspace-monitor.is-single .monitor-foot {
-      grid-template-rows: 32px 32px;
-      row-gap: 4px;
-      padding: 8px 12px;
-    }
-    #workspace-monitor.is-single .monitor-state { font-size: 18px; line-height: 32px; }
-    #workspace-monitor.is-single .monitor-detail { font-size: 14px; line-height: 32px; }
+    #workspace-monitor.is-single .monitor-foot { padding: 8px 12px; }
+    #workspace-monitor.is-single .monitor-state { font-size: 16px; line-height: 32px; }
+    #workspace-monitor.is-single .monitor-detail { font-size: 13px; line-height: 32px; }
     #workspace-monitor.is-single .monitor-actions { gap: 4px; }
     #workspace-monitor.is-single .monitor-actions button { min-height: 32px; padding: 0 12px; font-size: 14px; }
     .monitor-actions .monitor-hold {
       border-color: transparent;
       background: var(--danger-soft);
       color: var(--danger);
+    }
+    @container (max-width: 440px) {
+      .monitor-action-row { grid-template-columns: 3.6em repeat(3, minmax(0, 1fr)); }
+      .monitor-state { font-size: 12px; }
+      .monitor-actions button,
+      #workspace-monitor.is-single .monitor-actions button {
+        min-width: 0;
+        padding: 0 4px;
+        font-size: 12px;
+        white-space: normal;
+      }
     }
     @media (prefers-reduced-motion: reduce) {
       button:active:not(:disabled) { transform: none; }
@@ -975,6 +1020,14 @@
             <div class="flight-now-row"><span>执行</span><strong id="mission-label" data-flight-status="mission-execution-now">—</strong></div>
             <div class="flight-now-row"><span>上传/动作</span><strong data-flight-status="mission-upload-or-action">—</strong></div>
             <div class="flight-now-row"><span>中断</span><strong data-flight-status="mission-wayline-interrupt">—</strong></div>
+            <div class="mission-run" data-mission-run hidden>
+              <div class="mission-run-top">
+                <span data-mission-run-label>执行进度</span>
+                <strong data-mission-run-count>—</strong>
+              </div>
+              <progress data-mission-run-meter max="1" value="0" hidden></progress>
+              <p data-mission-run-detail hidden></p>
+            </div>
           </div>
           <div class="flight-panel-actions">
             <div class="mission-flow">
@@ -1094,15 +1147,15 @@
           <button type="button" class="monitor-arrow is-next" data-monitor-step="1" aria-label="下一架">›</button>
         </div>
         <footer class="monitor-foot">
-          <strong class="monitor-state" data-monitor-state>未确认</strong>
-          <span class="monitor-detail" data-monitor-detail></span>
           <div class="monitor-actions">
             <div class="monitor-action-row">
+              <strong class="monitor-state" data-monitor-state>未确认</strong>
               <button type="button" data-monitor-stream disabled>启动图传</button>
               <button type="button" data-monitor-route>航线选择</button>
               <button type="button" data-monitor-photo disabled>回传照片</button>
             </div>
             <div class="monitor-action-row">
+              <span class="monitor-detail" data-monitor-detail></span>
               <button class="monitor-hold" type="button" data-monitor-hold disabled>紧急悬停</button>
               <button type="button" data-monitor-home disabled>返航</button>
               <button type="button" data-monitor-land disabled>降落</button>
@@ -1127,15 +1180,15 @@
           <button type="button" class="monitor-arrow is-next" data-monitor-step="1" aria-label="下一架">›</button>
         </div>
         <footer class="monitor-foot">
-          <strong class="monitor-state" data-monitor-state>未确认</strong>
-          <span class="monitor-detail" data-monitor-detail></span>
           <div class="monitor-actions">
             <div class="monitor-action-row">
+              <strong class="monitor-state" data-monitor-state>未确认</strong>
               <button type="button" data-monitor-stream disabled>启动图传</button>
               <button type="button" data-monitor-route>航线选择</button>
               <button type="button" data-monitor-photo disabled>回传照片</button>
             </div>
             <div class="monitor-action-row">
+              <span class="monitor-detail" data-monitor-detail></span>
               <button class="monitor-hold" type="button" data-monitor-hold disabled>紧急悬停</button>
               <button type="button" data-monitor-home disabled>返航</button>
               <button type="button" data-monitor-land disabled>降落</button>
@@ -1160,15 +1213,15 @@
           <button type="button" class="monitor-arrow is-next" data-monitor-step="1" aria-label="下一架">›</button>
         </div>
         <footer class="monitor-foot">
-          <strong class="monitor-state" data-monitor-state>未确认</strong>
-          <span class="monitor-detail" data-monitor-detail></span>
           <div class="monitor-actions">
             <div class="monitor-action-row">
+              <strong class="monitor-state" data-monitor-state>未确认</strong>
               <button type="button" data-monitor-stream disabled>启动图传</button>
               <button type="button" data-monitor-route>航线选择</button>
               <button type="button" data-monitor-photo disabled>回传照片</button>
             </div>
             <div class="monitor-action-row">
+              <span class="monitor-detail" data-monitor-detail></span>
               <button class="monitor-hold" type="button" data-monitor-hold disabled>紧急悬停</button>
               <button type="button" data-monitor-home disabled>返航</button>
               <button type="button" data-monitor-land disabled>降落</button>
@@ -1193,15 +1246,15 @@
           <button type="button" class="monitor-arrow is-next" data-monitor-step="1" aria-label="下一架">›</button>
         </div>
         <footer class="monitor-foot">
-          <strong class="monitor-state" data-monitor-state>未确认</strong>
-          <span class="monitor-detail" data-monitor-detail></span>
           <div class="monitor-actions">
             <div class="monitor-action-row">
+              <strong class="monitor-state" data-monitor-state>未确认</strong>
               <button type="button" data-monitor-stream disabled>启动图传</button>
               <button type="button" data-monitor-route>航线选择</button>
               <button type="button" data-monitor-photo disabled>回传照片</button>
             </div>
             <div class="monitor-action-row">
+              <span class="monitor-detail" data-monitor-detail></span>
               <button class="monitor-hold" type="button" data-monitor-hold disabled>紧急悬停</button>
               <button type="button" data-monitor-home disabled>返航</button>
               <button type="button" data-monitor-land disabled>降落</button>
@@ -1216,6 +1269,6 @@
   <script src="./sky-bridge.js"></script>
   <script>window.CESIUM_BASE_URL = "./cesium/";</script>
   <script src="./cesium/Cesium.js"></script>
-  <script src="./console.js"></script>
+  <script src="./console.js?v=20261023-fc-upload-2"></script>
 </body>
 </html>

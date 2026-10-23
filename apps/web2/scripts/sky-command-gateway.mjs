@@ -36,6 +36,7 @@ const methods = {
   'stream-clear': 'stream.clear',
   'photo-capture': 'photo.capture',
   'photo-fetch': 'photo.fetch',
+  'photo-fetch-stop': 'photo.fetch.stop',
   'settings-transmission-read': 'settings.transmission.read',
   'settings-transmission-write': 'settings.transmission.write',
   'settings-camera-read': 'settings.camera.read',
