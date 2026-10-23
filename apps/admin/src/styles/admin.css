@@ -66,6 +66,7 @@ input {
 }
 
 .admin-main {
+  min-width: 0;
   padding: 24px;
 }
 

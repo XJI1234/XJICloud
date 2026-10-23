@@ -76,6 +76,39 @@ export interface JobResponse {
   updatedAt: string
 }
 
+export type CloudAccessKeyResource = 'ECI_OPENAPI' | 'OSS'
+
+export interface CloudAccessKeyResponse {
+  id: string
+  name: string
+  accessKeyHint: string
+  secretConfigured: boolean
+  resources: CloudAccessKeyResource[]
+  selectedResources: CloudAccessKeyResource[]
+  createdAt: string
+  updatedAt: string
+  label: string
+}
+
+export interface CloudAccessKeyListResponse {
+  resource: CloudAccessKeyResource
+  currentId: string | null
+  items: CloudAccessKeyResponse[]
+}
+
+export interface CloudAccessKeySelectResponse extends CloudAccessKeyResponse {
+  appliedResource: CloudAccessKeyResource
+}
+
+export interface CloudAccessKeyTestResponse {
+  resource: CloudAccessKeyResource
+  ok: boolean
+  accessKeyHint: string | null
+  detail: string
+  persistedCurrent: boolean
+  appliedToEciManager: boolean
+}
+
 export function adminLogin(username: string, password: string) {
   return adminRequest<AdminAuthResponse>('/api/v1/admin/auth/login', {
     method: 'POST',
@@ -124,4 +157,59 @@ export function cancelJob(jobId: string) {
 
 export function fetchStats() {
   return adminRequest<Record<string, number>>('/api/v1/admin/stats')
+}
+
+export function fetchCloudAccessKeys(resource: CloudAccessKeyResource) {
+  return adminRequest<CloudAccessKeyListResponse>(
+    `/api/v1/admin/cloud-access-keys?resource=${resource}`,
+  )
+}
+
+export function createCloudAccessKey(payload: {
+  name: string
+  accessKeyId: string
+  accessKeySecret: string
+  resources: CloudAccessKeyResource[]
+  label: string
+}) {
+  return adminRequest<CloudAccessKeyResponse>('/api/v1/admin/cloud-access-keys', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateCloudAccessKey(id: string, payload: { label: string }) {
+  return adminRequest<CloudAccessKeyResponse>(`/api/v1/admin/cloud-access-keys/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteCloudAccessKey(id: string) {
+  return adminRequest<void>(`/api/v1/admin/cloud-access-keys/${id}`, { method: 'DELETE' })
+}
+
+export function selectCloudAccessKey(id: string, resource: CloudAccessKeyResource) {
+  return adminRequest<CloudAccessKeySelectResponse>(`/api/v1/admin/cloud-access-keys/${id}/select`, {
+    method: 'POST',
+    body: JSON.stringify({ resource }),
+  })
+}
+
+export function testCloudAccessKeyDraft(payload: {
+  resource: CloudAccessKeyResource
+  accessKeyId: string
+  accessKeySecret: string
+}) {
+  return adminRequest<CloudAccessKeyTestResponse>('/api/v1/admin/cloud-access-keys/test', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function testSavedCloudAccessKey(id: string, resource: CloudAccessKeyResource) {
+  return adminRequest<CloudAccessKeyTestResponse>(`/api/v1/admin/cloud-access-keys/${id}/test`, {
+    method: 'POST',
+    body: JSON.stringify({ resource }),
+  })
 }

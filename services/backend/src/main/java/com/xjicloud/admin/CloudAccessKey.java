@@ -34,6 +34,9 @@ public class CloudAccessKey {
     @Column(nullable = false, length = 512)
     private String secret;
 
+    @Column(length = 128)
+    private String label;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "cloud_access_key_resource",
@@ -79,6 +82,14 @@ public class CloudAccessKey {
 
     public void setSecret(String secret) {
         this.secret = secret;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
     }
 
     Set<CloudResource> getResources() {

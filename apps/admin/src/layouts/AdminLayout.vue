@@ -10,6 +10,7 @@ const authStore = useAdminAuthStore()
 const navItems = [
   { label: '概览', name: 'dashboard' },
   { label: 'OSS 配置', name: 'oss' },
+  { label: 'Key 管理', name: 'cloud-access-keys' },
   { label: '算力容器', name: 'workers' },
   { label: '训练任务', name: 'jobs' },
 ]

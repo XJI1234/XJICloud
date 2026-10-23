@@ -32,11 +32,12 @@ import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 /**
  * 阿里云 ECI OpenAPI 实现：CreateContainerGroup / DescribeContainerGroups / DeleteContainerGroup。
  * <p>
- * 成对运行时 AccessKey 时走 STATIC_AK；否则 ECS RAM 角色或 SDK 默认链。
+ * 成对运行时 AccessKey 时走 STATIC_AK；否则 ECS RAM 角色或 SDK 默认链在首次请求时解析。
  * 日志只记录实例 ID、credentialMode 与错误码，不打印凭证 / Api-Key。
  */
 public class AliyunEciProvider implements EciProvider {
@@ -87,8 +88,6 @@ public class AliyunEciProvider implements EciProvider {
                 credentialMode = "DEFAULT_CHAIN";
                 creds = new DefaultCredentialsProvider();
             }
-            // 启动期失败快：非 ECS 无 env 时可能 IMDS 超时后抛错
-            creds.getCredentials();
         } catch (ClientException e) {
             throw new IllegalStateException(CREDENTIAL_HINT + " 原因: " + e.getErrMsg(), e);
         } catch (RuntimeException e) {
@@ -285,11 +284,20 @@ public class AliyunEciProvider implements EciProvider {
 
     private static CloudOperationException cloudException(
             String operation, ClientException exception, CloudOperationKind kind) {
-        return new CloudOperationException(operation, exception.getErrCode(), kind);
+        String errorCode = isCredentialResolutionFailure(exception)
+                ? "credential resolution failed"
+                : exception.getErrCode();
+        return new CloudOperationException(operation, errorCode, kind);
+    }
+
+    private static boolean isCredentialResolutionFailure(ClientException exception) {
+        String message = exception.getMessage();
+        return message != null && message.toLowerCase(Locale.ROOT).contains("credential");
     }
 
     private static CloudOperationKind classifyCreate(ClientException exception) {
-        return REJECTED_CREATE_ERROR_CODES.contains(exception.getErrCode())
+        return isCredentialResolutionFailure(exception)
+                || REJECTED_CREATE_ERROR_CODES.contains(exception.getErrCode())
                 ? CloudOperationKind.REJECTED
                 : CloudOperationKind.UNKNOWN_OUTCOME;
     }

@@ -89,6 +89,7 @@ public class CloudAccessKeyService {
                 "accessKeySecret 长度不能超过 512"
         );
         Set<CloudResource> resources = requireResources(request.resources());
+        String label = normalizeLabel(request.label());
         if (repository.existsByName(name)) {
             throw new BusinessException("云访问密钥名称已存在", HttpStatus.CONFLICT);
         }
@@ -96,6 +97,7 @@ public class CloudAccessKeyService {
         key.setName(name);
         key.setAccessKeyId(accessKeyId);
         key.setSecret(secret);
+        key.setLabel(label);
         key.setResources(resources);
         Instant now = Instant.now();
         key.setCreatedAt(now);
@@ -136,6 +138,9 @@ public class CloudAccessKeyService {
                     512,
                     "accessKeySecret 长度不能超过 512"
             ));
+        }
+        if (request.label() != null) {
+            key.setLabel(normalizeLabel(request.label()));
         }
         Map<CloudResource, UUID> currentIds = readCurrentIds();
         if (request.resources() != null) {
@@ -288,7 +293,8 @@ public class CloudAccessKeyService {
                 resourceNames(key.getResources()),
                 selectedResources(key.getId(), currentIds),
                 key.getCreatedAt(),
-                key.getUpdatedAt()
+                key.getUpdatedAt(),
+                key.getLabel() == null ? "" : key.getLabel()
         );
     }
 
@@ -306,7 +312,8 @@ public class CloudAccessKeyService {
                 selectedResources(key.getId(), currentIds),
                 key.getCreatedAt(),
                 key.getUpdatedAt(),
-                appliedResource.name()
+                appliedResource.name(),
+                key.getLabel() == null ? "" : key.getLabel()
         );
     }
 
@@ -403,6 +410,14 @@ public class CloudAccessKeyService {
             throw new BusinessException(emptyMessage, HttpStatus.BAD_REQUEST);
         }
         return value.trim();
+    }
+
+    private static String normalizeLabel(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.length() > 128) {
+            throw new BusinessException("标签长度不能超过 128", HttpStatus.BAD_REQUEST);
+        }
+        return trimmed;
     }
 
     private static String requireCredential(

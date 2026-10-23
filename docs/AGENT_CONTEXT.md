@@ -251,6 +251,12 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V202610
 
 该迁移为请求发出时间、实例/云端状态、状态原因和清理确认添加字段，并将旧 claim 时间回填为 `dispatch_request_sent_at`；无 claim 时间的活动旧 claim 使用任务创建时间作为保守证据。历史记录的 `eci_cleanup_confirmed` 默认 `false`；旧 claim 或绑定旧 ECI task 的任务因此必须在新接口返回清理证据后，才能删除或重试。H2 使用相同回填规则，并由启动初始化自动执行一次。
 
+生产新增云访问密钥标签字段时，`ddl-auto: validate` 不会自动升级已有表。部署包含标签能力的 backend 前，先执行迁移；该列保持可空以兼容历史行，历史 `null` 标签继续由 API 规范化为 `""`：
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V20261022_01__cloud_access_key_label.sql
+```
+
 ### 6.2 Worker（Bearer worker JWT + 注册时 X-Worker-Secret）
 
 | 方法 | 路径 |
@@ -270,8 +276,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V202610
 | GET | `/admin/dashboard` |
 | GET/PUT | `/admin/oss` |
 | POST | `/admin/oss/test` |
-| GET/POST | `/admin/cloud-access-keys`（GET 必传 `resource=ECI_OPENAPI|OSS`；POST 用 `resources` 绑定一个或多个资源） |
-| GET/PUT/DELETE | `/admin/cloud-access-keys/{id}` |
+| GET/POST | `/admin/cloud-access-keys`（GET 必传 `resource=ECI_OPENAPI|OSS`；POST 用 `resources` 绑定一个或多个资源，并可带独立 `label`） |
+| GET/PUT/DELETE | `/admin/cloud-access-keys/{id}`（PUT 可更新 `label`） |
 | POST | `/admin/cloud-access-keys/{id}/select`（body 指定单个 `resource`）、`/admin/cloud-access-keys/{id}/test` |
 | POST | `/admin/cloud-access-keys/test` |
 | GET | `/admin/workers` |
@@ -279,6 +285,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V202610
 | GET | `/admin/jobs` |
 | POST | `/admin/jobs/{id}/retry`, `/cancel` |
 | GET | `/admin/stats` |
+
+云访问密钥 `label` 可重复，创建和更新时会去除首尾空白，最长 128 个字符。创建时省略或传 `null` 会保存为空字符串；更新时省略或传 `null` 保留原值，传空串或纯空白会清空。旧记录的 `null` 标签在响应中返回 `""`。标签操作不调用 8081，也不改变当前选用项；目录名称仍保持唯一。列表与详情仅返回脱敏 AK 提示和 Secret 配置状态，不返回 AK/SK 明文。
 
 **默认管理员：** `admin` / `admin123`（`AdminDataInitializer` 首次启动创建，生产必改）
 

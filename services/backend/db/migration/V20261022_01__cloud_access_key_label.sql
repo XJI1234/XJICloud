@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE cloud_access_key
+    ADD COLUMN IF NOT EXISTS label VARCHAR(128);
+
+COMMIT;

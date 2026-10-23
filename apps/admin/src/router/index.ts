@@ -16,6 +16,11 @@ const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
         { path: 'oss', name: 'oss', component: () => import('@/views/OssSettingsView.vue') },
+        {
+          path: 'cloud-access-keys',
+          name: 'cloud-access-keys',
+          component: () => import('@/views/CloudAccessKeysView.vue'),
+        },
         { path: 'workers', name: 'workers', component: () => import('@/views/WorkersView.vue') },
         { path: 'jobs', name: 'jobs', component: () => import('@/views/JobsView.vue') },
       ],

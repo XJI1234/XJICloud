@@ -24,8 +24,21 @@ public final class CloudAccessKeyDtos {
             List<String> resources,
             List<String> selectedResources,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            String label
     ) {
+        public CloudAccessKeyResponse(
+                UUID id,
+                String name,
+                String accessKeyHint,
+                boolean secretConfigured,
+                List<String> resources,
+                List<String> selectedResources,
+                Instant createdAt,
+                Instant updatedAt
+        ) {
+            this(id, name, accessKeyHint, secretConfigured, resources, selectedResources, createdAt, updatedAt, "");
+        }
     }
 
     public record CloudAccessKeySelectResponse(
@@ -37,16 +50,50 @@ public final class CloudAccessKeyDtos {
             List<String> selectedResources,
             Instant createdAt,
             Instant updatedAt,
-            String appliedResource
+            String appliedResource,
+            String label
     ) {
+        public CloudAccessKeySelectResponse(
+                UUID id,
+                String name,
+                String accessKeyHint,
+                boolean secretConfigured,
+                List<String> resources,
+                List<String> selectedResources,
+                Instant createdAt,
+                Instant updatedAt,
+                String appliedResource
+        ) {
+            this(
+                    id,
+                    name,
+                    accessKeyHint,
+                    secretConfigured,
+                    resources,
+                    selectedResources,
+                    createdAt,
+                    updatedAt,
+                    appliedResource,
+                    ""
+            );
+        }
     }
 
     public record CreateCloudAccessKeyRequest(
             String name,
             String accessKeyId,
             String accessKeySecret,
-            List<String> resources
+            List<String> resources,
+            String label
     ) {
+        public CreateCloudAccessKeyRequest(
+                String name,
+                String accessKeyId,
+                String accessKeySecret,
+                List<String> resources
+        ) {
+            this(name, accessKeyId, accessKeySecret, resources, null);
+        }
     }
 
     public record SelectCloudAccessKeyRequest(String resource) {
@@ -73,7 +120,16 @@ public final class CloudAccessKeyDtos {
             String name,
             String accessKeyId,
             String accessKeySecret,
-            List<String> resources
+            List<String> resources,
+            String label
     ) {
+        public UpdateCloudAccessKeyRequest(
+                String name,
+                String accessKeyId,
+                String accessKeySecret,
+                List<String> resources
+        ) {
+            this(name, accessKeyId, accessKeySecret, resources, null);
+        }
     }
 }
