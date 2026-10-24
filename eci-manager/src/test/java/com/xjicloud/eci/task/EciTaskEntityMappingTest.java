@@ -19,6 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(properties = {
         "eci.mock=true",
         "eci.api-key=test-api-key",
+        // 宽限只认精确 ECI_* 环境源；本类断言 0，必须有显式夹具
+        "ECI_FAILURE_LOG_GRACE_SEC=0",
         "spring.datasource.url=jdbc:h2:mem:eci-task-mapping;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
 })
 class EciTaskEntityMappingTest {
@@ -40,6 +42,52 @@ class EciTaskEntityMappingTest {
         assertThat(properties.getFailureLogTailLines()).isEqualTo(1000);
         // test/resources/application.yml 关闭宽限，避免 IT 卡住
         assertThat(properties.getFailureLogGraceSec()).isEqualTo(0);
+    }
+
+    @Test
+    void persistsFailureForensicsSnapshotAndToleratesLegacyNulls() {
+        Instant now = Instant.now();
+        UUID id = UUID.randomUUID();
+
+        EciTaskEntity task = new EciTaskEntity();
+        task.setId(id);
+        task.setName("failure-snapshot-task");
+        task.setStatus(TaskStatus.PENDING);
+        task.setImage("nginx:alpine");
+        task.setCpu(1.0);
+        task.setMemory(2.0);
+        task.setRestartPolicy("Never");
+        task.setMaxRuntimeSec(60);
+        task.setFailureLogTailLines(37);
+        task.setFailureLogGraceSec(12);
+        task.setCreatedAt(now);
+        task.setUpdatedAt(now);
+
+        taskRepository.save(task);
+
+        EciTaskEntity loaded = taskRepository.findById(id).orElseThrow();
+        assertThat(loaded.getFailureLogTailLines()).isEqualTo(37);
+        assertThat(loaded.getFailureLogGraceSec()).isEqualTo(12);
+
+        // 迁移前旧行没有快照值：必须可读为 null，由生命周期回退当前配置，而不是当成 0 立即删除
+        UUID legacyId = UUID.randomUUID();
+        EciTaskEntity legacy = new EciTaskEntity();
+        legacy.setId(legacyId);
+        legacy.setName("legacy-task");
+        legacy.setStatus(TaskStatus.PENDING);
+        legacy.setImage("nginx:alpine");
+        legacy.setCpu(1.0);
+        legacy.setMemory(2.0);
+        legacy.setRestartPolicy("Never");
+        legacy.setMaxRuntimeSec(60);
+        legacy.setCreatedAt(now);
+        legacy.setUpdatedAt(now);
+
+        taskRepository.save(legacy);
+
+        EciTaskEntity loadedLegacy = taskRepository.findById(legacyId).orElseThrow();
+        assertThat(loadedLegacy.getFailureLogTailLines()).isNull();
+        assertThat(loadedLegacy.getFailureLogGraceSec()).isNull();
     }
 
     @Test

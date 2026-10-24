@@ -26,9 +26,13 @@ import org.springframework.test.web.servlet.MvcResult;
         "eci.poll-interval-ms=200",
         "eci.mock-auto-complete-sec=0",
         "eci.oss.enabled=true",
+        "ECI_OSS_ENABLED=true",
         "eci.oss.endpoint=https://oss-cn-hangzhou.aliyuncs.com",
+        "ECI_OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com",
         "eci.oss.region=cn-hangzhou",
+        "ECI_OSS_REGION=cn-hangzhou",
         "eci.oss.bucket=test-bucket",
+        "ECI_OSS_BUCKET=test-bucket",
         "eci.oss.access-key=test-ak",
         "eci.oss.secret-key=test-sk",
         "spring.datasource.url=jdbc:h2:mem:eci-task-storage-enabled-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"

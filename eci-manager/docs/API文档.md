@@ -36,7 +36,7 @@
 | 入口 | 「提交任务」 | 「直接创建容器」 |
 | 关系 | 一个任务对应一个容器 | 没有关联任务 |
 | 谁负责收尾 | 服务自动删（终态 / 超时 / 取消） | 始终需人手动删除 |
-| 镜像 | **必须**指定 | 可不传，用默认镜像 |
+| 镜像 | 可省略；先用请求值，再用当前默认镜像；两者为空时 400 | 可不传，用默认镜像 |
 
 ### 1.3 当前能验收什么
 
@@ -149,7 +149,7 @@ RUNNING → STOPPING → TERMINATED
 
 | 配置键 | 默认值（`application.yml`） | 说明 |
 |--------|---------------------------|------|
-| `eci.default-image` | `nginx:alpine` | **仅手动实例**缺 `image` 时使用；任务仍必填 `image`。cloud profile 常改为 VPC 镜像 |
+| `eci.default-image` | `nginx:alpine` | 请求未提供非空 `image` 时，任务与手动实例均使用当前默认值；任务请求值优先。cloud profile 常改为 VPC 镜像 |
 | `eci.default-cpu` | `1.0` | |
 | `eci.default-memory` | `2.0` | |
 | `eci.default-restart-policy` | `Never` | |
@@ -207,7 +207,7 @@ RUNNING → STOPPING → TERMINATED
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `clientRequestId` | string | 否 | 可选客户端请求幂等 key；同一 key 在任务记录中唯一，重复提交返回原任务，不再创建实例。任务记录保留期间 key 不可复用；不同 key 创建独立任务 |
-| `image` | string | **是** | 完整镜像地址 |
+| `image` | string | 否 | 完整镜像地址；非空请求值优先，否则用当前默认镜像；两者为空时返回 400 |
 | `name` | string | 否 | 未传则 `task-` + UUID 前 8 位 |
 | `command` | string[] | 否 | 覆盖镜像 ENTRYPOINT |
 | `args` | string[] | 否 | 覆盖镜像 CMD |
@@ -318,7 +318,7 @@ OSS 联调（`mode=test` + 联调镜像）：
 
 | 条件 | HTTP | message 示例 |
 |------|------|----------------|
-| 缺 `image` | 400 | `image 为必填项` |
+| 请求 `image` 为空且当前默认镜像也为空 | 400 | `image 为必填项` |
 | 非法 `restartPolicy` | 400 | `restartPolicy 须为 Never、OnFailure 或 Always` |
 | `maxRuntimeSec≤0` | 400 | `maxRuntimeSec 须为正整数` |
 | 有 `storage` 但 OSS 未启用/配置不完整 | 400 | `OSS 未启用或配置不完整，无法处理 storage 请求`（**不落库、不建实例**） |
@@ -740,7 +740,7 @@ curl -s -X DELETE "$BASE/api/v1/eci/instances/<INSTANCE_ID>" \
 | `restartPolicy` / `command` / `args` 透传创建 | 创建请求体 | **已实现** |
 | `imageSnapshotId` 镜像缓存加速 | 创建请求体；透传 `CreateContainerGroup.ImageSnapshotId` | **已实现** |
 | `shmSize` 放大 `/dev/shm` | 创建请求体；Memory EmptyDir 挂 `/dev/shm` | **已实现** |
-| 任务提交（`image` 必填） | `POST /tasks` | **已实现** |
+| 任务提交（显式镜像或默认镜像） | `POST /tasks` | **已实现** |
 | 可选 `storage`（OSS presign 注入 env） | `POST /tasks` | **已实现**（一期无响应 `storageResolved`） |
 | 任务列表 / 详情 | `GET /tasks`、`GET /tasks/{id}` | **已实现** |
 | 任务日志尾部 | `GET /tasks/{id}/logs` | **已实现** |

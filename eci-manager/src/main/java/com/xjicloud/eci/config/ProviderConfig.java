@@ -1,5 +1,6 @@
 package com.xjicloud.eci.config;
 
+import com.xjicloud.eci.EciManagerApplication.CloudResourceConfigRuntime;
 import com.xjicloud.eci.credential.AccessKeyPair;
 import com.xjicloud.eci.credential.AliyunCredentialMode;
 import com.xjicloud.eci.credential.AliyunCredentialResolver;
@@ -11,6 +12,7 @@ import com.xjicloud.eci.provider.EciProvider;
 import com.xjicloud.eci.provider.MockEciProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,6 +31,13 @@ public class ProviderConfig {
      * {@code runtimeCredentials} 为 null 时跳过种子（单测），用 properties 当运行时钥。
      */
     @Bean
+    public EciProvider eciProvider(EciProperties properties, RuntimeCredentialService runtimeCredentials,
+                                   ObjectProvider<CloudResourceConfigRuntime> runtime) {
+        // 工厂参数先完成数据库配置加载，真实 Provider 随后的网络校验才能使用最终值。
+        runtime.getIfAvailable();
+        return eciProvider(properties, runtimeCredentials);
+    }
+
     public EciProvider eciProvider(EciProperties properties, RuntimeCredentialService runtimeCredentials) {
         if (runtimeCredentials != null) {
             runtimeCredentials.seedIfAbsent();

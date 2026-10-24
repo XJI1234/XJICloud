@@ -1,5 +1,6 @@
 package com.xjicloud.eci.config;
 
+import com.xjicloud.eci.common.BusinessException;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +12,8 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** 云资源配置的来源解析、校验、持久化和当前快照入口。 */
 @Service
@@ -23,10 +26,32 @@ public class CloudResourceConfigService {
     private final CloudResourceConfigRepository repository;
     private final Environment environment;
     private CloudResourceConfigSnapshot current;
+    private Function<CloudResourceConfigSnapshot, PreparedProjection> runtimeProjection;
 
     public CloudResourceConfigService(CloudResourceConfigRepository repository, Environment environment) {
         this.repository = repository;
         this.environment = environment;
+    }
+
+    /** 配置事务、属性读取、OSS 操作和凭证热切共用这个监视器。 */
+    public synchronized <T> T coordinate(Supplier<T> action) {
+        return action.get();
+    }
+
+    public synchronized void coordinate(Runnable action) {
+        action.run();
+    }
+
+    public synchronized void setRuntimeProjection(
+            Function<CloudResourceConfigSnapshot, PreparedProjection> runtimeProjection) {
+        this.runtimeProjection = runtimeProjection;
+    }
+
+    public interface PreparedProjection extends AutoCloseable {
+        void apply();
+
+        @Override
+        void close();
     }
 
     /** 当前三个分类的不可变快照。 */
@@ -74,6 +99,12 @@ public class CloudResourceConfigService {
     }
 
     private CloudResourceConfigSnapshot save(CloudResourceConfigKey.Category category, Map<String, String> updates) {
+        List<CloudResourceConfigDefinition> definitions = CloudResourceConfigDefinition.inCategory(category);
+        for (String key : updates.keySet()) {
+            if (definitions.stream().noneMatch(definition -> definition.key().equals(key))) {
+                throw new BusinessException("当前分类不支持配置字段: " + key);
+            }
+        }
         Map<CloudResourceConfigKey, Resolved> candidate = parseAll();
         for (CloudResourceConfigDefinition definition : CloudResourceConfigDefinition.inCategory(category)) {
             if (updates.containsKey(definition.key())) {
@@ -110,21 +141,32 @@ public class CloudResourceConfigService {
 
     /** 快照只在事务提交后替换；提交失败时内存快照保持与数据库一致。 */
     private CloudResourceConfigSnapshot publishAfterCommit(CloudResourceConfigSnapshot next) {
+        PreparedProjection prepared = runtimeProjection == null ? null : runtimeProjection.apply(next);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    publish(next);
+                    publish(next, prepared);
+                }
+
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED && prepared != null) {
+                        prepared.close();
+                    }
                 }
             });
         } else {
-            publish(next);
+            publish(next, prepared);
         }
         return next;
     }
 
     /** 与 snapshot() 共用同一把锁发布，保证其他线程可见且不产生数据竞争。 */
-    private synchronized void publish(CloudResourceConfigSnapshot next) {
+    private synchronized void publish(CloudResourceConfigSnapshot next, PreparedProjection prepared) {
+        if (prepared != null) {
+            prepared.apply();
+        }
         current = next;
     }
 

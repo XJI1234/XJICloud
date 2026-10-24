@@ -27,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "eci.mock=true",
         "eci.api-key=test-api-key",
+        // 受管配置由精确 ECI_* 键提供；application.yml 的老默认不再参与解析
+        "ECI_DEFAULT_IMAGE=nginx:alpine",
         "eci.poll-interval-ms=200",
         "eci.mock-auto-complete-sec=0",
         "spring.datasource.url=jdbc:h2:mem:eci-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"

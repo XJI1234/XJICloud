@@ -95,6 +95,25 @@ public class EciInstanceEntity {
     @Column(length = 32)
     private String shmSize;
 
+    /** 创建时的地域快照；升级前旧实例为空。 */
+    @Column(length = 64)
+    private String regionId;
+
+    /** 创建时的 VPC 快照。ECI CreateContainerGroup 无 VPC 请求字段，仅供追溯。 */
+    @Column(length = 64)
+    private String vpcId;
+
+    /** 创建时的交换机快照；旧实例为空时由 Provider 回退当前配置。 */
+    @Column(length = 64)
+    private String vswitchId;
+
+    /** 创建时的安全组快照；旧实例为空时由 Provider 回退当前配置。 */
+    @Column(length = 64)
+    private String securityGroupId;
+
+    /** 创建时的等待 Running 超时；升级前旧实例为空时回退当前配置。 */
+    private Integer createTimeoutSec;
+
     @Column(length = 1024)
     private String failureReason;
 
@@ -284,6 +303,46 @@ public class EciInstanceEntity {
 
     public void setShmSize(String shmSize) {
         this.shmSize = shmSize;
+    }
+
+    public String getRegionId() {
+        return regionId;
+    }
+
+    public void setRegionId(String regionId) {
+        this.regionId = regionId;
+    }
+
+    public String getVpcId() {
+        return vpcId;
+    }
+
+    public void setVpcId(String vpcId) {
+        this.vpcId = vpcId;
+    }
+
+    public String getVswitchId() {
+        return vswitchId;
+    }
+
+    public void setVswitchId(String vswitchId) {
+        this.vswitchId = vswitchId;
+    }
+
+    public String getSecurityGroupId() {
+        return securityGroupId;
+    }
+
+    public void setSecurityGroupId(String securityGroupId) {
+        this.securityGroupId = securityGroupId;
+    }
+
+    public Integer getCreateTimeoutSec() {
+        return createTimeoutSec;
+    }
+
+    public void setCreateTimeoutSec(Integer createTimeoutSec) {
+        this.createTimeoutSec = createTimeoutSec;
     }
 
     public String getFailureReason() {

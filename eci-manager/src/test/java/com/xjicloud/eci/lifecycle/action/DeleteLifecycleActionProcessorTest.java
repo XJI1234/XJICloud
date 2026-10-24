@@ -70,8 +70,8 @@ class DeleteLifecycleActionProcessorTest {
         assertThat(unknownCreate.getAttemptCount()).isEqualTo(1);
         assertThat(instanceRepository.findById(instanceId).orElseThrow().getStatus())
                 .isEqualTo(InstanceStatus.STOPPING);
-        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString());
-        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString());
+        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -89,8 +89,8 @@ class DeleteLifecycleActionProcessorTest {
                 .isEqualTo(LifecycleActionStatus.IN_PROGRESS);
         assertThat(instanceRepository.findById(instanceId).orElseThrow().getStatus())
                 .isEqualTo(InstanceStatus.STOPPING);
-        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString());
-        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString());
+        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -107,8 +107,8 @@ class DeleteLifecycleActionProcessorTest {
                 .isEqualTo(LifecycleActionStatus.WAITING);
         assertThat(instanceRepository.findById(instanceId).orElseThrow().getStatus())
                 .isEqualTo(InstanceStatus.STOPPING);
-        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString());
-        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString());
+        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -123,8 +123,8 @@ class DeleteLifecycleActionProcessorTest {
         LifecycleActionEntity cancelledCreate = actionRepository.findById(createId).orElseThrow();
         assertThat(cancelledCreate.getStatus()).isEqualTo(LifecycleActionStatus.CANCELLED);
         assertThat(cancelledCreate.getCompletedAt()).isEqualTo(NOW);
-        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString());
-        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString());
+        verify(provider, never()).delete(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+        verify(provider, never()).describe(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -141,28 +141,28 @@ class DeleteLifecycleActionProcessorTest {
         assertThat(action.getAttemptCount()).isZero();
         assertThat(instanceRepository.findById(instanceId).orElseThrow().getStatus())
                 .isEqualTo(InstanceStatus.STOPPING);
-        verify(provider).delete("eci-delete");
-        verify(provider, never()).describe("eci-delete");
+        verify(provider).delete("eci-delete", null);
+        verify(provider, never()).describe(org.mockito.ArgumentMatchers.eq("eci-delete"), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void notFoundDuringWaitDeletedCompletesActionAndInstance() {
         UUID instanceId = saveInstance("eci-gone", InstanceStatus.STOPPING);
         UUID actionId = saveDelete(instanceId, LifecycleActionPhase.WAIT_DELETED, NOW);
-        when(provider.describe("eci-gone")).thenReturn(new CloudInstanceView("eci-gone", "NotFound", null));
+        when(provider.describe("eci-gone", null)).thenReturn(new CloudInstanceView("eci-gone", "NotFound", null));
 
         processAt(actionId, NOW);
 
         assertCompleted(actionId, instanceId);
-        verify(provider).describe("eci-gone");
-        verify(provider, never()).delete("eci-gone");
+        verify(provider).describe("eci-gone", null);
+        verify(provider, never()).delete(org.mockito.ArgumentMatchers.eq("eci-gone"), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void deletedDuringWaitDeletedCompletesActionAndInstance() {
         UUID instanceId = saveInstance("eci-deleted", InstanceStatus.STOPPING);
         UUID actionId = saveDelete(instanceId, LifecycleActionPhase.WAIT_DELETED, NOW);
-        when(provider.describe("eci-deleted"))
+        when(provider.describe("eci-deleted", null))
                 .thenReturn(new CloudInstanceView("eci-deleted", "Deleted", null));
 
         processAt(actionId, NOW);
@@ -176,7 +176,7 @@ class DeleteLifecycleActionProcessorTest {
         UUID actionId = saveDelete(instanceId, LifecycleActionPhase.DELETE_REQUEST, NOW);
         doThrow(new IllegalStateException("temporary 1"))
                 .doThrow(new IllegalStateException("temporary 2"))
-                .doNothing().when(provider).delete("eci-retry");
+                .doNothing().when(provider).delete("eci-retry", null);
 
         processAt(actionId, NOW);
         LifecycleActionEntity firstFailure = actionRepository.findById(actionId).orElseThrow();
@@ -197,7 +197,7 @@ class DeleteLifecycleActionProcessorTest {
         assertThat(succeededDeleteCall.getPhase()).isEqualTo(LifecycleActionPhase.WAIT_DELETED);
         assertThat(succeededDeleteCall.getAttemptCount()).isEqualTo(2);
         assertThat(succeededDeleteCall.getLastError()).isNull();
-        verify(provider, org.mockito.Mockito.times(3)).delete("eci-retry");
+        verify(provider, org.mockito.Mockito.times(3)).delete("eci-retry", null);
     }
 
     @Test
@@ -205,7 +205,7 @@ class DeleteLifecycleActionProcessorTest {
         UUID instanceId = saveInstance("eci-permanent", InstanceStatus.STOPPING);
         UUID actionId = saveDelete(instanceId, LifecycleActionPhase.DELETE_REQUEST, NOW);
         doThrow(new IllegalStateException("still unavailable"))
-                .when(provider).delete("eci-permanent");
+                .when(provider).delete("eci-permanent", null);
         Instant due = NOW;
 
         for (int attempt = 1; attempt <= 8; attempt++) {
@@ -229,7 +229,7 @@ class DeleteLifecycleActionProcessorTest {
         action.setLeaseUntil(NOW);
         actionRepository.saveAndFlush(action);
         UUID newLease = actionService.claim(actionId, NOW.plusSeconds(1)).orElseThrow().leaseToken();
-        doNothing().when(provider).delete("eci-stale");
+        doNothing().when(provider).delete("eci-stale", null);
 
         processor.process(actionId, oldLease);
 
@@ -245,7 +245,7 @@ class DeleteLifecycleActionProcessorTest {
         UUID instanceId = saveInstance("eci-slow-delete", InstanceStatus.STOPPING);
         UUID actionId = saveDelete(instanceId, LifecycleActionPhase.WAIT_DELETED,
                 NOW.minusSeconds(properties.getDeleteTimeoutSec() + 1L));
-        when(provider.describe("eci-slow-delete"))
+        when(provider.describe("eci-slow-delete", null))
                 .thenReturn(new CloudInstanceView("eci-slow-delete", "Running", null));
 
         processAt(actionId, NOW);

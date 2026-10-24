@@ -40,26 +40,29 @@ eci-manager/
 
 ### Mock 模式
 
-Mock 模式不调用 ECI，也不实际拉取镜像、执行容器程序。无需配置阿里云 AccessKey。
+Mock 模式不调用 ECI，也不实际拉取镜像、执行容器程序。无需配置阿里云 AccessKey。Mock 本身不隔离数据库；下面的验证命令显式使用独立内存 H2 和端口 `18081`，不加载 `.env`，不使用默认 `./data/eci-manager` 持久库。确认端口空闲后再启动；若已占用，不复用已有实例。
 
 ```bash
 cd eci-manager
 if [ -f ../.tools/env.sh ]; then source ../.tools/env.sh; fi
 
 export ECI_API_KEY=dev-eci-api-key-change-me
-SPRING_PROFILES_ACTIVE=dev ECI_MOCK=true ECI_OSS_ENABLED=false \
+SPRING_DATASOURCE_URL='jdbc:h2:mem:cloud-config-check;DB_CLOSE_DELAY=-1' \
+  SERVER_PORT=18081 SPRING_PROFILES_ACTIVE=dev ECI_MOCK=true ECI_CONSOLE_OPEN_BROWSER=false \
   mvn spring-boot:run
 ```
 
-内置操作台位于 <http://127.0.0.1:8081/>，使用上面设置的 HTTP Api-Key，顶栏显示当前模式。操作台仍有已知问题，当前阶段请按下文的 HTTP API 示例操作。
+本次验证的内置操作台位于 <http://127.0.0.1:18081/>，使用上面设置的 HTTP Api-Key，顶栏显示当前模式。操作台仍有已知问题，当前阶段请按下文的 HTTP API 示例操作，并将默认 `8081` 地址改为本次验证实例的 `18081`。
 
 健康检查无需 Api-Key：
 
 ```bash
-curl -fsS http://127.0.0.1:8081/actuator/health
+curl -fsS http://127.0.0.1:18081/actuator/health
 ```
 
-服务默认尝试打开浏览器。无桌面环境可在启动前设置 `export ECI_CONSOLE_OPEN_BROWSER=false`。修改端口用 `SERVER_PORT`，例如 `SERVER_PORT=18081 mvn spring-boot:run`。
+预期：启动日志确认内存 H2 和端口 `18081`，健康检查返回 `UP`；若启动失败则停止验收。该内存库随进程退出清空，只验证当前进程内保存和恢复默认。需要断言集中默认值时，使用[设计与使用说明](docs/设计与使用说明.md) §7 的完整步骤清除继承的 15 项环境覆盖。8080 代理和 Admin 浏览器验收也必须连接该独立实例，并按 §7 使用专用 backend 内存库；不能沿用现有 backend 的默认连接或操作已有配置库。
+
+服务默认尝试打开浏览器，上面的验证命令已关闭。修改端口用 `SERVER_PORT`；验证实例端口变动时须同步修改所有请求地址和代理目标。
 
 ### 构建后运行
 
@@ -127,6 +130,22 @@ XJICLOUD_ECI_MANAGER_API_KEY=your-eci-manager-api-key
 
 选用后，8081 持久化当前凭据并热更新 ECI 或 OSS 客户端，8080 收到成功响应后记录目录的选中状态。可通过操作台或 `GET /api/v1/eci/runtime-credentials` 核对 8081 当前凭据的脱敏信息。若提示“已推送但保存当前选用失败”，重试选用。完整新增、轮换和删除流程见[云访问密钥管理说明](docs/云访问密钥管理说明.md)。
 
+### 在 Admin 管理云资源配置
+
+与云密钥同页的「云资源配置」（原「Key 管理」，路由不变）管理 15 项非密钥配置，按分类保存，另有「恢复默认」。Key 管理区域保留在同一页面，密钥行为不变。
+
+| 分类 | 包含 |
+|------|------|
+| 网络 | 地域、VPC、交换机 ID、安全组 ID |
+| OSS | 启用 OSS、OSS 地址、OSS 地域、OSS 存储桶、使用路径风格访问、预签名 URL 有效期 |
+| 高级 | 默认镜像、默认共享内存、创建超时时间、失败日志尾部行数、失败删除宽限时间 |
+
+配置按「数据库覆盖值 > 环境变量值 > 集中定义的默认值」解析；数据库中的空字符串是明确保存的空值，不回退。集中默认值例如：启用 OSS `true`、预签名有效期 `1440` 分钟、创建超时 `1800` 秒，完整清单见[设计与使用说明](docs/设计与使用说明.md) §4.5。保存或恢复默认后，新任务与后续操作使用新值；已提交任务使用创建时的快照。
+
+Admin 页面调用 8080 的 `GET` / `PUT` / `DELETE /api/v1/admin/cloud-resource-config[/network|/oss|/advanced]`，8080 只转发到 8081 的 `/api/v1/eci/runtime-config`，不保存副本。`ECI_API_KEY`、RAM 角色、STS 凭证、`ECI_MOCK`、`ECI_CONSOLE_OPEN_BROWSER`、`SPRING_PROFILES_ACTIVE` 仍由进程配置管理，不在页面内。
+
+Mock 验收的 GET / PUT / DELETE 和浏览器保存、恢复默认均限上述独立内存库实例；完整编号步骤、专用 8080 的连接配置与预期结果见[设计与使用说明](docs/设计与使用说明.md) §7。Task 4 管理代理、Task 5 Admin 页面已实现并独立审查通过；Task 3 创建 / OSS / 失败清理快照消费已实现（本任务未做浏览器 E2E）；Task 2 第 1 轮修复已落地，独立复审待进行。
+
 ### 使用 `.env` 启动真云服务
 
 ```bash
@@ -135,17 +154,15 @@ cp .env.example .env
 ./scripts/start.sh
 ```
 
-`.env` 负责服务鉴权、网络和首次启动配置。日常 ECI / OSS 换钥按上面的 8080 链路操作；AccessKeyId 与 Secret 必须成对填写，不要将实际密钥提交到 Git。
+`.env` 负责服务鉴权、网络和首次启动配置。日常 ECI / OSS 换钥按上面的 8080 链路操作。除服务鉴权以外的配置项均可以用占位符替代。
 
 | 变量 | 配置说明 |
 |------|----------|
 | `SPRING_PROFILES_ACTIVE` | 真云用 `cloud,local`；Mock 用 `dev` |
 | `ECI_API_KEY` | 自行设置的服务访问密钥，真云部署时替换开发默认值 |
-| `ECI_ACCESS_KEY_ID` / `ECI_ACCESS_KEY_SECRET` | 首次空库启动的 ECI 凭据种子；后续当前密钥由 8080 推送 |
 | `ECI_REGION_ID` | ECI 所在地域，如 `cn-hangzhou` |
-| `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 真云必填，使用目标地域、VPC 内的交换机与安全组 |
+| `ECI_VSWITCH_ID` / `ECI_SECURITY_GROUP_ID` | 真云必填，使用目标地域、VPC 内的交换机与安全组；也可在 Admin「云资源配置」页保存 |
 | `ECI_VPC_ID` | 可选，填写对应 VPC |
-| `ECI_CREATE_TIMEOUT_SEC` | 创建超时，默认 `300` 秒；大镜像可调为 `1800` |
 
 模板默认注释了所有云凭据种子。使用静态 AK 时，取消 `ECI_ACCESS_KEY_*` 的注释并填写真实凭据；使用 ECS RAM 角色时，保持 ECI 和 `ALIBABA_CLOUD_*` 两组 AK 种子为空，且数据库中不能已有当前 ECI AK。兼容变量只会由 `load-env.sh` 在 ECI 凭据为空且未设 STS token 时映射为初始化值；直接运行 Java 不会读取这两个兼容变量。RAM 角色等配置见[设计与使用说明](docs/设计与使用说明.md)。
 
@@ -161,7 +178,7 @@ HTTP Api-Key 仍由进程配置决定，修改后需要重启，并同步更新 
 
 ### 按需启用 OSS
 
-普通容器任务可跳过此项。任务需要下载输入或上传结果时，在 `.env` 中填写：
+普通容器任务可跳过此项。任务需要下载输入或上传结果时，需要完整的 OSS 配置（写在 `.env`，或在 Admin「云资源配置」页保存）：
 
 ```dotenv
 ECI_OSS_ENABLED=true
@@ -171,9 +188,9 @@ ECI_OSS_BUCKET=your-bucket
 ECI_OSS_PRESIGN_EXPIRATION_MINUTES=1440
 ```
 
-OSS 的 AK / SK 通过 8080 选用 `OSS` 资源后推送。`.env.example` 中已注释的 `ECI_OSS_ACCESS_KEY` / `ECI_OSS_SECRET_KEY` 仅用于可选的首次初始化，走 8080 管理时保持注释。热切换只更新凭据，OSS 的启用状态、endpoint、地域和 bucket 仍由本服务配置决定，修改后需要重启。
+OSS 的 AK / SK 通过 8080 选用 `OSS` 资源后推送。`.env.example` 中已注释的 `ECI_OSS_ACCESS_KEY` / `ECI_OSS_SECRET_KEY` 仅用于可选的首次初始化，走 8080 管理时保持注释。热切换只更新凭据；启用状态、endpoint、地域、bucket 与预签名有效期属于「云资源配置」的 OSS 分类（集中默认 `true` / 内网 endpoint / `cn-hangzhou` / 空 / `1440` 分钟），保存后对后续任务生效。
 
-真云 ECI 任务使用对应地域的 OSS 内网 endpoint。预签名 URL 必须覆盖镜像启动、训练和上传的总耗时；3DGS 长任务建议使用 `1440` 分钟，默认值仅为 `60` 分钟。
+真云 ECI 任务使用对应地域的 OSS 内网 endpoint。未配置完整时仍可保存，带 `storage` 的任务会返回 400；预签名 URL 必须覆盖镜像启动、训练和上传的总耗时，默认 `1440` 分钟，3DGS 长任务按需调大。
 
 服务通过预签名 URL 让容器读写对象，不向容器注入 AccessKey。镜像中的程序仍需自行下载和上传文件；任务请求的 `storage` 字段及注入的环境变量见 [API 文档](docs/API文档.md)。
 
@@ -185,7 +202,7 @@ OSS 的 AK / SK 通过 8080 选用 `OSS` 资源后推送。`.env.example` 中已
 
 | 字段 | 含义与默认值 |
 |------|--------------|
-| `image` | 必填，容器镜像地址；真云需使用 VPC 可达的镜像仓库 |
+| `image` | 可选；省略或为空白时使用当前云资源配置的默认镜像，显式值优先。默认镜像也为空时返回 400；真云需使用 VPC 可达的镜像仓库 |
 | `command` / `args` | 字符串数组，覆盖容器启动命令与参数 |
 | `env` | 容器环境变量，JSON 对象 |
 | `cpu` / `memory` | CPU 核数 / 内存 GiB；默认 `1` / `2` |
@@ -215,16 +232,16 @@ eci:
 
 启用 `local` profile 后重启生效，真云使用 `cloud,local`。复制的模板还包含 `mock: false` 和示例 Api-Key，使用前要替换为自己的配置；用于 Mock 时，把 `mock` 改为 `true`，以 `dev,local` 启动。
 
-任务接口始终要求显式提供 `image`；`default-image` 只在手动创建实例等场景作为缺省值。
+任务和手动实例均可使用当前默认镜像；任务请求的非空 `image` 优先，默认镜像也为空时任务提交返回 400。
 
 ## 使用示例
 
 ### 提交、查询和取消任务
 
-以下示例用于已启动的 Mock 服务，需 `curl` 和 Python 3。另开终端，设置与服务一致的 Api-Key：
+以下示例仅用于上文已启动的独立内存库 Mock 实例（`18081`），需 `curl` 和 Python 3。另开终端，设置与服务一致的 Api-Key，不向现有持久库实例提交请求：
 
 ```bash
-export ECI_BASE=http://127.0.0.1:8081
+export ECI_BASE=http://127.0.0.1:18081
 export ECI_API_KEY=dev-eci-api-key-change-me
 
 TASK_JSON=$(curl -fsS "$ECI_BASE/api/v1/eci/tasks" \

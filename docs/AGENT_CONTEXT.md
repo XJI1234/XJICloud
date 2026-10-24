@@ -280,6 +280,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V202610
 | GET/PUT/DELETE | `/admin/cloud-access-keys/{id}`（PUT 可更新 `label`） |
 | POST | `/admin/cloud-access-keys/{id}/select`（body 指定单个 `resource`）、`/admin/cloud-access-keys/{id}/test` |
 | POST | `/admin/cloud-access-keys/test` |
+| GET/PUT/DELETE | `/admin/cloud-resource-config`（GET 读三个分类；PUT/DELETE `/{section}`，section 仅 `network|oss|advanced`，PUT body 为配置键到文本值的 Map；非法 section 返回 400） |
 | GET | `/admin/workers` |
 | POST | `/admin/workers/{id}/offline` |
 | GET | `/admin/jobs` |
@@ -287,6 +288,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/backend/db/migration/V202610
 | GET | `/admin/stats` |
 
 云访问密钥 `label` 可重复，创建和更新时会去除首尾空白，最长 128 个字符。创建时省略或传 `null` 会保存为空字符串；更新时省略或传 `null` 保留原值，传空串或纯空白会清空。旧记录的 `null` 标签在响应中返回 `""`。标签操作不调用 8081，也不改变当前选用项；目录名称仍保持唯一。列表与详情仅返回脱敏 AK 提示和 Secret 配置状态，不返回 AK/SK 明文。
+
+云资源配置由 8081 负责默认值、校验和持久化，8080 只做管理员鉴权、转发和错误格式转换，配置不落 8080 存储；字段级错误沿用统一 `{success,message}` 响应。
 
 **默认管理员：** `admin` / `admin123`（`AdminDataInitializer` 首次启动创建，生产必改）
 

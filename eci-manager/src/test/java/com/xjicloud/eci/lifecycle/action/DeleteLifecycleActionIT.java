@@ -36,6 +36,7 @@ import static org.mockito.Mockito.when;
         "eci.task-poll-interval-sec=3600",
         "eci.lifecycle-action.dispatch-interval-ms=3600000",
         "eci.failure-log-grace-sec=37",
+        "ECI_FAILURE_LOG_GRACE_SEC=37",
         "spring.datasource.url=jdbc:h2:mem:eci-delete-lifecycle-it;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
 })
 class DeleteLifecycleActionIT {
@@ -71,9 +72,9 @@ class DeleteLifecycleActionIT {
             String cloudId = "failed-cloud-" + index;
             tasks.add(saveTask(taskId, instanceId));
             saveInstance(instanceId, taskId, cloudId);
-            when(provider.describe(cloudId)).thenReturn(
+            when(provider.describe(cloudId, null)).thenReturn(
                     new CloudInstanceView(cloudId, "Failed", "exit 1"));
-            when(provider.fetchContainerLog(cloudId, properties.getFailureLogTailLines()))
+            when(provider.fetchContainerLog(cloudId, properties.getFailureLogTailLines(), null))
                     .thenReturn("log tail " + index);
         }
 

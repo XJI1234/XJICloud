@@ -245,6 +245,67 @@ class CloudResourceConfigApiTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void putUnknownKeyReturns400WithoutWritingOrReplacingRuntime() throws Exception {
+        long before = repository.count();
+
+        mockMvc.perform(put(PATH + "/network")
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ECI_REGION_ID\":\"cn-shanghai\",\"ECI_REGION_IDD\":\"cn-shanghai\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(containsString("ECI_REGION_IDD")));
+
+        // 同一请求里的合法键也不得落库或替换运行时
+        assertThat(repository.count()).isEqualTo(before);
+        assertThat(repository.findById("ECI_REGION_ID")).isEmpty();
+        assertThat(repository.findById("ECI_REGION_IDD")).isEmpty();
+        assertThat(eciProperties.getRegionId()).isEqualTo("cn-hangzhou");
+        mockMvc.perform(get(PATH).header("X-Api-Key", API_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.network.fields[0].value").value("cn-hangzhou"))
+                .andExpect(jsonPath("$.data.network.fields[0].source").value("default"));
+    }
+
+    @Test
+    void putKeyFromAnotherSectionReturns400WithoutWriting() throws Exception {
+        long before = repository.count();
+
+        mockMvc.perform(put(PATH + "/network")
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ECI_OSS_BUCKET\":\"cross-network-bucket\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(containsString("ECI_OSS_BUCKET")));
+
+        mockMvc.perform(put(PATH + "/oss")
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ECI_DEFAULT_IMAGE\":\"cross-oss-image\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(containsString("ECI_DEFAULT_IMAGE")));
+
+        mockMvc.perform(put(PATH + "/advanced")
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ECI_SECURITY_GROUP_ID\":\"sg-cross-advanced\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(containsString("ECI_SECURITY_GROUP_ID")));
+
+        assertThat(repository.count()).isEqualTo(before);
+        assertThat(repository.findById("ECI_OSS_BUCKET")).isEmpty();
+        assertThat(repository.findById("ECI_DEFAULT_IMAGE")).isEmpty();
+        assertThat(repository.findById("ECI_SECURITY_GROUP_ID")).isEmpty();
+        assertThat(ossProperties.getBucket()).isEqualTo("env-bucket");
+        assertThat(eciProperties.getDefaultImage()).isEmpty();
+        assertThat(ossStorageService.presignPutUrl("datasets/test/a.txt", "text/plain"))
+                .contains("env-bucket");
+    }
+
     private void deleteSection(String section) throws Exception {
         mockMvc.perform(delete(PATH + "/" + section).header("X-Api-Key", API_KEY))
                 .andExpect(status().isOk());

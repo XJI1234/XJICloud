@@ -109,6 +109,31 @@ export interface CloudAccessKeyTestResponse {
   appliedToEciManager: boolean
 }
 
+export type CloudResourceConfigSectionId = 'network' | 'oss' | 'advanced'
+
+export interface CloudResourceConfigField {
+  key: string
+  displayName: string
+  groupLabel: string
+  value: string
+  source: string
+  allowEmpty: boolean
+  valueType: string
+  validationRule: string
+}
+
+export interface CloudResourceConfigSection {
+  id: CloudResourceConfigSectionId
+  label: string
+  fields: CloudResourceConfigField[]
+}
+
+export interface CloudResourceConfigResponse {
+  network: CloudResourceConfigSection
+  oss: CloudResourceConfigSection
+  advanced: CloudResourceConfigSection
+}
+
 export function adminLogin(username: string, password: string) {
   return adminRequest<AdminAuthResponse>('/api/v1/admin/auth/login', {
     method: 'POST',
@@ -211,5 +236,25 @@ export function testSavedCloudAccessKey(id: string, resource: CloudAccessKeyReso
   return adminRequest<CloudAccessKeyTestResponse>(`/api/v1/admin/cloud-access-keys/${id}/test`, {
     method: 'POST',
     body: JSON.stringify({ resource }),
+  })
+}
+
+export function fetchCloudResourceConfig() {
+  return adminRequest<CloudResourceConfigResponse>('/api/v1/admin/cloud-resource-config')
+}
+
+export function saveCloudResourceConfigSection(
+  section: CloudResourceConfigSectionId,
+  values: Record<string, string>,
+) {
+  return adminRequest<CloudResourceConfigResponse>(`/api/v1/admin/cloud-resource-config/${section}`, {
+    method: 'PUT',
+    body: JSON.stringify(values),
+  })
+}
+
+export function resetCloudResourceConfigSection(section: CloudResourceConfigSectionId) {
+  return adminRequest<CloudResourceConfigResponse>(`/api/v1/admin/cloud-resource-config/${section}`, {
+    method: 'DELETE',
   })
 }

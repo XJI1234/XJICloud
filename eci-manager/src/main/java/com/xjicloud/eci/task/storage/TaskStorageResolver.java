@@ -3,6 +3,7 @@ package com.xjicloud.eci.task.storage;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.common.BusinessException;
+import com.xjicloud.eci.config.CloudResourceConfigSnapshot;
 import com.xjicloud.eci.config.OssProperties;
 import com.xjicloud.eci.oss.OssStorageService;
 import java.util.ArrayList;
@@ -53,8 +54,20 @@ public class TaskStorageResolver {
             UUID taskId,
             TaskStorageRequest storage,
             Map<String, String> callerEnv) {
+        return resolveAndBuildEnv(taskId, storage, callerEnv, null);
+    }
+
+    public Map<String, String> resolveAndBuildEnv(
+            UUID taskId,
+            TaskStorageRequest storage,
+            Map<String, String> callerEnv,
+            CloudResourceConfigSnapshot.Oss configSnapshot) {
         // 门控：未启用或缺少 endpoint/bucket 时直接 400。当前钥在活客户端上，不看 properties AK。
-        if (!ossProperties.isEnabled() || !ossProperties.hasTarget()) {
+        boolean enabled = configSnapshot != null ? configSnapshot.enabled() : ossProperties.isEnabled();
+        String endpoint = configSnapshot != null ? configSnapshot.endpoint() : ossProperties.getEndpoint();
+        String region = configSnapshot != null ? configSnapshot.region() : ossProperties.getRegion();
+        String bucket = configSnapshot != null ? configSnapshot.bucket() : ossProperties.getBucket();
+        if (!enabled || !StringUtils.hasText(endpoint) || !StringUtils.hasText(bucket)) {
             throw new BusinessException("OSS 未启用或配置不完整，无法处理 storage 请求");
         }
 
@@ -94,9 +107,9 @@ public class TaskStorageResolver {
         ResolvedTaskStorage resolved = new ResolvedTaskStorage(outputKey, putUrl, inputFiles);
 
         Map<String, String> env = new LinkedHashMap<>();
-        env.put("XJI_OSS_ENDPOINT", nullToEmpty(ossProperties.getEndpoint()));
-        env.put("XJI_OSS_BUCKET", nullToEmpty(ossProperties.getBucket()));
-        env.put("XJI_OSS_REGION", nullToEmpty(ossProperties.getRegion()));
+        env.put("XJI_OSS_ENDPOINT", nullToEmpty(endpoint));
+        env.put("XJI_OSS_BUCKET", nullToEmpty(bucket));
+        env.put("XJI_OSS_REGION", nullToEmpty(region));
         env.put("XJI_TASK_ID", taskId.toString());
         env.put("XJI_OUTPUT_OSS_KEY", resolved.outputKey());
         env.put("XJI_OUTPUT_UPLOAD_URL", resolved.outputUploadUrl());

@@ -3,6 +3,7 @@ package com.xjicloud.admin;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xjicloud.admin.EciManagerCloudResourceConfigDtos.CloudResourceConfigView;
 import com.xjicloud.common.BusinessException;
 import com.xjicloud.config.EciManagerProperties;
 import java.io.IOException;
@@ -93,6 +94,35 @@ public class EciManagerClient {
         }
     }
 
+    public CloudResourceConfigView getCloudResourceConfig() {
+        requireApiKey();
+        return exchangeCloudResourceConfig(() -> restClient.get()
+                .uri("/api/v1/eci/runtime-config")
+                .header("X-Api-Key", properties.apiKey().trim())
+                .retrieve()
+                .body(String.class));
+    }
+
+    public CloudResourceConfigView saveCloudResourceConfigSection(String section, Map<String, String> values) {
+        requireApiKey();
+        return exchangeCloudResourceConfig(() -> restClient.put()
+                .uri("/api/v1/eci/runtime-config/{section}", section)
+                .header("X-Api-Key", properties.apiKey().trim())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(values == null ? Map.of() : values)
+                .retrieve()
+                .body(String.class));
+    }
+
+    public CloudResourceConfigView resetCloudResourceConfigSection(String section) {
+        requireApiKey();
+        return exchangeCloudResourceConfig(() -> restClient.delete()
+                .uri("/api/v1/eci/runtime-config/{section}", section)
+                .header("X-Api-Key", properties.apiKey().trim())
+                .retrieve()
+                .body(String.class));
+    }
+
     private void exchangePut(Map<String, String> body, String resource, String accessKeyId, String accessKeySecret) {
         try {
             String responseBody = restClient.put()
@@ -152,6 +182,35 @@ public class EciManagerClient {
             throw new BusinessException("eci-manager 不可达", HttpStatus.BAD_GATEWAY);
         } catch (RestClientResponseException ex) {
             throw new BusinessException("eci-manager 训练任务请求失败", HttpStatus.BAD_GATEWAY);
+        } catch (Exception ex) {
+            throw new BusinessException("eci-manager 返回无效响应", HttpStatus.BAD_GATEWAY);
+        }
+    }
+
+    private CloudResourceConfigView exchangeCloudResourceConfig(Supplier<String> request) {
+        try {
+            String responseBody = request.get();
+            if (responseBody == null || responseBody.isBlank()) {
+                throw new BusinessException("eci-manager 返回空响应", HttpStatus.BAD_GATEWAY);
+            }
+            EciEnvelope envelope = parseEnvelope(responseBody);
+            if (envelope == null) {
+                throw new BusinessException("eci-manager 返回无效响应", HttpStatus.BAD_GATEWAY);
+            }
+            if (!envelope.success()) {
+                throw new BusinessException("eci-manager 云资源配置请求失败", HttpStatus.BAD_GATEWAY);
+            }
+            JsonNode data = envelope.data();
+            if (data == null || data.isNull()) {
+                throw new BusinessException("eci-manager 返回空响应", HttpStatus.BAD_GATEWAY);
+            }
+            return objectMapper.treeToValue(data, CloudResourceConfigView.class);
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (ResourceAccessException ex) {
+            throw new BusinessException("eci-manager 不可达", HttpStatus.BAD_GATEWAY);
+        } catch (RestClientResponseException ex) {
+            throw mapResponseException(ex, "cloud-resource-config", null, null, true);
         } catch (Exception ex) {
             throw new BusinessException("eci-manager 返回无效响应", HttpStatus.BAD_GATEWAY);
         }

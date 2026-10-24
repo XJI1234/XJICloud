@@ -86,6 +86,18 @@ public class EciTaskEntity {
     @Column
     private String containerLogTail;
 
+    /**
+     * 提交任务时的失败日志尾部行数快照；旧行缺少该列时为 null，由生命周期回退当前配置。
+     */
+    @Column(name = "failure_log_tail_lines")
+    private Integer failureLogTailLines;
+
+    /**
+     * 提交任务时的失败删除宽限秒数快照；旧行缺少该列时为 null，不得当成 0 立即删除。
+     */
+    @Column(name = "failure_log_grace_sec")
+    private Integer failureLogGraceSec;
+
     /** 任务进入 RUNNING 的时间；用于超时判断。 */
     @Column
     private Instant startedAt;
@@ -250,6 +262,22 @@ public class EciTaskEntity {
 
     public void setContainerLogTail(String containerLogTail) {
         this.containerLogTail = containerLogTail;
+    }
+
+    public Integer getFailureLogTailLines() {
+        return failureLogTailLines;
+    }
+
+    public void setFailureLogTailLines(Integer failureLogTailLines) {
+        this.failureLogTailLines = failureLogTailLines;
+    }
+
+    public Integer getFailureLogGraceSec() {
+        return failureLogGraceSec;
+    }
+
+    public void setFailureLogGraceSec(Integer failureLogGraceSec) {
+        this.failureLogGraceSec = failureLogGraceSec;
     }
 
     public Instant getStartedAt() {

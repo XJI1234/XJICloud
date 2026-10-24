@@ -43,6 +43,26 @@ class AliyunEciProviderIdempotencyTest {
     }
 
     @Test
+    void createSendsCapturedNetworkTargetFromSpec() throws Exception {
+        // 排队任务的目标在提交时固化：请求字段以 spec 为准，不用当前 EciProperties
+        IAcsClient client = mock(IAcsClient.class);
+        CreateContainerGroupResponse response = mock(CreateContainerGroupResponse.class);
+        when(response.getContainerGroupId()).thenReturn("eci-created");
+        when(client.getAcsResponse(any(CreateContainerGroupRequest.class))).thenReturn(response);
+        AliyunEciProvider provider = new AliyunEciProvider(properties(), client);
+
+        provider.create(specWithNetwork("cn-beijing", "vpc-submitted", "vsw-submitted", "sg-submitted"),
+                "8b71e826-7ad1-4c60-99f4-5aaed5792689");
+
+        ArgumentCaptor<CreateContainerGroupRequest> captor = ArgumentCaptor.forClass(CreateContainerGroupRequest.class);
+        org.mockito.Mockito.verify(client).getAcsResponse(captor.capture());
+        CreateContainerGroupRequest request = captor.getValue();
+        assertThat(request.getRegionId()).isEqualTo("cn-beijing");
+        assertThat(request.getVSwitchId()).isEqualTo("vsw-submitted");
+        assertThat(request.getSecurityGroupId()).isEqualTo("sg-submitted");
+    }
+
+    @Test
     void retryWithSameClientTokenBuildsIdenticalCreateRequestIdentity() throws Exception {
         IAcsClient client = mock(IAcsClient.class);
         CreateContainerGroupResponse response = mock(CreateContainerGroupResponse.class);
@@ -149,5 +169,12 @@ class AliyunEciProviderIdempotencyTest {
     private static CreateSpec spec() {
         return new CreateSpec("idempotency-test", "nginx:alpine", 1.0, 2.0,
                 Map.of(), null, null, "Never", null, null, null, null);
+    }
+
+    private static CreateSpec specWithNetwork(
+            String regionId, String vpcId, String vswitchId, String securityGroupId) {
+        return new CreateSpec("idempotency-test", "nginx:alpine", 1.0, 2.0,
+                Map.of(), null, null, "Never", null, null, null, null,
+                regionId, vpcId, vswitchId, securityGroupId);
     }
 }

@@ -381,6 +381,15 @@ public class LifecycleActionService {
     public void completeCreateFailedAndRequestDelete(
             UUID actionId, UUID leaseToken, String reason, String logTail,
             String cloudStatus, String statusReason) {
+        completeCreateFailedAndRequestDelete(
+                actionId, leaseToken, reason, logTail, cloudStatus, statusReason,
+                properties.getFailureLogGraceSec());
+    }
+
+    @Transactional
+    public void completeCreateFailedAndRequestDelete(
+            UUID actionId, UUID leaseToken, String reason, String logTail,
+            String cloudStatus, String statusReason, int failureLogGraceSec) {
         LockedCreate locked = lockCreateInstanceAndAction(actionId);
         LifecycleActionEntity action = locked == null ? null : locked.action();
         EciInstanceEntity instance = locked == null ? null : locked.instance();
@@ -399,7 +408,7 @@ public class LifecycleActionService {
         }
         instanceRepository.save(instance);
         if (hasText(instance.getCloudInstanceId())) {
-            requestDelete(instance.getId(), now.plusSeconds(Math.max(0, properties.getFailureLogGraceSec())));
+            requestDelete(instance.getId(), now.plusSeconds(Math.max(0, failureLogGraceSec)));
         }
         completeAction(action, now);
         repository.save(action);
@@ -407,6 +416,11 @@ public class LifecycleActionService {
 
     @Transactional
     public void timeoutCreateBusiness(UUID actionId, UUID leaseToken) {
+        timeoutCreateBusiness(actionId, leaseToken, properties.getCreateTimeoutSec());
+    }
+
+    @Transactional
+    public void timeoutCreateBusiness(UUID actionId, UUID leaseToken, int createTimeoutSec) {
         LockedCreate locked = lockCreateInstanceAndAction(actionId);
         LifecycleActionEntity action = locked == null ? null : locked.action();
         EciInstanceEntity instance = locked == null ? null : locked.instance();
@@ -415,7 +429,7 @@ public class LifecycleActionService {
         }
         Instant now = clock.instant();
         if (instance.getStatus() == InstanceStatus.CREATING || instance.getStatus() == InstanceStatus.RUNNING) {
-            failBusinessInstance(instance, "等待 Running 超时（" + properties.getCreateTimeoutSec() + "s）", now);
+            failBusinessInstance(instance, "等待 Running 超时（" + createTimeoutSec + "s）", now);
             instanceRepository.save(instance);
         }
     }

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.common.BusinessException;
+import com.xjicloud.eci.config.CloudResourceConfigService;
+import com.xjicloud.eci.config.CloudResourceConfigSnapshot;
 import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.instance.dto.CreateInstanceRequest;
 import com.xjicloud.eci.instance.dto.InstanceResponse;
@@ -56,6 +58,7 @@ public class EciInstanceService {
     /** 任务状态回写；单测可传 null。 */
     private final EciTaskService taskService;
     private final EciTaskRepository taskRepository;
+    private final CloudResourceConfigService cloudResourceConfigService;
 
     @Autowired
     public EciInstanceService(
@@ -67,7 +70,8 @@ public class EciInstanceService {
             LifecycleActionService lifecycleActionService,
             Clock clock,
             EciTaskRepository taskRepository,
-            @Lazy EciInstanceService self) {
+            @Lazy EciInstanceService self,
+            CloudResourceConfigService cloudResourceConfigService) {
         this.repository = repository;
         this.properties = properties;
         this.eciProvider = eciProvider;
@@ -77,6 +81,21 @@ public class EciInstanceService {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
         this.self = self;
+        this.cloudResourceConfigService = cloudResourceConfigService;
+    }
+
+    public EciInstanceService(
+            EciInstanceRepository repository,
+            EciProperties properties,
+            EciProvider eciProvider,
+            ObjectMapper objectMapper,
+            EciTaskService taskService,
+            LifecycleActionService lifecycleActionService,
+            Clock clock,
+            EciTaskRepository taskRepository,
+            EciInstanceService self) {
+        this(repository, properties, eciProvider, objectMapper, taskService,
+                lifecycleActionService, clock, taskRepository, self, null);
     }
 
     /** Retained for the focused service tests that construct this service without Spring. */
@@ -99,7 +118,7 @@ public class EciInstanceService {
      */
     @Transactional
     public InstanceResponse create(CreateInstanceRequest request) {
-        return createInternal(request, null);
+        return createInternal(request, null, null);
     }
 
     /** 任务驱动创建：绑定 {@code taskId}。 */
@@ -108,15 +127,29 @@ public class EciInstanceService {
         if (taskId == null) {
             throw new BusinessException("taskId 不能为空");
         }
-        return createInternal(request, taskId);
+        return createInternal(request, taskId, null);
     }
 
-    private InstanceResponse createInternal(CreateInstanceRequest request, UUID taskId) {
+    @Transactional
+    public InstanceResponse createForTask(
+            CreateInstanceRequest request, UUID taskId, CloudResourceConfigSnapshot configSnapshot) {
+        if (taskId == null) {
+            throw new BusinessException("taskId 不能为空");
+        }
+        return createInternal(request, taskId, configSnapshot);
+    }
+
+    private InstanceResponse createInternal(
+            CreateInstanceRequest request, UUID taskId, CloudResourceConfigSnapshot configSnapshot) {
+        if (configSnapshot == null && cloudResourceConfigService != null) {
+            configSnapshot = cloudResourceConfigService.snapshot();
+        }
         Instant now = Instant.now();
         UUID id = UUID.randomUUID();
 
         String name = StringUtils.hasText(request.getName()) ? request.getName() : "demo-" + id.toString().substring(0, 8);
-        String image = StringUtils.hasText(request.getImage()) ? request.getImage() : properties.getDefaultImage();
+        String image = StringUtils.hasText(request.getImage()) ? request.getImage()
+                : configSnapshot != null ? configSnapshot.advanced().defaultImage() : properties.getDefaultImage();
         double cpu = request.getCpu() != null ? request.getCpu() : properties.getDefaultCpu();
         double memory = request.getMemory() != null ? request.getMemory() : properties.getDefaultMemory();
         Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
@@ -125,7 +158,10 @@ public class EciInstanceService {
         String imageSnapshotId = StringUtils.hasText(request.getImageSnapshotId())
                 ? request.getImageSnapshotId().trim()
                 : null;
-        String shmSize = resolveShmSize(request.getShmSize(), memory);
+        String defaultShmSize = configSnapshot != null
+                ? configSnapshot.advanced().defaultShmSize()
+                : properties.getDefaultShmSize();
+        String shmSize = resolveShmSize(request.getShmSize(), memory, defaultShmSize);
         String restartPolicy = StringUtils.hasText(request.getRestartPolicy())
                 ? request.getRestartPolicy().trim()
                 : properties.getDefaultRestartPolicy();
@@ -148,6 +184,15 @@ public class EciInstanceService {
         entity.setImageSnapshotId(imageSnapshotId);
         entity.setShmSize(shmSize);
         entity.setRestartPolicy(restartPolicy);
+        // 提交时的配置快照随实例固化；排队后才创建的任务不得改用后来的配置
+        CloudResourceConfigSnapshot.Network network = configSnapshot != null ? configSnapshot.network() : null;
+        entity.setRegionId(network != null ? network.regionId() : properties.getRegionId());
+        entity.setVpcId(network != null ? network.vpcId() : properties.getVpcId());
+        entity.setVswitchId(network != null ? network.vswitchId() : properties.getVswitchId());
+        entity.setSecurityGroupId(network != null ? network.securityGroupId() : properties.getSecurityGroupId());
+        entity.setCreateTimeoutSec(configSnapshot != null
+                ? configSnapshot.advanced().createTimeoutSec()
+                : properties.getCreateTimeoutSec());
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
         repository.save(entity);
@@ -266,6 +311,11 @@ public class EciInstanceService {
         return toResponse(findEntity(id));
     }
 
+    @Transactional(readOnly = true)
+    public String getRegionId(UUID id) {
+        return repository.findById(id).map(EciInstanceEntity::getRegionId).orElse(null);
+    }
+
     @Transactional
     public void recordProviderStatus(UUID id, String cloudStatus, String statusReason) {
         lifecycleActionService.recordProviderStatus(id, cloudStatus, statusReason);
@@ -285,7 +335,7 @@ public class EciInstanceService {
         }
 
         String describedCloudInstanceId = entity.getCloudInstanceId();
-        CloudInstanceView view = eciProvider.describe(describedCloudInstanceId);
+        CloudInstanceView view = eciProvider.describe(describedCloudInstanceId, entity.getRegionId());
         return self == null
                 ? applyRefresh(id, describedCloudInstanceId, view)
                 : self.applyRefresh(id, describedCloudInstanceId, view);
@@ -429,8 +479,12 @@ public class EciInstanceService {
     }
 
     private String resolveShmSize(String raw, double memoryGiB) {
+        return resolveShmSize(raw, memoryGiB, properties.getDefaultShmSize());
+    }
+
+    private String resolveShmSize(String raw, double memoryGiB, String defaultShmSize) {
         try {
-            return ShmSize.resolve(raw, properties.getDefaultShmSize(), memoryGiB);
+            return ShmSize.resolve(raw, defaultShmSize, memoryGiB);
         } catch (IllegalArgumentException e) {
             throw new BusinessException(e.getMessage());
         }

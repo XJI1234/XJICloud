@@ -10,6 +10,8 @@ import com.xjicloud.eci.provider.CloudOperationException;
 import com.xjicloud.eci.provider.CloudOperationKind;
 import com.xjicloud.eci.provider.CreateSpec;
 import com.xjicloud.eci.provider.EciProvider;
+import com.xjicloud.eci.task.EciTaskEntity;
+import com.xjicloud.eci.task.EciTaskRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -35,6 +37,7 @@ public class LifecycleActionProcessor {
     private final EciProvider provider;
     private final EciProperties properties;
     private final Clock clock;
+    private final EciTaskRepository taskRepository;
 
     public LifecycleActionProcessor(
             LifecycleActionRepository actionRepository,
@@ -42,13 +45,15 @@ public class LifecycleActionProcessor {
             LifecycleActionService actionService,
             EciProvider provider,
             EciProperties properties,
-            Clock clock) {
+            Clock clock,
+            EciTaskRepository taskRepository) {
         this.actionRepository = actionRepository;
         this.instanceRepository = instanceRepository;
         this.actionService = actionService;
         this.provider = provider;
         this.properties = properties;
         this.clock = clock;
+        this.taskRepository = taskRepository;
     }
 
     public void process(UUID actionId, UUID leaseToken) {
@@ -80,9 +85,9 @@ public class LifecycleActionProcessor {
         }
 
         if (action.getPhase() == LifecycleActionPhase.DELETE_REQUEST) {
-            requestCloudDelete(action, leaseToken, cloudId);
+            requestCloudDelete(action, leaseToken, cloudId, instance.getRegionId());
         } else if (action.getPhase() == LifecycleActionPhase.WAIT_DELETED) {
-            pollCloudDeletion(action, leaseToken, cloudId);
+            pollCloudDeletion(action, leaseToken, cloudId, instance.getRegionId());
         } else {
             recordFailure(action, leaseToken,
                     new IllegalStateException("unsupported DELETE phase: " + action.getPhase()));
@@ -107,8 +112,11 @@ public class LifecycleActionProcessor {
             actionService.failCreate(action.getId(), leaseToken, "CREATE client token does not match local instance");
             return;
         }
-        if (isCreateTimedOut(action)) {
-            actionService.timeoutCreateBusiness(action.getId(), leaseToken);
+        int createTimeoutSec = instance.getCreateTimeoutSec() != null
+                ? instance.getCreateTimeoutSec()
+                : properties.getCreateTimeoutSec();
+        if (isCreateTimedOut(action, createTimeoutSec)) {
+            actionService.timeoutCreateBusiness(action.getId(), leaseToken, createTimeoutSec);
             if (hasText(instance.getCloudInstanceId())) {
                 actionService.finishCreateAndRequestDelete(action.getId(), leaseToken);
                 return;
@@ -165,7 +173,7 @@ public class LifecycleActionProcessor {
         }
         CloudInstanceView view;
         try {
-            view = provider.describe(instance.getCloudInstanceId());
+            view = provider.describe(instance.getCloudInstanceId(), instance.getRegionId());
         } catch (Exception exception) {
             actionService.retryCreate(action.getId(), leaseToken, messageOf(exception));
             return;
@@ -175,16 +183,31 @@ public class LifecycleActionProcessor {
                     action.getId(), leaseToken, view.status(), view.statusDetail());
         } else if (view.isFailed()) {
             String reason = view.statusDetail() == null ? view.status() : view.statusDetail();
+            FailureCaptureSettings settings = failureCaptureSettings(instance);
             actionService.completeCreateFailedAndRequestDelete(action.getId(), leaseToken, reason,
-                    fetchLogSafe(instance.getCloudInstanceId()), view.status(), view.statusDetail());
+                    fetchLogSafe(instance.getCloudInstanceId(), settings.tailLines(), instance.getRegionId()),
+                    view.status(), view.statusDetail(), settings.graceSec());
         } else {
             actionService.waitForRunning(action.getId(), leaseToken, view.status(), view.statusDetail());
         }
     }
 
-    private String fetchLogSafe(String cloudInstanceId) {
+    private FailureCaptureSettings failureCaptureSettings(EciInstanceEntity instance) {
+        EciTaskEntity task = instance.getTaskId() == null
+                ? null
+                : taskRepository.findById(instance.getTaskId()).orElse(null);
+        int tailLines = task != null && task.getFailureLogTailLines() != null
+                ? task.getFailureLogTailLines()
+                : properties.getFailureLogTailLines();
+        int graceSec = task != null && task.getFailureLogGraceSec() != null
+                ? task.getFailureLogGraceSec()
+                : properties.getFailureLogGraceSec();
+        return new FailureCaptureSettings(tailLines, Math.max(0, graceSec));
+    }
+
+    private String fetchLogSafe(String cloudInstanceId, int tailLines, String regionId) {
         try {
-            String logTail = provider.fetchContainerLog(cloudInstanceId, properties.getFailureLogTailLines());
+            String logTail = provider.fetchContainerLog(cloudInstanceId, tailLines, regionId);
             return logTail == null || logTail.isBlank() ? null : logTail;
         } catch (Exception exception) {
             log.warn("fetchContainerLog failed cloudInstanceId={}: {}", cloudInstanceId, exception.getMessage());
@@ -193,6 +216,18 @@ public class LifecycleActionProcessor {
     }
 
     private CreateSpec createSpec(EciInstanceEntity instance) {
+        String regionId = instance.getRegionId();
+        String vswitchId = instance.getVswitchId();
+        String securityGroupId = instance.getSecurityGroupId();
+        if (!properties.isMock()) {
+            // 在写入未知调用标记前校验，并固定旧行的回退值，避免 Provider 再读取变化后的配置。
+            regionId = requireCreateNetworkValue("regionId",
+                    regionId != null ? regionId : properties.getRegionId());
+            vswitchId = requireCreateNetworkValue("vswitchId",
+                    vswitchId != null ? vswitchId : properties.getVswitchId());
+            securityGroupId = requireCreateNetworkValue("securityGroupId",
+                    securityGroupId != null ? securityGroupId : properties.getSecurityGroupId());
+        }
         return new CreateSpec(
                 instance.getName(),
                 instance.getImage(),
@@ -205,7 +240,18 @@ public class LifecycleActionProcessor {
                 readList(instance.getCommandJson()),
                 readList(instance.getArgsJson()),
                 instance.getImageSnapshotId(),
-                instance.getShmSize());
+                instance.getShmSize(),
+                regionId,
+                instance.getVpcId(),
+                vswitchId,
+                securityGroupId);
+    }
+
+    private static String requireCreateNetworkValue(String fieldName, String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return value;
     }
 
     private Map<String, String> readMap(String json) {
@@ -230,9 +276,9 @@ public class LifecycleActionProcessor {
         }
     }
 
-    private boolean isCreateTimedOut(LifecycleActionEntity action) {
+    private boolean isCreateTimedOut(LifecycleActionEntity action, int createTimeoutSec) {
         return action.getCreatedAt() != null
-                && clock.instant().isAfter(action.getCreatedAt().plusSeconds(properties.getCreateTimeoutSec()));
+                && clock.instant().isAfter(action.getCreatedAt().plusSeconds(createTimeoutSec));
     }
 
     private static boolean isLegacyUnknownMarker(LifecycleActionEntity action) {
@@ -250,9 +296,10 @@ public class LifecycleActionProcessor {
         return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
-    private void requestCloudDelete(LifecycleActionEntity action, UUID leaseToken, String cloudId) {
+    private void requestCloudDelete(
+            LifecycleActionEntity action, UUID leaseToken, String cloudId, String regionId) {
         try {
-            provider.delete(cloudId);
+            provider.delete(cloudId, regionId);
         } catch (Exception exception) {
             recordFailure(action, leaseToken, exception);
             return;
@@ -266,10 +313,11 @@ public class LifecycleActionProcessor {
                 action.getAttemptCount(), null);
     }
 
-    private void pollCloudDeletion(LifecycleActionEntity action, UUID leaseToken, String cloudId) {
+    private void pollCloudDeletion(
+            LifecycleActionEntity action, UUID leaseToken, String cloudId, String regionId) {
         CloudInstanceView view;
         try {
-            view = provider.describe(cloudId);
+            view = provider.describe(cloudId, regionId);
         } catch (Exception exception) {
             recordFailure(action, leaseToken, exception);
             return;
@@ -326,6 +374,9 @@ public class LifecycleActionProcessor {
                 retry.getRetryInitialSec(), retry.getRetryMaxSec());
         actionService.updateDeleteStep(action.getId(), leaseToken, action.getUpdatedAt(), action.getPhase(),
                 nextAttemptAt, attemptCount, error);
+    }
+
+    private record FailureCaptureSettings(int tailLines, int graceSec) {
     }
 
     private static boolean hasLease(LifecycleActionEntity action, UUID leaseToken) {

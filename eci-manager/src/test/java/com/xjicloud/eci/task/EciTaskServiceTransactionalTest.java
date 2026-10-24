@@ -1,6 +1,7 @@
 package com.xjicloud.eci.task;
 
 import com.xjicloud.eci.instance.EciInstanceService;
+import com.xjicloud.eci.config.CloudResourceConfigSnapshot;
 import com.xjicloud.eci.task.dto.CreateTaskRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +36,7 @@ class EciTaskServiceTransactionalTest {
 
     @Test
     void createRollsBackTaskWhenInstanceCreateFails() {
-        when(instanceService.createForTask(any(), any()))
+        when(instanceService.createForTask(any(), any(), any(CloudResourceConfigSnapshot.class)))
                 .thenThrow(new RuntimeException("instance create failed"));
 
         CreateTaskRequest request = new CreateTaskRequest();

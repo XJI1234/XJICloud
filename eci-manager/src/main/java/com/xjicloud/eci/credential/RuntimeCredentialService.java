@@ -1,6 +1,7 @@
 package com.xjicloud.eci.credential;
 
 import com.xjicloud.eci.common.BusinessException;
+import com.xjicloud.eci.config.CloudResourceConfigService;
 import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.config.OssProperties;
 import com.xjicloud.eci.credential.dto.PutRuntimeCredentialRequest;
@@ -17,11 +18,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 /**
  * 每种资源一把当前 AK：种子、查询、PUT 落盘并热重建。GET 永不返回 SK。
@@ -37,7 +40,8 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
     private final ObjectProvider<EciProvider> eciProvider;
     private final ObjectProvider<OssStorageService> ossStorageService;
     private final RuntimeCredentialTester tester;
-    private final ReentrantLock putLock = new ReentrantLock();
+    @Autowired(required = false)
+    private CloudResourceConfigService runtimeCoordinator;
     private TransactionTemplate transactionTemplate;
 
     public RuntimeCredentialService(
@@ -60,6 +64,22 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
+    private <T> T coordinate(Supplier<T> action) {
+        if (runtimeCoordinator != null) {
+            return runtimeCoordinator.coordinate(action);
+        }
+        synchronized (this) {
+            return action.get();
+        }
+    }
+
+    private void coordinate(Runnable action) {
+        coordinate(() -> {
+            action.run();
+            return null;
+        });
+    }
+
     static String idKey(AliyunResource resource) {
         return "current." + resource.name() + ".access-key-id";
     }
@@ -70,8 +90,10 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
 
     /** 行不存在且 properties 非空才写入。 */
     public void seedIfAbsent() {
-        seedPair(AliyunResource.ECI_OPENAPI, eciProperties.getAccessKeyId(), eciProperties.getAccessKeySecret());
-        seedPair(AliyunResource.OSS, ossProperties.getAccessKey(), ossProperties.getSecretKey());
+        coordinate(() -> {
+            seedPair(AliyunResource.ECI_OPENAPI, eciProperties.getAccessKeyId(), eciProperties.getAccessKeySecret());
+            seedPair(AliyunResource.OSS, ossProperties.getAccessKey(), ossProperties.getSecretKey());
+        });
     }
 
     @Override
@@ -81,26 +103,32 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
     }
 
     public AccessKeyPair currentPair(AliyunResource resource) {
-        return new AccessKeyPair(read(idKey(resource)), read(secretKey(resource)));
+        return coordinate(() -> {
+            return new AccessKeyPair(read(idKey(resource)), read(secretKey(resource)));
+        });
     }
 
     /** 全部单例就绪后按库钥建 OSS 客户端（避免 {@code eciProvider} Bean 创建时 OSS 尚未存在）。 */
     public void applyPersistedOssKeys() {
-        AccessKeyPair pair = currentPair(AliyunResource.OSS);
-        if (!pair.isComplete()) {
-            return;
-        }
-        OssStorageService oss = ossStorageService.getIfAvailable();
-        if (oss != null) {
-            oss.applyRuntimeKeys(pair.accessKeyId(), pair.accessKeySecret());
-        }
+        coordinate(() -> {
+            AccessKeyPair pair = currentPair(AliyunResource.OSS);
+            if (!pair.isComplete()) {
+                return;
+            }
+            OssStorageService oss = ossStorageService.getIfAvailable();
+            if (oss != null) {
+                oss.applyRuntimeKeys(pair.accessKeyId(), pair.accessKeySecret());
+            }
+        });
     }
 
     public RuntimeCredentialsResponse snapshot() {
-        Map<String, RuntimeResourceStatus> resources = new LinkedHashMap<>();
-        resources.put(AliyunResource.ECI_OPENAPI.name(), eciStatus());
-        resources.put(AliyunResource.OSS.name(), ossStatus());
-        return new RuntimeCredentialsResponse(eciProperties.isMock(), resources);
+        return coordinate(() -> {
+            Map<String, RuntimeResourceStatus> resources = new LinkedHashMap<>();
+            resources.put(AliyunResource.ECI_OPENAPI.name(), eciStatus());
+            resources.put(AliyunResource.OSS.name(), ossStatus());
+            return new RuntimeCredentialsResponse(eciProperties.isMock(), resources);
+        });
     }
 
     /**
@@ -119,15 +147,12 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
     }
 
     public RuntimeCredentialsResponse putCurrent(PutRuntimeCredentialRequest request) {
-        putLock.lock();
-        try {
+        return coordinate(() -> {
             if (transactionTemplate != null) {
                 return transactionTemplate.execute(status -> putCurrentInTransaction(request));
             }
             return putCurrentInTransaction(request);
-        } finally {
-            putLock.unlock();
-        }
+        });
     }
 
     private RuntimeCredentialsResponse putCurrentInTransaction(PutRuntimeCredentialRequest request) {
@@ -161,7 +186,27 @@ public class RuntimeCredentialService implements SmartInitializingSingleton {
         }
         OssStorageService oss = ossStorageService.getIfAvailable();
         if (oss != null) {
-            oss.applyRuntimeKeys(accessKeyId, accessKeySecret);
+            OssStorageService.PreparedClients prepared = oss.prepare(
+                    ossProperties.isEnabled(), ossProperties.getEndpoint(), ossProperties.getRegion(),
+                    ossProperties.getBucket(), ossProperties.isPathStyleAccess(),
+                    ossProperties.getPresignExpirationMinutes(), accessKeyId, accessKeySecret);
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        oss.applyRuntime(prepared);
+                    }
+
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status != STATUS_COMMITTED) {
+                            prepared.close();
+                        }
+                    }
+                });
+            } else {
+                oss.applyRuntime(prepared);
+            }
         }
     }
 

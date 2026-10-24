@@ -4,7 +4,7 @@
 > 人类可读详细文档：[docs/设计与使用说明.md](docs/设计与使用说明.md)；**逐步测试（Mock/真云每条命令）：** [docs/测试说明.md](docs/测试说明.md)；快速上手：[README.md](README.md)。  
 > 主仓全局上下文见 [AGENT_CONTEXT.md](../docs/AGENT_CONTEXT.md)（若未收录本子工程，以本文为准）。
 
-**最后更新：** 2026-10-19（任务云端状态快照与安全取消契约）
+**最后更新：** 2026-10-24（云资源配置管理：集中定义、来源优先级、8081 接口与页面/代理约定）
 
 **3DGS：** 操作见 [`docs/3dgs-ECI使用说明.md`](docs/3dgs-ECI使用说明.md)（`submit-3dgs-standard.sh`，默认 `shmSize=8Gi`）。**失败取证已实现：** `fetchContainerLog` → 落库 `containerLogTail` → 持久化 not-before → DELETE；成功不存全量日志。仍待联合 3dgs：traceback 刷 stderr、`PYTHONUNBUFFERED=1`。
 
@@ -52,6 +52,17 @@
   - ✅ `POST /tasks` 支持可选 `clientRequestId`；同 key 返回既有任务，避免歧义重试创建第二个 ECI task
   - ✅ 主 backend 使用 `storage.mode=keys` 传输入对象 key 与固定输出 key，并显式命令运行 one-shot 训练入口
   - ✅ 重复 key 冲突时回滚新建事务，再读取唯一键胜出的既有任务；未提供 key 的旧调用仍每次新建
+- **进行中（云资源配置管理，2026-10-24）：**
+  - ✅ 8081 集中定义 15 项非密钥配置（网络 / OSS / 高级）：内部键、环境变量名、中文名称、默认值与校验规则
+  - 🔧 Task 2 第 1 轮生产修复已落地（来源解析数据库覆盖值 > 环境变量值 > 集中默认值、`eci_cloud_config` 持久化、不可变快照与运行时投影、Provider 创建前投影、分类键校验、配置与凭证统一协调），独立复审待进行
+  - ✅ `GET /api/v1/eci/runtime-config` 与 network / oss / advanced 的 PUT / DELETE（恢复默认），沿用 `X-Api-Key` 与 `{ success, message, data }`
+  - ✅ 8080 管理代理（Task 4）：已完成，独立 review 无阻断问题；主协作者反馈 backend 全量 110 项通过（本任务未重跑）
+  - ✅ Task 3：任务 image 按显式值 > 当前默认值解析；网络、默认值和 OSS 签名使用同一提交快照，任务与实例保存相同解析结果
+  - ✅ Task 3：实例固化可空 `eci_instance.create_timeout_sec` 和网络目标 `region_id` / `vpc_id` / `vswitch_id` / `security_group_id`；创建超时判断与文案使用同一超时快照，旧行 null 回退当前配置
+  - ✅ Task 3：任务提交时固化 `eci_task.failure_log_tail_lines` / `failure_log_grace_sec`（Integer 可空）；CREATE Failed 与 `TaskLifecycleWatcher` 优先用任务快照，旧记录或手动实例 null 时回退当前配置，并保持「抓日志 → 落库 → not-before → 删除」顺序
+  - ✅ Task 3：Describe、实时日志、删除请求及删除确认均使用实例 `region_id`；旧实例 null 时 Provider 回退当前配置
+  - ✅ Task 3：`CreateSpec` 末尾追加 regionId / vpcId / vswitchId / securityGroupId（保留旧 12 参构造），`AliyunEciProvider` 从 spec 快照取 RegionId / VSwitchId / SecurityGroupId，空则回退当前配置；VPC 无官方 CreateContainerGroup 字段，只作本地快照
+  - ✅ Task 5：Admin「云资源配置」页（同页、路由不变）已实现并独立审查 / 浏览器验证通过；契约见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4.5
 - **已交付（shm EmptyDir，2026-09-16）：**
   - ✅ `POST /tasks` / `POST /instances` 可选 `shmSize`；配置 `eci.default-shm-size`（默认空）
   - ✅ `AliyunEciProvider` 挂 Memory EmptyDir 到 `/dev/shm`；须 >64Mi 且严格小于容器 memory
@@ -146,7 +157,7 @@ eci-manager/
 
 | 文件 | 作用 |
 |------|------|
-| `.env` / `.env.example` | **推荐**：HTTP Api-Key、网络、**种子** `ECI_ACCESS_KEY_*` / `ECI_OSS_*`（`.env` gitignore） |
+| `.env` / `.env.example` | **推荐**：HTTP Api-Key、网络、**种子** `ECI_ACCESS_KEY_*` / `ECI_OSS_*`（`.env` gitignore）；15 项非密钥配置的**环境变量来源**，数据库覆盖优先 |
 | `scripts/load-env.sh` / `start.sh` | 加载 `.env`；`ALIBABA_CLOUD_*` **仅脚本**映射到 `ECI_ACCESS_KEY_*`（Java 不读） |
 | `application.yml` | 端口 8081、默认 mock、H2、任务轮询/超时、`failure-log-*`、`lifecycle-action.*`、`eci.console.open-browser` |
 | `eci.lifecycle-action.*` | 默认 `1000/20/60/2/300/5`：dispatcher 周期、批量、租约、初始退避、退避上限、ERROR 告警起始次数 |
@@ -249,6 +260,8 @@ HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把�
 
 **`ALIBABA_CLOUD_*` 仅脚本映射：** Java **不读**该变量。`scripts/load-env.sh` 在 `ECI_ACCESS_KEY_*` 为空且无 `ALIBABA_CLOUD_SECURITY_TOKEN` 时，才把它 export 成 `ECI_ACCESS_KEY_*`。成对非空的 `eci.access-key-id/secret`（通常来自该种子）走 **STATIC_AK**。当前钥为空时才回退 ECS RAM 角色 / SDK 默认链；这两种凭证都在首次云 API 请求时解析，不阻断服务启动。非 ECS 且无可用默认凭证时，首次云操作可能等待 IMDS 超时后以凭证错误失败。
 
+**非密钥云资源配置独立于密钥：** 网络 / OSS / 高级共 15 项非密钥配置由 8081 集中定义并持久化在 `eci_cloud_config`，可在 Admin「云资源配置」页（原「Key 管理」，同一页面）修改；ECI / OSS AccessKey 仍走 Key 管理与 `/runtime-credentials`。`ECI_API_KEY`、`ECI_ECS_RAM_ROLE_NAME`、`ALIBABA_CLOUD_*`（含 STS token）、`ECI_MOCK`、`ECI_CONSOLE_OPEN_BROWSER`、`SPRING_PROFILES_ACTIVE` 不纳入该页面。
+
 网络项仍要配：`api-key`、`region-id`、`vswitch-id`、`security-group-id`。启动时 `ProviderConfig` 还会校验轮询/超时间隔为正数。
 
 契约与 curl：[docs/API文档.md](docs/API文档.md) §5；配置详解：[docs/设计与使用说明.md](docs/设计与使用说明.md) §4。
@@ -275,7 +288,7 @@ HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把�
 
 | 方法 | 路径 | 行为 |
 |------|------|------|
-| POST | `/tasks` | **`image` 必填**；可选 `storage`、`shmSize`；立即返回 taskId + STARTING + instanceId |
+| POST | `/tasks` | `image` 优先用请求值，其次用当前 `ECI_DEFAULT_IMAGE`；两者为空返回 400；可选 `storage`、`shmSize`；立即返回 taskId + STARTING + instanceId |
 | GET | `/tasks?status=` | 列表 |
 | GET | `/tasks/{id}` | 详情（实例/云状态快照、清理证据；失败时含 `failureReason` + `containerLogTail`） |
 | GET | `/tasks/{id}/logs?tailLines=` | 运行中走 `fetchContainerLog`；终态走 `containerLogTail`；尚无 cloudId → 200 空日志 |
@@ -286,6 +299,8 @@ HTTP Api-Key 只从进程配置 `eci.api-key` 读取；`ECI_API_KEY` 只是把�
 有 `storage`：须 `eci.oss.enabled` 且配置完整，否则 **400 不落库**；注入 `XJI_OUTPUT_UPLOAD_URL` 等（禁止 AK/SK 进容器）。契约见 [docs/API文档.md](docs/API文档.md) §3.1。
 
 失败取证字段：`failureReason` 仍为短文案（≤1000）；容器日志尾部落独立字段 **`containerLogTail`**（`@Lob`），实例删除后仍可从 `GET /tasks/{id}` 读取。
+
+任务提交时另固化失败取证快照 **`failure_log_tail_lines`** / **`failure_log_grace_sec`**（均为可空 `Integer`）；升级前旧行为 `null`，生命周期回退当前配置，不按 0 处理。实例表新增可空 `create_timeout_sec`（`Integer`）和网络目标快照 `region_id` / `vpc_id` / `vswitch_id` / `security_group_id`；创建超时检查与失败文案使用同一 `create_timeout_sec`，旧实例 null 才回退当前配置。Describe、实时日志、删除及删除确认使用实例地域快照。VPC 无官方 `CreateContainerGroup` 请求字段（SDK 1.3.3 已确认），只作本地配置语义快照。使用 `ddl-auto: validate` 的已有数据库需增加可空 `eci_instance.create_timeout_sec INTEGER`，无需回填。
 
 TaskResponse 新增 `instanceStatus`、`cloudStatus`、`statusReason`、`cleanupConfirmed`，字段名与主 backend 消费端一致。`statusReason` 只取 provider 状态说明，经 URL、凭据字段、环境变量赋值检测后限长；命中敏感格式时返回固定安全文案，不复制 SDK 异常消息。`cleanupConfirmed` 只有关联实例状态为 `TERMINATED` 才为 true；缺失实例、未知 CREATE、空/未知云状态或仍待删除时为 false，DELETE 受理不作为清理证据。
 
@@ -302,6 +317,18 @@ TaskResponse 新增 `instanceStatus`、`cloudStatus`、`statusReason`、`cleanup
 | POST | `/runtime-credentials/test` | 测草稿或已保存当前钥；不改当前云钥 |
 
 `resource`：`ECI_OPENAPI` \| `OSS`。Mock 下测 ECI → 400。OSS 缺 endpoint/bucket → 400。完整字段见 [docs/API文档.md](docs/API文档.md) §5。
+
+### 云资源配置（8081 / 8080）
+
+| 方法 | 路径 | 行为 |
+|------|------|------|
+| GET | `/runtime-config` | network / oss / advanced 三类的最终值、来源（`database` / `environment` / `default`）与中文名称 |
+| PUT | `/runtime-config/network` | 保存单一分类（`oss` / `advanced` 同理）；请求体是「配置键 → 文本值」，布尔传 `true` / `false` |
+| DELETE | `/runtime-config/network` | 删除该分类的数据库覆盖行，恢复环境变量 / 集中默认值（`oss` / `advanced` 同理） |
+
+来源优先级：**数据库覆盖值 > 环境变量值 > 集中定义默认值**；数据库中的空字符串是明确保存的空值，不回退。保存失败返回字段级错误，不写库、不替换当前快照。8080 管理代理：`GET` / `PUT` / `DELETE /api/v1/admin/cloud-resource-config[/network|/oss|/advanced]`，需管理员 JWT，只转发、不落库。15 项清单、默认值、页面行为与任务快照规则见 [docs/设计与使用说明.md](docs/设计与使用说明.md) §4.5。
+
+云资源配置 Mock 验收必须使用 `SPRING_DATASOURCE_URL='jdbc:h2:mem:cloud-config-check;DB_CLOSE_DELAY=-1'` 的独立实例（验证端口 `18081`），不能沿用默认 `./data/eci-manager` 持久库。8080 代理及 Admin 浏览器验收必须经专用 backend 连接此实例，backend 自身也用独立内存库；不得复用现有配置库。按 [docs/设计与使用说明.md](docs/设计与使用说明.md) §7 的编号步骤执行，不加载真实 `.env`；断言集中默认值前在子 Shell 清除 15 项受管环境覆盖。内存库只在本次进程内保留数据，不用于验证跨重启持久化。
 
 ### 其它
 
@@ -329,6 +356,9 @@ TaskResponse 新增 `instanceStatus`、`cloudStatus`、`statusReason`、`cleanup
 | 生产选型 ECI/CCI | 待定，不阻塞 |
 | 云凭证 | 每 resource 一把当前钥（落盘+热切）；`.env` 仅种子；Java 不读 `ALIBABA_CLOUD_*`；成对 AK → STATIC_AK；空则 RAM/默认链 |
 | 8081 目录 | 8081 不提供；列表与绑定已由主后端 8080 管理 |
+| 云资源配置 | 15 项非密钥项（网络 4 / OSS 6 / 高级 5）由 8081 集中定义 + `eci_cloud_config` 覆盖；优先级固定 DB > 环境变量 > 集中默认；分类 DELETE 恢复默认；空串是显式覆盖 |
+| 配置生效 | 保存后对后续任务与操作生效；已提交任务用创建时的快照（镜像、共享内存、网络目标、OSS 解析、失败取证参数） |
+| 管理入口 | Admin「云资源配置」页（原「Key 管理」，同一页面、路由不变）；8080 只转发；不纳入 `ECI_API_KEY`、STS、RAM 角色、`ECI_MOCK`、浏览器开关 |
 | P0 范围 | Task 1–8 完成；动作恢复、删除重试、取消收敛与 Mock 验证已纳入 |
 | `notifyTaskOnStatusChange` 不通知 TERMINATED | **有意为之**；SUCCEEDED 由 `TaskLifecycleWatcher` 在 Describe=Succeeded 且实例 TERMINATED 后写入 |
 | 手动实例 | 云终态不触发本地自动删（无 task watcher）；见 `ManualInstanceNoAutoDeleteIT` |
@@ -463,8 +493,10 @@ curl -s -X POST "$BASE/api/v1/eci/tasks/$TASK_ID/cancel" -H "X-Api-Key: $ECI_API
 cd eci-manager
 source ../.tools/env.sh
 
-# Mock 操作台（启动后打开 http://127.0.0.1:8081/）:
-./scripts/start.sh mock
+# Mock 独立验证实例（端口 18081；不加载 .env；退出后清空内存库）:
+SPRING_DATASOURCE_URL='jdbc:h2:mem:cloud-config-check;DB_CLOSE_DELAY=-1' \
+  SERVER_PORT=18081 SPRING_PROFILES_ACTIVE=dev ECI_MOCK=true \
+  ECI_CONSOLE_OPEN_BROWSER=false mvn spring-boot:run
 
 # 真云操作台（计费；须 .env）:
 #   cp .env.example .env
@@ -531,6 +563,9 @@ source ../.tools/env.sh
 | `src/.../lifecycle/action/LifecycleActionProcessor.java` | 单步 CREATE/DELETE/Describe 处理，不循环、不 sleep |
 | `src/.../lifecycle/action/LifecycleActionService.java` | 动作幂等、实例终态和任务终态收敛 |
 | `src/.../config/EciProperties.java` | 含失败取证、`lifecycleAction` 六项配置、`defaultShmSize`、`console.openBrowser` |
+| `src/.../config/CloudResourceConfigKey.java` | 15 项云资源配置键：内部键、环境变量名、分类、中文名称、默认值与值类型 |
+| `src/.../config/CloudResourceConfigService.java` | 来源解析、校验、`eci_cloud_config` 持久化与不可变快照 |
+| `src/.../config/CloudResourceConfigController.java` | `GET` / `PUT` / `DELETE /api/v1/eci/runtime-config` |
 | `src/main/resources/static/` | 本地操作台（无构建） |
 | `src/.../config/EciMetaController.java` | `GET /meta` |
 | `src/.../task/EciTaskLogService.java` | `GET /tasks/{id}/logs` |

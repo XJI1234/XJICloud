@@ -1,5 +1,6 @@
 package com.xjicloud.eci.config;
 
+import java.util.function.Supplier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -9,6 +10,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "eci")
 public class EciProperties {
+
+    private CloudResourceConfigService runtimeCoordinator;
+
+    public void coordinateWith(CloudResourceConfigService coordinator) {
+        this.runtimeCoordinator = coordinator;
+    }
+
+    private <T> T runtimeValue(Supplier<T> value) {
+        return runtimeCoordinator == null ? value.get() : runtimeCoordinator.coordinate(value);
+    }
 
     /** 为 true 时使用 MockProvider，不调用阿里云。 */
     private boolean mock = true;
@@ -113,7 +124,7 @@ public class EciProperties {
     }
 
     public String getRegionId() {
-        return regionId;
+        return runtimeValue(() -> regionId);
     }
 
     public void setRegionId(String regionId) {
@@ -121,7 +132,7 @@ public class EciProperties {
     }
 
     public String getVpcId() {
-        return vpcId;
+        return runtimeValue(() -> vpcId);
     }
 
     public void setVpcId(String vpcId) {
@@ -129,7 +140,7 @@ public class EciProperties {
     }
 
     public String getVswitchId() {
-        return vswitchId;
+        return runtimeValue(() -> vswitchId);
     }
 
     public void setVswitchId(String vswitchId) {
@@ -137,7 +148,7 @@ public class EciProperties {
     }
 
     public String getSecurityGroupId() {
-        return securityGroupId;
+        return runtimeValue(() -> securityGroupId);
     }
 
     public void setSecurityGroupId(String securityGroupId) {
@@ -145,7 +156,7 @@ public class EciProperties {
     }
 
     public String getDefaultImage() {
-        return defaultImage;
+        return runtimeValue(() -> defaultImage);
     }
 
     public void setDefaultImage(String defaultImage) {
@@ -169,7 +180,7 @@ public class EciProperties {
     }
 
     public int getCreateTimeoutSec() {
-        return createTimeoutSec;
+        return runtimeValue(() -> createTimeoutSec);
     }
 
     public void setCreateTimeoutSec(int createTimeoutSec) {
@@ -233,7 +244,7 @@ public class EciProperties {
     }
 
     public int getFailureLogTailLines() {
-        return failureLogTailLines;
+        return runtimeValue(() -> failureLogTailLines);
     }
 
     public void setFailureLogTailLines(int failureLogTailLines) {
@@ -241,7 +252,7 @@ public class EciProperties {
     }
 
     public int getFailureLogGraceSec() {
-        return failureLogGraceSec;
+        return runtimeValue(() -> failureLogGraceSec);
     }
 
     public void setFailureLogGraceSec(int failureLogGraceSec) {
@@ -249,7 +260,7 @@ public class EciProperties {
     }
 
     public String getDefaultShmSize() {
-        return defaultShmSize;
+        return runtimeValue(() -> defaultShmSize);
     }
 
     public void setDefaultShmSize(String defaultShmSize) {

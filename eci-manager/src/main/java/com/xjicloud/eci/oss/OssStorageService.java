@@ -1,13 +1,16 @@
 package com.xjicloud.eci.oss;
 
 import com.xjicloud.eci.config.CloudResourceConfigSnapshot;
+import com.xjicloud.eci.config.CloudResourceConfigService;
 import com.xjicloud.eci.config.OssProperties;
 import com.xjicloud.eci.credential.AccessKeyPair;
 import java.net.URI;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -39,9 +42,27 @@ public class OssStorageService {
 
     private final OssProperties properties;
     private volatile ActiveClients active = ActiveClients.notConfigured();
+    @Autowired(required = false)
+    private CloudResourceConfigService runtimeCoordinator;
 
     public OssStorageService(OssProperties properties) {
         this.properties = properties;
+    }
+
+    private <T> T coordinate(Supplier<T> action) {
+        if (runtimeCoordinator != null) {
+            return runtimeCoordinator.coordinate(action);
+        }
+        synchronized (this) {
+            return action.get();
+        }
+    }
+
+    private void coordinate(Runnable action) {
+        coordinate(() -> {
+            action.run();
+            return null;
+        });
     }
 
     /**
@@ -49,20 +70,22 @@ public class OssStorageService {
      * Spring 启动走 {@link com.xjicloud.eci.credential.RuntimeCredentialService#applyPersistedOssKeys()}。
      */
     public void init() {
-        if (!properties.isEnabled() || !properties.isConfigured()) {
-            log.info("OSS client skipped: enabled={}, configured={}",
-                    properties.isEnabled(), properties.isConfigured());
-            return;
-        }
-        applyRuntime(prepare(
-                properties.isEnabled(),
-                properties.getEndpoint(),
-                properties.getRegion(),
-                properties.getBucket(),
-                properties.isPathStyleAccess(),
-                properties.getPresignExpirationMinutes(),
-                properties.getAccessKey(),
-                properties.getSecretKey()));
+        coordinate(() -> {
+            if (!properties.isEnabled() || !properties.isConfigured()) {
+                log.info("OSS client skipped: enabled={}, configured={}",
+                        properties.isEnabled(), properties.isConfigured());
+                return;
+            }
+            applyRuntime(prepare(
+                    properties.isEnabled(),
+                    properties.getEndpoint(),
+                    properties.getRegion(),
+                    properties.getBucket(),
+                    properties.isPathStyleAccess(),
+                    properties.getPresignExpirationMinutes(),
+                    properties.getAccessKey(),
+                    properties.getSecretKey()));
+        });
     }
 
     /**
@@ -70,24 +93,26 @@ public class OssStorageService {
      * 未启用或 endpoint/bucket 不完整时只记日志、不抛错。
      */
     public void applyRuntimeKeys(String accessKeyId, String accessKeySecret) {
-        if (!new AccessKeyPair(accessKeyId, accessKeySecret).isComplete()) {
-            log.info("OSS applyRuntimeKeys skipped: access key pair incomplete");
-            return;
-        }
-        if (!properties.isEnabled() || !properties.hasTarget()) {
-            log.info("OSS applyRuntimeKeys skipped: enabled={}, endpoint/bucket incomplete",
-                    properties.isEnabled());
-            return;
-        }
-        applyRuntime(prepare(
-                properties.isEnabled(),
-                properties.getEndpoint(),
-                properties.getRegion(),
-                properties.getBucket(),
-                properties.isPathStyleAccess(),
-                properties.getPresignExpirationMinutes(),
-                accessKeyId,
-                accessKeySecret));
+        coordinate(() -> {
+            if (!new AccessKeyPair(accessKeyId, accessKeySecret).isComplete()) {
+                log.info("OSS applyRuntimeKeys skipped: access key pair incomplete");
+                return;
+            }
+            if (!properties.isEnabled() || !properties.hasTarget()) {
+                log.info("OSS applyRuntimeKeys skipped: enabled={}, endpoint/bucket incomplete",
+                        properties.isEnabled());
+                return;
+            }
+            applyRuntime(prepare(
+                    properties.isEnabled(),
+                    properties.getEndpoint(),
+                    properties.getRegion(),
+                    properties.getBucket(),
+                    properties.isPathStyleAccess(),
+                    properties.getPresignExpirationMinutes(),
+                    accessKeyId,
+                    accessKeySecret));
+        });
     }
 
     /**
@@ -177,31 +202,35 @@ public class OssStorageService {
 
     /** 一次性替换当前客户端和目标配置；旧的客户端在替换后关闭。 */
     public void applyRuntime(PreparedClients next) {
-        ActiveClients previous = active;
-        active = new ActiveClients(
-                next.client(),
-                next.presigner(),
-                next.endpoint(),
-                next.region(),
-                next.bucket(),
-                next.pathStyleAccess(),
-                next.presignExpirationMinutes());
-        closeQuietly(previous.client());
-        closeQuietly(previous.presigner());
+        coordinate(() -> {
+            ActiveClients previous = active;
+            active = new ActiveClients(
+                    next.client(),
+                    next.presigner(),
+                    next.endpoint(),
+                    next.region(),
+                    next.bucket(),
+                    next.pathStyleAccess(),
+                    next.presignExpirationMinutes());
+            closeQuietly(previous.client());
+            closeQuietly(previous.presigner());
+        });
     }
 
     /**
      * 先赋新引用再关闭旧客户端。包可见以便测试 {@code close()}。
      */
     void swapClients(S3Client nextClient, S3Presigner nextPresigner) {
-        applyRuntime(new PreparedClients(
-                nextClient,
-                nextPresigner,
-                properties.getEndpoint(),
-                properties.getRegion(),
-                properties.getBucket(),
-                properties.isPathStyleAccess(),
-                properties.getPresignExpirationMinutes()));
+        coordinate(() -> {
+            applyRuntime(new PreparedClients(
+                    nextClient,
+                    nextPresigner,
+                    properties.getEndpoint(),
+                    properties.getRegion(),
+                    properties.getBucket(),
+                    properties.isPathStyleAccess(),
+                    properties.getPresignExpirationMinutes()));
+        });
     }
 
     private static void closeQuietly(AutoCloseable closeable) {
@@ -219,28 +248,32 @@ public class OssStorageService {
      * 签发 PUT 预签名 URL；{@code contentType} 会写入签名请求，客户端上传必须带相同 Content-Type。
      */
     public String presignPutUrl(String ossKey, String contentType) {
-        ActiveClients clients = requireReady();
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(clients.bucket())
-                .key(ossKey)
-                .contentType(contentType)
-                .build();
-        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(clients.presignExpirationMinutes()))
-                .putObjectRequest(putObjectRequest)
-                .build();
-        PresignedPutObjectRequest presigned = clients.presigner().presignPutObject(presignRequest);
-        return presigned.url().toString();
+        return coordinate(() -> {
+            ActiveClients clients = requireReady();
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(clients.bucket())
+                    .key(ossKey)
+                    .contentType(contentType)
+                    .build();
+            PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofMinutes(clients.presignExpirationMinutes()))
+                    .putObjectRequest(putObjectRequest)
+                    .build();
+            PresignedPutObjectRequest presigned = clients.presigner().presignPutObject(presignRequest);
+            return presigned.url().toString();
+        });
     }
 
     public String presignGetUrl(String ossKey) {
-        ActiveClients clients = requireReady();
-        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(clients.presignExpirationMinutes()))
-                .getObjectRequest(builder -> builder.bucket(clients.bucket()).key(ossKey))
-                .build();
-        PresignedGetObjectRequest presigned = clients.presigner().presignGetObject(presignRequest);
-        return presigned.url().toString();
+        return coordinate(() -> {
+            ActiveClients clients = requireReady();
+            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofMinutes(clients.presignExpirationMinutes()))
+                    .getObjectRequest(builder -> builder.bucket(clients.bucket()).key(ossKey))
+                    .build();
+            PresignedGetObjectRequest presigned = clients.presigner().presignGetObject(presignRequest);
+            return presigned.url().toString();
+        });
     }
 
     public String buildDatasetPrefix(UUID jobId) {
@@ -268,30 +301,32 @@ public class OssStorageService {
      * </ul>
      */
     public void testConnection() {
-        ActiveClients clients = requireReady();
-        try {
-            clients.client().listObjectsV2(ListObjectsV2Request.builder()
-                    .bucket(clients.bucket())
-                    .maxKeys(1)
-                    .build());
-        } catch (S3Exception ex) {
-            if (ex.statusCode() == 403) {
+        coordinate(() -> {
+            ActiveClients clients = requireReady();
+            try {
+                clients.client().listObjectsV2(ListObjectsV2Request.builder()
+                        .bucket(clients.bucket())
+                        .maxKeys(1)
+                        .build());
+            } catch (S3Exception ex) {
+                if (ex.statusCode() == 403) {
+                    throw new IllegalStateException(
+                            "OSS 鉴权失败（403）。请确认 Access Key / Secret Key。详情: "
+                                    + ex.awsErrorDetails().errorMessage(),
+                            ex
+                    );
+                }
+                throw ex;
+            } catch (SdkClientException ex) {
+                String hostHint = resolveRequestHost(clients.bucket(), clients.endpoint(), clients.pathStyleAccess());
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                 throw new IllegalStateException(
-                        "OSS 鉴权失败（403）。请确认 Access Key / Secret Key。详情: "
-                                + ex.awsErrorDetails().errorMessage(),
+                        "OSS 连接失败，请检查 endpoint/密钥及服务器 DNS。请求主机: " + hostHint
+                                + "，原因: " + cause.getMessage(),
                         ex
                 );
             }
-            throw ex;
-        } catch (SdkClientException ex) {
-            String hostHint = resolveRequestHost(clients.bucket(), clients.endpoint(), clients.pathStyleAccess());
-            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-            throw new IllegalStateException(
-                    "OSS 连接失败，请检查 endpoint/密钥及服务器 DNS。请求主机: " + hostHint
-                            + "，原因: " + cause.getMessage(),
-                    ex
-            );
-        }
+        });
     }
 
     private ActiveClients requireReady() {

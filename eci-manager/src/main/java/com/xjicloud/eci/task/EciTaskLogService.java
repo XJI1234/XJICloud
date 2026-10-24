@@ -74,7 +74,8 @@ public class EciTaskLogService {
 
         String content;
         try {
-            String fetched = eciProvider.fetchContainerLog(instance.cloudInstanceId(), lines);
+            String fetched = eciProvider.fetchContainerLog(
+                    instance.cloudInstanceId(), lines, instanceService.getRegionId(instance.id()));
             content = fetched == null ? "" : fetched;
         } catch (Exception ex) {
             content = "fetchContainerLog failed: "

@@ -1,5 +1,6 @@
 package com.xjicloud.eci.config;
 
+import java.util.function.Supplier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 
@@ -12,6 +13,16 @@ import org.springframework.util.StringUtils;
  */
 @ConfigurationProperties(prefix = "eci.oss")
 public class OssProperties {
+
+    private CloudResourceConfigService runtimeCoordinator;
+
+    public void coordinateWith(CloudResourceConfigService coordinator) {
+        this.runtimeCoordinator = coordinator;
+    }
+
+    private <T> T runtimeValue(Supplier<T> value) {
+        return runtimeCoordinator == null ? value.get() : runtimeCoordinator.coordinate(value);
+    }
 
     /** 为 false 时拒绝带 storage 的请求；服务仍可正常启动。 */
     private boolean enabled = false;
@@ -31,7 +42,7 @@ public class OssProperties {
     private int presignExpirationMinutes = 60;
 
     public boolean isEnabled() {
-        return enabled;
+        return runtimeValue(() -> enabled);
     }
 
     public void setEnabled(boolean enabled) {
@@ -39,7 +50,7 @@ public class OssProperties {
     }
 
     public String getEndpoint() {
-        return endpoint;
+        return runtimeValue(() -> endpoint);
     }
 
     public void setEndpoint(String endpoint) {
@@ -47,7 +58,7 @@ public class OssProperties {
     }
 
     public String getRegion() {
-        return region;
+        return runtimeValue(() -> region);
     }
 
     public void setRegion(String region) {
@@ -55,7 +66,7 @@ public class OssProperties {
     }
 
     public String getBucket() {
-        return bucket;
+        return runtimeValue(() -> bucket);
     }
 
     public void setBucket(String bucket) {
@@ -79,7 +90,7 @@ public class OssProperties {
     }
 
     public boolean isPathStyleAccess() {
-        return pathStyleAccess;
+        return runtimeValue(() -> pathStyleAccess);
     }
 
     public void setPathStyleAccess(boolean pathStyleAccess) {
@@ -87,7 +98,7 @@ public class OssProperties {
     }
 
     public int getPresignExpirationMinutes() {
-        return presignExpirationMinutes;
+        return runtimeValue(() -> presignExpirationMinutes);
     }
 
     public void setPresignExpirationMinutes(int presignExpirationMinutes) {
@@ -98,7 +109,7 @@ public class OssProperties {
      * 网络目标是否齐全（不含 AccessKey）。种子 AK 只用于 {@link #isConfigured()} / {@code init()}。
      */
     public boolean hasTarget() {
-        return StringUtils.hasText(endpoint) && StringUtils.hasText(bucket);
+        return runtimeValue(() -> StringUtils.hasText(endpoint) && StringUtils.hasText(bucket));
     }
 
     /**

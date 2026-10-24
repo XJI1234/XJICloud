@@ -5,6 +5,9 @@ import {
   createCloudAccessKey,
   deleteCloudAccessKey,
   fetchCloudAccessKeys,
+  fetchCloudResourceConfig,
+  resetCloudResourceConfigSection,
+  saveCloudResourceConfigSection,
   selectCloudAccessKey,
   testCloudAccessKeyDraft,
   testSavedCloudAccessKey,
@@ -12,6 +15,9 @@ import {
   type CloudAccessKeyResource,
   type CloudAccessKeyResponse,
   type CloudAccessKeyTestResponse,
+  type CloudResourceConfigField,
+  type CloudResourceConfigResponse,
+  type CloudResourceConfigSectionId,
 } from '@/api/adminClient'
 
 type KeyKind = 'ECI_AccessKey' | 'OSS_AccessKey' | 'COMMON'
@@ -23,6 +29,16 @@ type SavedTestSnapshot = {
   requestVersion: number
 }
 type SavedTestFeedback = { snapshot: SavedTestSnapshot; feedback: TestFeedback }
+type ConfigFeedback = { message: string } | { error: string }
+type ConfigState = {
+  fields: CloudResourceConfigField[]
+  label: string
+  values: Record<string, string>
+  dirty: Record<string, boolean>
+  fieldErrors: Record<string, string>
+  feedback: ConfigFeedback | null
+  pending: boolean
+}
 
 const resourceOptions: { value: CloudAccessKeyResource; label: string }[] = [
   { value: 'ECI_OPENAPI', label: 'ECI_AccessKey' },
@@ -76,6 +92,22 @@ const deleteDialog = ref<HTMLDialogElement | null>(null)
 const deleteCancelButton = ref<HTMLButtonElement | null>(null)
 const deleteIds = ref<string[]>([])
 
+const configSectionIds: CloudResourceConfigSectionId[] = ['network', 'oss', 'advanced']
+const booleanValueType = 'BOOLEAN'
+const booleanOptions = [
+  { value: 'true', label: '是' },
+  { value: 'false', label: '否' },
+]
+const configView = ref<CloudResourceConfigResponse | null>(null)
+const configLoading = ref(true)
+const configLoadError = ref('')
+const configState = reactive<Record<CloudResourceConfigSectionId, ConfigState>>({
+  network: { fields: [], label: '', values: {}, dirty: {}, fieldErrors: {}, feedback: null, pending: false },
+  oss: { fields: [], label: '', values: {}, dirty: {}, fieldErrors: {}, feedback: null, pending: false },
+  advanced: { fields: [], label: '', values: {}, dirty: {}, fieldErrors: {}, feedback: null, pending: false },
+})
+let configSaveQueue: Promise<void> = Promise.resolve()
+
 const kindOptions: { value: KeyKind | typeof allKinds; label: string }[] = [
   { value: allKinds, label: '全部种类' },
   { value: 'ECI_AccessKey', label: 'ECI_AccessKey' },
@@ -109,6 +141,28 @@ function errorMessage(error: unknown, fallback: string) {
 function clearActionFeedback() {
   actionMessage.value = ''
   actionError.value = ''
+}
+
+const configSections = computed<{ id: CloudResourceConfigSectionId; title: string; fields: CloudResourceConfigField[] }[]>(() => [
+  { id: 'network', title: configState.network.label, fields: configState.network.fields.filter((field) => !field.groupLabel) },
+  { id: 'oss', title: configState.oss.label, fields: configState.oss.fields.filter((field) => !field.groupLabel) },
+  { id: 'advanced', title: configState.advanced.label, fields: [] },
+])
+
+const advancedGroups = computed(() => {
+  const fields = configState.advanced.fields
+  const grouped: { label: string; fields: CloudResourceConfigField[] }[] = []
+  for (const field of fields) {
+    if (!field.groupLabel) continue
+    const group = grouped.find((item) => item.label === field.groupLabel)
+    if (group) group.fields.push(field)
+    else grouped.push({ label: field.groupLabel, fields: [field] })
+  }
+  return grouped
+})
+
+function isBooleanConfigField(field: { valueType: string }) {
+  return field.valueType === booleanValueType
 }
 
 const labelOptions = computed(() => {
@@ -258,6 +312,117 @@ async function loadDirectory(options: { page?: number } = {}) {
   } finally {
     loading.value = false
   }
+}
+
+function markConfigDirty(section: CloudResourceConfigSectionId, key: string) {
+  configState[section].dirty[key] = true
+  configState[section].fieldErrors[key] = ''
+  if (configState[section].feedback && 'error' in configState[section].feedback) {
+    configState[section].feedback = null
+  }
+}
+
+function loadConfigSection(section: CloudResourceConfigSectionId, source: CloudResourceConfigResponse) {
+  const state = configState[section]
+  state.fields = source[section].fields
+  state.label = source[section].label
+  state.values = {}
+  state.dirty = {}
+  state.fieldErrors = {}
+  for (const field of state.fields) {
+    state.values[field.key] = field.value ?? ''
+  }
+}
+
+async function loadCloudResourceConfig() {
+  configLoading.value = true
+  configLoadError.value = ''
+  try {
+    const view = await fetchCloudResourceConfig()
+    configView.value = view
+    for (const section of configSectionIds) loadConfigSection(section, view)
+  } catch (error) {
+    configLoadError.value = `读取云资源配置失败：${errorMessage(error, '请求失败')}`
+  } finally {
+    configLoading.value = false
+  }
+}
+
+function showConfigFieldError(section: CloudResourceConfigSectionId, message: string) {
+  for (const field of configState[section].fields) {
+    if (message.startsWith(`${field.displayName}：`)) {
+      configState[section].fieldErrors[field.key] = message
+      return true
+    }
+  }
+  return false
+}
+
+function configFeedbackMessage(section: CloudResourceConfigSectionId) {
+  const feedback = configState[section].feedback
+  return feedback && 'message' in feedback ? feedback.message : ''
+}
+
+function configFeedbackError(section: CloudResourceConfigSectionId) {
+  const feedback = configState[section].feedback
+  return feedback && 'error' in feedback ? feedback.error : ''
+}
+
+/* 保存请求串行执行，避免并发修改同一份运行时配置。 */
+function enqueueConfigRequest(action: () => Promise<void>) {
+  const operation = configSaveQueue.then(action)
+  configSaveQueue = operation.catch(() => undefined)
+}
+
+function saveConfigSection(section: CloudResourceConfigSectionId, keys: string[]) {
+  const state = configState[section]
+  const values: Record<string, string> = {}
+  for (const key of keys) values[key] = state.values[key] ?? ''
+  return saveCloudResourceConfigSection(section, values).then((view) => {
+    loadConfigSection(section, view)
+    state.feedback = { message: `${state.label}已保存` }
+  })
+}
+
+function resetConfigSectionRequest(section: CloudResourceConfigSectionId) {
+  return resetCloudResourceConfigSection(section).then((view) => {
+    loadConfigSection(section, view)
+    configState[section].feedback = { message: `${configState[section].label}已恢复默认` }
+  })
+}
+
+function queueConfigSave(section: CloudResourceConfigSectionId) {
+  const state = configState[section]
+  if (state.pending) return
+  const keys = Object.keys(state.dirty)
+  state.pending = true
+  state.feedback = null
+  enqueueConfigRequest(async () => {
+    try {
+      await saveConfigSection(section, keys)
+    } catch (error) {
+      const message = errorMessage(error, '保存失败')
+      if (!showConfigFieldError(section, message)) state.feedback = { error: message }
+    } finally {
+      state.pending = false
+    }
+  })
+}
+
+function queueConfigReset(section: CloudResourceConfigSectionId) {
+  const state = configState[section]
+  if (state.pending) return
+  state.pending = true
+  state.feedback = null
+  enqueueConfigRequest(async () => {
+    try {
+      await resetConfigSectionRequest(section)
+    } catch (error) {
+      state.feedback = { error: errorMessage(error, '恢复默认失败') }
+    } finally {
+      state.pending = false
+    }
+  })
 }
 
 function clearDraft() {
@@ -655,6 +820,7 @@ watchEffect(() => {
 
 onMounted(() => {
   void loadDirectory({ page: 1 })
+  void loadCloudResourceConfig()
 })
 </script>
 
@@ -662,8 +828,8 @@ onMounted(() => {
   <div class="cloud-key-page">
     <header class="cloud-key-heading">
       <div>
-        <h2 class="cloud-key-title">Key 管理</h2>
-        <p class="cloud-key-subtitle">管理 ECI 和 OSS 的访问密钥，分别设置当前使用的 key。</p>
+        <h2 class="cloud-key-title">云资源配置</h2>
+        <p class="cloud-key-subtitle">管理 ECI 和 OSS 的访问密钥与云资源配置。</p>
       </div>
       <div class="cloud-key-heading-actions">
         <button class="cloud-btn cloud-btn--ghost" type="button" :disabled="loading || mutationPending" @click="loadDirectory({ page: currentPage })">
@@ -974,6 +1140,85 @@ onMounted(() => {
         </div>
       </footer>
     </section>
+
+    <section v-if="configLoading" class="admin-card cloud-config-card" aria-live="polite">
+      <h3 class="cloud-key-section-title">云资源配置</h3>
+      <p class="cloud-config-state">正在加载云资源配置…</p>
+    </section>
+
+    <section v-else-if="configLoadError" class="admin-card cloud-config-card" role="alert">
+      <h3 class="cloud-key-section-title">云资源配置</h3>
+      <p class="error-text">{{ configLoadError }}</p>
+      <button class="cloud-btn cloud-btn--ghost" type="button" @click="loadCloudResourceConfig">重试</button>
+    </section>
+
+    <template v-else-if="configView">
+      <section
+        v-for="section in configSections"
+        :key="section.id"
+        class="admin-card cloud-config-card"
+        :aria-labelledby="`cloud-config-${section.id}-title`"
+      >
+        <h3 :id="`cloud-config-${section.id}-title`" class="cloud-key-section-title">{{ section.title }}</h3>
+        <div class="cloud-config-fields">
+          <label v-for="field in section.fields" :key="field.key" class="admin-field">
+            <span>{{ field.displayName }}</span>
+            <select
+              v-if="isBooleanConfigField(field)"
+              v-model="configState[section.id].values[field.key]"
+              class="admin-input"
+              :disabled="configState[section.id].pending"
+              @change="markConfigDirty(section.id, field.key)"
+            >
+              <option v-for="option in booleanOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <input
+              v-else
+              v-model="configState[section.id].values[field.key]"
+              class="admin-input"
+              type="text"
+              autocomplete="off"
+              :disabled="configState[section.id].pending"
+              @input="markConfigDirty(section.id, field.key)"
+            />
+            <span v-if="configState[section.id].fieldErrors[field.key]" class="error-text">{{ configState[section.id].fieldErrors[field.key] }}</span>
+          </label>
+        </div>
+        <div v-if="section.id === 'advanced'" class="cloud-config-groups">
+          <div v-for="group in advancedGroups" :key="group.label" class="cloud-config-group">
+            <h4>{{ group.label }}</h4>
+            <div class="cloud-config-fields">
+              <label v-for="field in group.fields" :key="field.key" class="admin-field">
+                <span>{{ field.displayName }}</span>
+                <input
+                  v-model="configState.advanced.values[field.key]"
+                  class="admin-input"
+                  type="text"
+                  autocomplete="off"
+                  :disabled="configState.advanced.pending"
+                  @input="markConfigDirty('advanced', field.key)"
+                />
+                <span v-if="configState.advanced.fieldErrors[field.key]" class="error-text">{{ configState.advanced.fieldErrors[field.key] }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <p v-if="configFeedbackMessage(section.id)" class="cloud-key-action-feedback" aria-live="polite">
+          {{ configFeedbackMessage(section.id) }}
+        </p>
+        <p v-if="configFeedbackError(section.id)" class="cloud-key-action-feedback error-text" role="alert">
+          {{ configFeedbackError(section.id) }}
+        </p>
+        <div class="cloud-config-actions">
+          <button class="cloud-btn cloud-btn--primary" type="button" :disabled="configState[section.id].pending" @click="queueConfigSave(section.id)">
+            {{ configState[section.id].pending ? '保存中…' : '保存' }}
+          </button>
+          <button class="cloud-btn cloud-btn--ghost" type="button" :disabled="configState[section.id].pending" @click="queueConfigReset(section.id)">
+            恢复默认
+          </button>
+        </div>
+      </section>
+    </template>
 
     <dialog ref="deleteDialog" class="cloud-key-dialog" @cancel.prevent="closeDeleteDialog">
       <form method="dialog" @submit.prevent="confirmDelete">
@@ -1395,6 +1640,46 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
+.cloud-config-card {
+  display: grid;
+  gap: 16px;
+}
+
+.cloud-config-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+
+.cloud-config-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.cloud-config-group {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #243041;
+}
+
+.cloud-config-group h4 {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cloud-config-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cloud-config-state {
+  margin: 0;
+  color: #94a3b8;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1441,7 +1726,8 @@ onMounted(() => {
   }
 
   .cloud-key-current-grid,
-  .cloud-key-form {
+  .cloud-key-form,
+  .cloud-config-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xjicloud.eci.common.BusinessException;
+import com.xjicloud.eci.config.CloudResourceConfigService;
+import com.xjicloud.eci.config.CloudResourceConfigSnapshot;
 import com.xjicloud.eci.config.EciProperties;
 import com.xjicloud.eci.instance.EciInstanceEntity;
 import com.xjicloud.eci.instance.EciInstanceRepository;
@@ -17,6 +19,7 @@ import com.xjicloud.eci.task.dto.CreateTaskRequest;
 import com.xjicloud.eci.task.dto.TaskResponse;
 import com.xjicloud.eci.task.storage.TaskStorageResolver;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -32,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * 任务业务服务：提交/查询/取消，并接收实例生命周期回写。
@@ -51,6 +55,27 @@ public class EciTaskService {
     private final ObjectMapper objectMapper;
     private final TaskStorageResolver taskStorageResolver;
     private final TransactionTemplate createTransaction;
+    private final CloudResourceConfigService cloudResourceConfigService;
+
+    @Autowired
+    public EciTaskService(
+            EciTaskRepository repository,
+            EciInstanceRepository instanceRepository,
+            EciInstanceService instanceService,
+            EciProperties properties,
+            ObjectMapper objectMapper,
+            TaskStorageResolver taskStorageResolver,
+            PlatformTransactionManager transactionManager,
+            CloudResourceConfigService cloudResourceConfigService) {
+        this.repository = repository;
+        this.instanceRepository = instanceRepository;
+        this.instanceService = instanceService;
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+        this.taskStorageResolver = taskStorageResolver;
+        this.createTransaction = new TransactionTemplate(transactionManager);
+        this.cloudResourceConfigService = cloudResourceConfigService;
+    }
 
     public EciTaskService(
             EciTaskRepository repository,
@@ -60,13 +85,8 @@ public class EciTaskService {
             ObjectMapper objectMapper,
             TaskStorageResolver taskStorageResolver,
             PlatformTransactionManager transactionManager) {
-        this.repository = repository;
-        this.instanceRepository = instanceRepository;
-        this.instanceService = instanceService;
-        this.properties = properties;
-        this.objectMapper = objectMapper;
-        this.taskStorageResolver = taskStorageResolver;
-        this.createTransaction = new TransactionTemplate(transactionManager);
+        this(repository, instanceRepository, instanceService, properties, objectMapper,
+                taskStorageResolver, transactionManager, null);
     }
 
     /**
@@ -83,8 +103,15 @@ public class EciTaskService {
             }
         }
 
+        UUID taskId = UUID.randomUUID();
+        Supplier<TaskSubmission> resolve = () -> resolveSubmission(request, taskId,
+                cloudResourceConfigService != null ? cloudResourceConfigService.snapshot() : null);
+        TaskSubmission submission = cloudResourceConfigService == null
+                ? resolve.get()
+                : cloudResourceConfigService.coordinate(resolve);
+
         try {
-            return createTransaction.execute(status -> createNewTask(request, clientRequestId));
+            return createTransaction.execute(status -> createNewTask(request, clientRequestId, submission));
         } catch (DataIntegrityViolationException exception) {
             if (clientRequestId == null) {
                 throw exception;
@@ -95,24 +122,48 @@ public class EciTaskService {
         }
     }
 
-    private TaskResponse createNewTask(CreateTaskRequest request, String clientRequestId) {
+    private TaskSubmission resolveSubmission(
+            CreateTaskRequest request, UUID taskId, CloudResourceConfigSnapshot configSnapshot) {
         if (request == null || !StringUtils.hasText(request.getImage())) {
-            throw new BusinessException("image 为必填项");
+            String defaultImage = configSnapshot != null
+                    ? configSnapshot.advanced().defaultImage()
+                    : properties.getDefaultImage();
+            if (request == null || !StringUtils.hasText(defaultImage)) {
+                throw new BusinessException("image 为必填项");
+            }
         }
+
+        String image = StringUtils.hasText(request.getImage())
+                ? request.getImage().trim()
+                : configSnapshot != null
+                        ? configSnapshot.advanced().defaultImage().trim()
+                        : properties.getDefaultImage().trim();
+        double memory = request.getMemory() != null ? request.getMemory() : properties.getDefaultMemory();
+        String defaultShmSize = configSnapshot != null
+                ? configSnapshot.advanced().defaultShmSize()
+                : properties.getDefaultShmSize();
+        String shmSize = resolveShmSize(request.getShmSize(), memory, defaultShmSize);
+        Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
+        if (request.getStorage() != null) {
+            env = configSnapshot != null
+                    ? taskStorageResolver.resolveAndBuildEnv(taskId, request.getStorage(), env, configSnapshot.oss())
+                    : taskStorageResolver.resolveAndBuildEnv(taskId, request.getStorage(), env);
+        }
+        return new TaskSubmission(taskId, image, shmSize, env, configSnapshot);
+    }
+
+    private TaskResponse createNewTask(
+            CreateTaskRequest request, String clientRequestId, TaskSubmission submission) {
 
         String restartPolicy = resolveRestartPolicy(request.getRestartPolicy());
         int maxRuntimeSec = resolveMaxRuntimeSec(request.getMaxRuntimeSec());
         double cpu = request.getCpu() != null ? request.getCpu() : properties.getDefaultCpu();
         double memory = request.getMemory() != null ? request.getMemory() : properties.getDefaultMemory();
-        String shmSize = resolveShmSize(request.getShmSize(), memory);
-        String image = request.getImage().trim();
-        Map<String, String> env = request.getEnv() != null ? new HashMap<>(request.getEnv()) : new HashMap<>();
+        String shmSize = submission.shmSize();
+        String image = submission.image();
+        Map<String, String> env = submission.env();
         Instant now = Instant.now();
-        UUID taskId = UUID.randomUUID();
-        // storage 必须在 save / 创建实例之前解析：校验或 presign 失败走 BusinessException(400)，避免脏数据入库
-        if (request.getStorage() != null) {
-            env = taskStorageResolver.resolveAndBuildEnv(taskId, request.getStorage(), env);
-        }
+        UUID taskId = submission.taskId();
         String name = StringUtils.hasText(request.getName())
                 ? request.getName().trim()
                 : "task-" + taskId.toString().substring(0, 8);
@@ -133,6 +184,16 @@ public class EciTaskService {
         entity.setShmSize(shmSize);
         entity.setRestartPolicy(restartPolicy);
         entity.setMaxRuntimeSec(maxRuntimeSec);
+        // 失败取证参数在提交时快照：之后改配置不影响已提交任务的抓日志与删除宽限
+        CloudResourceConfigSnapshot.Advanced advanced = submission.configSnapshot() != null
+                ? submission.configSnapshot().advanced()
+                : null;
+        entity.setFailureLogTailLines(advanced != null
+                ? advanced.failureLogTailLines()
+                : properties.getFailureLogTailLines());
+        entity.setFailureLogGraceSec(advanced != null
+                ? advanced.failureLogGraceSec()
+                : properties.getFailureLogGraceSec());
         entity.setEnvJson(toJson(env));
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -157,7 +218,9 @@ public class EciTaskService {
         instanceRequest.setCommand(request.getCommand());
         instanceRequest.setArgs(request.getArgs());
 
-        InstanceResponse instance = instanceService.createForTask(instanceRequest, taskId);
+        InstanceResponse instance = submission.configSnapshot() != null
+                ? instanceService.createForTask(instanceRequest, taskId, submission.configSnapshot())
+                : instanceService.createForTask(instanceRequest, taskId);
 
         entity.setInstanceId(instance.id());
         entity.setStatus(TaskStatus.STARTING);
@@ -360,11 +423,23 @@ public class EciTaskService {
     }
 
     private String resolveShmSize(String raw, double memoryGiB) {
+        return resolveShmSize(raw, memoryGiB, properties.getDefaultShmSize());
+    }
+
+    private String resolveShmSize(String raw, double memoryGiB, String defaultShmSize) {
         try {
-            return ShmSize.resolve(raw, properties.getDefaultShmSize(), memoryGiB);
+            return ShmSize.resolve(raw, defaultShmSize, memoryGiB);
         } catch (IllegalArgumentException e) {
             throw new BusinessException(e.getMessage());
         }
+    }
+
+    private record TaskSubmission(
+            UUID taskId,
+            String image,
+            String shmSize,
+            Map<String, String> env,
+            CloudResourceConfigSnapshot configSnapshot) {
     }
 
     private EciTaskEntity findEntity(UUID id) {

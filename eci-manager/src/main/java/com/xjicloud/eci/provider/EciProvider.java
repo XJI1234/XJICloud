@@ -17,6 +17,11 @@ public interface EciProvider {
     /** 查询云侧状态；不存在时可返回 status=NotFound。 */
     CloudInstanceView describe(String cloudInstanceId);
 
+    /** 查询云侧状态；地域快照为空时由实现沿用当前配置。 */
+    default CloudInstanceView describe(String cloudInstanceId, String regionId) {
+        return describe(cloudInstanceId);
+    }
+
     /**
      * 拉取容器日志尾部（删实例前取证用）。
      * <p>
@@ -27,8 +32,18 @@ public interface EciProvider {
      */
     String fetchContainerLog(String cloudInstanceId, int tailLines);
 
+    /** 拉取指定地域中容器日志；地域快照为空时由实现沿用当前配置。 */
+    default String fetchContainerLog(String cloudInstanceId, int tailLines, String regionId) {
+        return fetchContainerLog(cloudInstanceId, tailLines);
+    }
+
     /** 删除云实例；已不存在时应幂等成功（不抛错）。 */
     void delete(String cloudInstanceId);
+
+    /** 删除指定地域的云实例；地域快照为空时由实现沿用当前配置。 */
+    default void delete(String cloudInstanceId, String regionId) {
+        delete(cloudInstanceId);
+    }
 
     /**
      * 用成对 AccessKey 热重建客户端。默认 no-op（Mock 不建云客户端）。

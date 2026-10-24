@@ -130,9 +130,14 @@ public class AliyunEciProvider implements EciProvider {
             throw new IllegalArgumentException("clientToken must not be blank");
         }
         CreateContainerGroupRequest request = new CreateContainerGroupRequest();
-        request.setRegionId(properties.getRegionId());
-        request.setSecurityGroupId(properties.getSecurityGroupId());
-        request.setVSwitchId(properties.getVswitchId());
+        // 排队任务的网络目标在提交时固化；spec 有快照用快照，否则回退当前配置。
+        // ECI CreateContainerGroup 没有 VPC 字段（SDK 1.3.3 已确认），vpcId 只作本地快照。
+        request.setRegionId(requireCreateNetworkValue(
+                "regionId", preferSpec(spec.regionId(), properties.getRegionId())));
+        request.setSecurityGroupId(requireCreateNetworkValue(
+                "securityGroupId", preferSpec(spec.securityGroupId(), properties.getSecurityGroupId())));
+        request.setVSwitchId(requireCreateNetworkValue(
+                "vswitchId", preferSpec(spec.vswitchId(), properties.getVswitchId())));
         request.setClientToken(clientToken);
         CreateContainerGroupRequest.Tag tag = new CreateContainerGroupRequest.Tag();
         tag.setKey("xjicloud-local-instance-id");
@@ -202,8 +207,13 @@ public class AliyunEciProvider implements EciProvider {
 
     @Override
     public CloudInstanceView describe(String cloudInstanceId) {
+        return describe(cloudInstanceId, null);
+    }
+
+    @Override
+    public CloudInstanceView describe(String cloudInstanceId, String regionId) {
         DescribeContainerGroupsRequest request = new DescribeContainerGroupsRequest();
-        request.setRegionId(properties.getRegionId());
+        request.setRegionId(regionId != null ? regionId : properties.getRegionId());
         request.setContainerGroupIds(toContainerGroupIdsJson(cloudInstanceId));
 
         try {
@@ -229,18 +239,24 @@ public class AliyunEciProvider implements EciProvider {
 
     @Override
     public String fetchContainerLog(String cloudInstanceId, int tailLines) {
+        return fetchContainerLog(cloudInstanceId, tailLines, null);
+    }
+
+    @Override
+    public String fetchContainerLog(String cloudInstanceId, int tailLines, String regionId) {
         if (!StringUtils.hasText(cloudInstanceId)) {
             return "";
         }
         int tail = tailLines > 0 ? tailLines : 1000;
         try {
-            String containerName = resolvePrimaryContainerName(cloudInstanceId);
+            String effectiveRegionId = regionId != null ? regionId : properties.getRegionId();
+            String containerName = resolvePrimaryContainerName(cloudInstanceId, effectiveRegionId);
             if (!StringUtils.hasText(containerName)) {
                 log.warn("ECI fetchContainerLog skipped: no container name cloudInstanceId={}", cloudInstanceId);
                 return "";
             }
             DescribeContainerLogRequest request = new DescribeContainerLogRequest();
-            request.setRegionId(properties.getRegionId());
+            request.setRegionId(effectiveRegionId);
             request.setContainerGroupId(cloudInstanceId);
             request.setContainerName(containerName);
             request.setTail(tail);
@@ -261,8 +277,13 @@ public class AliyunEciProvider implements EciProvider {
 
     @Override
     public void delete(String cloudInstanceId) {
+        delete(cloudInstanceId, null);
+    }
+
+    @Override
+    public void delete(String cloudInstanceId, String regionId) {
         DeleteContainerGroupRequest request = new DeleteContainerGroupRequest();
-        request.setRegionId(properties.getRegionId());
+        request.setRegionId(regionId != null ? regionId : properties.getRegionId());
         request.setContainerGroupId(cloudInstanceId);
 
         try {
@@ -305,9 +326,9 @@ public class AliyunEciProvider implements EciProvider {
     /**
      * 从 DescribeContainerGroups 解析主容器名（取第一个 containers 项）。
      */
-    private String resolvePrimaryContainerName(String cloudInstanceId) throws ClientException {
+    private String resolvePrimaryContainerName(String cloudInstanceId, String regionId) throws ClientException {
         DescribeContainerGroupsRequest request = new DescribeContainerGroupsRequest();
-        request.setRegionId(properties.getRegionId());
+        request.setRegionId(regionId);
         request.setContainerGroupIds(toContainerGroupIdsJson(cloudInstanceId));
         DescribeContainerGroupsResponse response = client.getAcsResponse(request);
         if (response.getContainerGroups() == null || response.getContainerGroups().isEmpty()) {
@@ -430,6 +451,17 @@ public class AliyunEciProvider implements EciProvider {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("序列化 ContainerGroupIds 失败", e);
         }
+    }
+
+    private static String preferSpec(String specValue, String currentValue) {
+        return specValue != null ? specValue : currentValue;
+    }
+
+    private static String requireCreateNetworkValue(String fieldName, String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return value;
     }
 
     /** 将显示名规范为 ECI 可接受的名称，并附加短随机后缀。 */

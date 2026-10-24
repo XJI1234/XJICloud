@@ -84,7 +84,7 @@ class EciInstanceServiceRefreshTest {
         entity.setUpdatedAt(Instant.now());
 
         when(repository.findById(id)).thenReturn(Optional.of(entity));
-        when(eciProvider.describe("eci-short"))
+        when(eciProvider.describe("eci-short", null))
                 .thenReturn(new CloudInstanceView("eci-short", "Succeeded", null));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -136,7 +136,7 @@ class EciInstanceServiceRefreshTest {
         }
 
         when(repository.findById(id)).thenReturn(Optional.of(entity));
-        when(eciProvider.describe("eci-gone"))
+        when(eciProvider.describe("eci-gone", null))
                 .thenReturn(new CloudInstanceView("eci-gone", "NotFound", null));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 

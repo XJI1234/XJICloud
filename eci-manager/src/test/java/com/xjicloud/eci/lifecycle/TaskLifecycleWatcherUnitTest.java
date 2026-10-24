@@ -78,14 +78,14 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
 
         watcher.pollOnce();
 
         verify(instanceService).recordCloudSucceededAndDeleteForTask(instanceId);
         verify(taskService, never()).markSucceeded(any());
         verify(taskService, never()).onInstanceFailed(any(), any(), any());
-        verify(eciProvider, never()).fetchContainerLog(anyString(), anyInt());
+        verify(eciProvider, never()).fetchContainerLog(anyString(), anyInt(), any());
     }
 
     @Test
@@ -100,7 +100,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running, terminated);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
 
         watcher.pollOnce();
         verify(instanceService).recordCloudSucceededAndDeleteForTask(instanceId);
@@ -122,7 +122,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running, terminated);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
 
         watcher.pollOnce();
 
@@ -143,7 +143,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(creating);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Pending", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Pending", null));
 
         watcher.pollOnce();
 
@@ -164,19 +164,80 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Failed", "exit 1"));
-        when(eciProvider.fetchContainerLog(cloudId, 500)).thenReturn(logTail);
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Failed", "exit 1"));
+        when(eciProvider.fetchContainerLog(cloudId, 500, null)).thenReturn(logTail);
         when(instanceService.deleteForTaskCancel(instanceId, clock.instant().plusSeconds(90)))
                 .thenReturn(running);
 
         watcher.pollOnce();
 
         InOrder order = inOrder(eciProvider, taskService, instanceService);
-        order.verify(eciProvider).describe(cloudId);
-        order.verify(eciProvider).fetchContainerLog(cloudId, 500);
+        order.verify(eciProvider).describe(cloudId, null);
+        order.verify(eciProvider).fetchContainerLog(cloudId, 500, null);
         order.verify(taskService).onInstanceFailed(taskId, "exit 1", logTail);
         order.verify(instanceService).deleteForTaskCancel(instanceId, clock.instant().plusSeconds(90));
         verify(taskService, never()).markSucceeded(any());
+    }
+
+    @Test
+    void failedTaskUsesPersistedFailureLogSnapshotInsteadOfCurrentConfig() {
+        // 当前配置已改大；已提交任务必须继续用提交时快照
+        properties.setFailureLogTailLines(500);
+        properties.setFailureLogGraceSec(90);
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        String cloudId = "mock-eci-snapshot";
+        String logTail = "snapshot failure log";
+
+        EciTaskEntity task = activeTask(taskId, instanceId, "Never", 60, Instant.now());
+        task.setFailureLogTailLines(7);
+        task.setFailureLogGraceSec(30);
+        InstanceResponse running = instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running");
+
+        when(taskService.findActiveForWatch()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(running);
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Failed", "exit 1"));
+        when(eciProvider.fetchContainerLog(cloudId, 7, null)).thenReturn(logTail);
+        when(instanceService.deleteForTaskCancel(instanceId, clock.instant().plusSeconds(30)))
+                .thenReturn(running);
+
+        watcher.pollOnce();
+
+        InOrder order = inOrder(eciProvider, taskService, instanceService);
+        order.verify(eciProvider).describe(cloudId, null);
+        order.verify(eciProvider).fetchContainerLog(cloudId, 7, null);
+        order.verify(taskService).onInstanceFailed(taskId, "exit 1", logTail);
+        order.verify(instanceService).deleteForTaskCancel(instanceId, clock.instant().plusSeconds(30));
+    }
+
+    @Test
+    void legacyTaskWithoutFailureSnapshotFallsBackToCurrentConfig() {
+        // 旧行两个快照列均为 null：不得 NPE、不得当成 0 立即删除
+        properties.setFailureLogTailLines(500);
+        properties.setFailureLogGraceSec(90);
+        UUID taskId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        String cloudId = "mock-eci-legacy-null";
+
+        EciTaskEntity task = activeTask(taskId, instanceId, "Never", 60, Instant.now());
+        task.setFailureLogTailLines(null);
+        task.setFailureLogGraceSec(null);
+        InstanceResponse running = instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running");
+
+        when(taskService.findActiveForWatch()).thenReturn(List.of(task));
+        when(instanceService.get(instanceId)).thenReturn(running);
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Failed", "exit 1"));
+        when(eciProvider.fetchContainerLog(cloudId, 500, null)).thenReturn("legacy failure log");
+        when(instanceService.deleteForTaskCancel(instanceId, clock.instant().plusSeconds(90)))
+                .thenReturn(running);
+
+        watcher.pollOnce();
+
+        InOrder order = inOrder(eciProvider, taskService, instanceService);
+        order.verify(eciProvider).describe(cloudId, null);
+        order.verify(eciProvider).fetchContainerLog(cloudId, 500, null);
+        order.verify(taskService).onInstanceFailed(taskId, "exit 1", "legacy failure log");
+        order.verify(instanceService).deleteForTaskCancel(instanceId, clock.instant().plusSeconds(90));
     }
 
     @Test
@@ -190,8 +251,8 @@ class TaskLifecycleWatcherUnitTest {
             tasks.add(activeTask(taskId, instanceId, "Never", 60, Instant.now()));
             when(instanceService.get(instanceId)).thenReturn(
                     instance(instanceId, taskId, cloudId, InstanceStatus.RUNNING, "Running"));
-            when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Failed", "exit 1"));
-            when(eciProvider.fetchContainerLog(cloudId, 500)).thenReturn("failure log");
+            when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Failed", "exit 1"));
+            when(eciProvider.fetchContainerLog(cloudId, 500, null)).thenReturn("failure log");
         }
         when(taskService.findActiveForWatch()).thenReturn(tasks);
 
@@ -232,7 +293,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
 
         watcher.pollOnce();
 
@@ -255,14 +316,14 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(creating);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Failed", "boom"));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Failed", "boom"));
 
         watcher.pollOnce();
 
         verify(taskService, never()).onInstanceFailed(any(), any(), any());
         verify(instanceService, never()).deleteForTaskCancel(any(), any());
         verify(taskService, never()).onInstanceRunning(any());
-        verify(eciProvider, never()).fetchContainerLog(anyString(), anyInt());
+        verify(eciProvider, never()).fetchContainerLog(anyString(), anyInt(), any());
     }
 
     @Test
@@ -276,7 +337,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Failed", "boom"));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Failed", "boom"));
 
         watcher.pollOnce();
 
@@ -298,16 +359,16 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.fetchContainerLog(cloudId, 500)).thenReturn(logTail);
+        when(eciProvider.fetchContainerLog(cloudId, 500, null)).thenReturn(logTail);
         when(instanceService.deleteForTaskCancel(instanceId, clock.instant())).thenReturn(running);
 
         watcher.pollOnce();
 
         InOrder order = inOrder(eciProvider, taskService, instanceService);
-        order.verify(eciProvider).fetchContainerLog(cloudId, 500);
+        order.verify(eciProvider).fetchContainerLog(cloudId, 500, null);
         order.verify(taskService).onInstanceFailed(taskId, "TIMEOUT", logTail);
         order.verify(instanceService).deleteForTaskCancel(instanceId, clock.instant());
-        verify(eciProvider, never()).describe(anyString());
+        verify(eciProvider, never()).describe(anyString(), any());
     }
 
     @Test
@@ -326,7 +387,7 @@ class TaskLifecycleWatcherUnitTest {
 
         verify(taskService).onInstanceFailed(taskId, "进程中断或资源已清理");
         verify(taskService, never()).markSucceeded(any());
-        verify(eciProvider, never()).fetchContainerLog(anyString(), anyInt());
+        verify(eciProvider, never()).fetchContainerLog(anyString(), anyInt(), any());
     }
 
     @Test
@@ -360,7 +421,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running, terminatedAsDeleted);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
 
         watcher.pollOnce();
         watcher.pollOnce();
@@ -380,7 +441,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Succeeded", null));
 
         watcher.pollOnce();
 
@@ -399,7 +460,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Running", null));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Running", null));
 
         watcher.pollOnce();
 
@@ -418,7 +479,7 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenThrow(new RuntimeException("cloud blip"));
+        when(eciProvider.describe(cloudId, null)).thenThrow(new RuntimeException("cloud blip"));
 
         watcher.pollOnce();
 
@@ -454,8 +515,8 @@ class TaskLifecycleWatcherUnitTest {
 
         when(taskService.findActiveForWatch()).thenReturn(List.of(task));
         when(instanceService.get(instanceId)).thenReturn(running);
-        when(eciProvider.describe(cloudId)).thenReturn(new CloudInstanceView(cloudId, "Failed", null));
-        when(eciProvider.fetchContainerLog(cloudId, 500)).thenThrow(new RuntimeException("log gone"));
+        when(eciProvider.describe(cloudId, null)).thenReturn(new CloudInstanceView(cloudId, "Failed", null));
+        when(eciProvider.fetchContainerLog(cloudId, 500, null)).thenThrow(new RuntimeException("log gone"));
         when(instanceService.deleteForTaskCancel(instanceId, clock.instant())).thenReturn(running);
 
         watcher.pollOnce();

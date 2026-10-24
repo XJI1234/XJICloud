@@ -1,6 +1,7 @@
 package com.xjicloud.eci.lifecycle.action;
 
 import com.xjicloud.eci.config.EciProperties;
+import com.xjicloud.eci.config.CloudResourceConfigService;
 import com.xjicloud.eci.instance.EciInstanceEntity;
 import com.xjicloud.eci.instance.EciInstanceRepository;
 import com.xjicloud.eci.instance.InstanceStatus;
@@ -9,7 +10,11 @@ import com.xjicloud.eci.provider.CloudOperationException;
 import com.xjicloud.eci.provider.CloudOperationKind;
 import com.xjicloud.eci.provider.CreateSpec;
 import com.xjicloud.eci.provider.EciProvider;
+import com.xjicloud.eci.task.EciTaskService;
+import com.xjicloud.eci.task.dto.CreateTaskRequest;
+import com.xjicloud.eci.task.dto.TaskResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -57,6 +62,10 @@ class CreateLifecycleActionProcessorTest {
     private EciInstanceRepository instanceRepository;
     @Autowired
     private EciProperties properties;
+    @Autowired
+    private CloudResourceConfigService configService;
+    @Autowired
+    private EciTaskService taskService;
 
     @MockBean
     private EciProvider provider;
@@ -79,6 +88,56 @@ class CreateLifecycleActionProcessorTest {
         verify(provider).create(new CreateSpec("persisted-name", "persisted:image", 3.0, 7.0,
                 Map.of("FROM", "DATABASE"), "ecs.gn7", 1, "OnFailure",
                 List.of("python"), List.of("run.py"), "snapshot-1", "1Gi"), instanceId.toString());
+    }
+
+    @Test
+    void queuedTaskKeepsSubmissionTimeNetworkTargetAfterConfigChange() {
+        String previousRegion = properties.getRegionId();
+        String previousVpc = properties.getVpcId();
+        String previousVswitch = properties.getVswitchId();
+        String previousSecurityGroup = properties.getSecurityGroupId();
+        try {
+            configService.saveNetwork(Map.of(
+                    "ECI_REGION_ID", "cn-beijing",
+                    "ECI_VPC_ID", "vpc-submitted",
+                    "ECI_VSWITCH_ID", "vsw-submitted",
+                    "ECI_SECURITY_GROUP_ID", "sg-submitted"));
+
+            CreateTaskRequest request = new CreateTaskRequest();
+            request.setImage("nginx:alpine");
+            TaskResponse task = taskService.create(request);
+            UUID instanceId = task.instanceId();
+            assertThat(instanceId).isNotNull();
+
+            // 排队期间改网络配置：已提交任务不得改用新目标
+            configService.saveNetwork(Map.of(
+                    "ECI_REGION_ID", "cn-shanghai",
+                    "ECI_VPC_ID", "vpc-new",
+                    "ECI_VSWITCH_ID", "vsw-new",
+                    "ECI_SECURITY_GROUP_ID", "sg-new"));
+
+            UUID actionId = actionRepository
+                    .findByInstanceIdAndActionType(instanceId, LifecycleActionType.CREATE)
+                    .orElseThrow()
+                    .getId();
+            when(provider.create(any(CreateSpec.class), eq(instanceId.toString()))).thenReturn("eci-queued");
+
+            processAt(actionId, NOW);
+
+            ArgumentCaptor<CreateSpec> captor = ArgumentCaptor.forClass(CreateSpec.class);
+            verify(provider).create(captor.capture(), eq(instanceId.toString()));
+            CreateSpec spec = captor.getValue();
+            assertThat(spec.regionId()).isEqualTo("cn-beijing");
+            assertThat(spec.vpcId()).isEqualTo("vpc-submitted");
+            assertThat(spec.vswitchId()).isEqualTo("vsw-submitted");
+            assertThat(spec.securityGroupId()).isEqualTo("sg-submitted");
+        } finally {
+            configService.saveNetwork(Map.of(
+                    "ECI_REGION_ID", previousRegion,
+                    "ECI_VPC_ID", previousVpc,
+                    "ECI_VSWITCH_ID", previousVswitch,
+                    "ECI_SECURITY_GROUP_ID", previousSecurityGroup));
+        }
     }
 
     @Test
@@ -260,7 +319,7 @@ class CreateLifecycleActionProcessorTest {
         UUID runningId = saveInstance(InstanceStatus.CREATING, "eci-running", NOW);
         UUID runningAction = saveCreate(runningId, LifecycleActionPhase.WAIT_RUNNING,
                 LifecycleActionStatus.READY, 1, NOW, null);
-        when(provider.describe("eci-running")).thenReturn(new CloudInstanceView("eci-running", "Running", null));
+        when(provider.describe("eci-running", null)).thenReturn(new CloudInstanceView("eci-running", "Running", null));
 
         processAt(runningAction, NOW);
 
@@ -270,7 +329,7 @@ class CreateLifecycleActionProcessorTest {
         UUID failedId = saveInstance(InstanceStatus.CREATING, "eci-failed", NOW);
         UUID failedAction = saveCreate(failedId, LifecycleActionPhase.WAIT_RUNNING,
                 LifecycleActionStatus.READY, 1, NOW, null);
-        when(provider.describe("eci-failed")).thenReturn(new CloudInstanceView("eci-failed", "Failed", "exit 1"));
+        when(provider.describe("eci-failed", null)).thenReturn(new CloudInstanceView("eci-failed", "Failed", "exit 1"));
 
         processAt(failedAction, NOW);
 

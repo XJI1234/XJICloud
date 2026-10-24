@@ -101,7 +101,7 @@ public class TaskLifecycleWatcher {
         if (isTimedOut(task, clock.instant()) && !cloudSucceeded) {
             log.info("task timeout taskId={} instanceId={} cloudInstanceId={} maxRuntimeSec={}",
                     taskId, instanceId, cloudInstanceId, task.getMaxRuntimeSec());
-            failPersistThenDelete(taskId, instance, cloudInstanceId, TIMEOUT_REASON);
+            failPersistThenDelete(taskId, task, instance, cloudInstanceId, TIMEOUT_REASON);
             return;
         }
 
@@ -113,7 +113,7 @@ public class TaskLifecycleWatcher {
             String reason = StringUtils.hasText(instance.failureReason())
                     ? instance.failureReason()
                     : "实例失败";
-            failPersistThenDelete(taskId, instance, cloudInstanceId, reason);
+            failPersistThenDelete(taskId, task, instance, cloudInstanceId, reason);
             return;
         }
 
@@ -138,7 +138,7 @@ public class TaskLifecycleWatcher {
 
         CloudInstanceView view;
         try {
-            view = eciProvider.describe(cloudInstanceId);
+            view = eciProvider.describe(cloudInstanceId, instanceService.getRegionId(instanceId));
         } catch (Exception e) {
             log.warn("describe failed taskId={} instanceId={} cloudInstanceId={}",
                     taskId, instanceId, cloudInstanceId, e);
@@ -166,7 +166,7 @@ public class TaskLifecycleWatcher {
                 String reason = StringUtils.hasText(view.statusDetail())
                         ? view.statusDetail()
                         : "云侧状态: " + view.status();
-                failPersistThenDelete(taskId, instance, cloudInstanceId, reason);
+                failPersistThenDelete(taskId, task, instance, cloudInstanceId, reason);
             }
             instanceService.recordProviderStatus(instanceId, view.status(), view.statusDetail());
             // OnFailure/Always：云侧 Failed 可能随后重启，等待 Succeeded / 超时 / cancel，勿标 RUNNING
@@ -182,22 +182,29 @@ public class TaskLifecycleWatcher {
 
     /**
      * 硬约束顺序：fetchContainerLog → 落库 FAILED(+logTail) → 可选 grace → ensureDelete。
+     * <p>
+     * 抓取行数与宽限时间优先用任务快照；旧任务两列为 null 时才回退当前配置。
      */
     private void failPersistThenDelete(
-            UUID taskId, InstanceResponse instance, String cloudInstanceId, String reason) {
-        String logTail = fetchLogSafe(cloudInstanceId);
+            UUID taskId, EciTaskEntity task, InstanceResponse instance, String cloudInstanceId, String reason) {
+        int tailLines = task.getFailureLogTailLines() != null
+                ? task.getFailureLogTailLines()
+                : properties.getFailureLogTailLines();
+        String logTail = fetchLogSafe(cloudInstanceId, tailLines,
+                instanceService.getRegionId(instance.id()));
         taskService.onInstanceFailed(taskId, reason, logTail);
-        int graceSec = Math.max(0, properties.getFailureLogGraceSec());
+        Integer snapshotGraceSec = task.getFailureLogGraceSec();
+        int graceSec = Math.max(0,
+                snapshotGraceSec != null ? snapshotGraceSec : properties.getFailureLogGraceSec());
         instanceService.deleteForTaskCancel(instance.id(), clock.instant().plusSeconds(graceSec));
     }
 
-    private String fetchLogSafe(String cloudInstanceId) {
+    private String fetchLogSafe(String cloudInstanceId, int tailLines, String regionId) {
         if (!StringUtils.hasText(cloudInstanceId)) {
             return null;
         }
         try {
-            String logTail = eciProvider.fetchContainerLog(
-                    cloudInstanceId, properties.getFailureLogTailLines());
+            String logTail = eciProvider.fetchContainerLog(cloudInstanceId, tailLines, regionId);
             return StringUtils.hasText(logTail) ? logTail : null;
         } catch (Exception e) {
             log.warn("fetchContainerLog failed cloudInstanceId={}: {}", cloudInstanceId, e.getMessage());

@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
         "eci.poll-interval-ms=200",
         "eci.mock-auto-complete-sec=0",
         "eci.oss.enabled=false",
+        "ECI_OSS_ENABLED=false",
         "spring.datasource.url=jdbc:h2:mem:eci-task-storage-api-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
 })
 @AutoConfigureMockMvc

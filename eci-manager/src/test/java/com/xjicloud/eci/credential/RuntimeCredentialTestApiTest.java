@@ -29,7 +29,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "eci.oss.access-key=LTAIseedoss01",
         "eci.oss.secret-key=seed-secret-value",
         "eci.oss.endpoint=https://oss-cn-hangzhou-internal.aliyuncs.com",
+        "ECI_OSS_ENDPOINT=https://oss-cn-hangzhou-internal.aliyuncs.com",
         "eci.oss.bucket=test-bucket",
+        "ECI_OSS_BUCKET=test-bucket",
         "spring.datasource.url=jdbc:h2:mem:eci-runtime-cred-probe;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
 })
 @AutoConfigureMockMvc
