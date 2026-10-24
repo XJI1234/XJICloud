@@ -1,5 +1,6 @@
 package com.xjicloud.eci.oss;
 
+import com.xjicloud.eci.config.CloudResourceConfigSnapshot;
 import com.xjicloud.eci.config.OssProperties;
 import com.xjicloud.eci.credential.AccessKeyPair;
 import java.net.URI;
@@ -8,6 +9,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
@@ -26,8 +28,9 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 /**
  * 精简版 OSS 客户端：presign PUT/GET 与 key 构建。
  * <p>
- * 从主项目移植；支持 {@link #applyRuntimeKeys} 热切换当前 AK（endpoint/bucket 仍读 {@link OssProperties}）。
- * {@code enabled=false} 或凭证/目标不完整时 {@link #init()} 跳过建连，服务仍可启动。
+ * 运行时目标（enabled/endpoint/region/bucket/path-style/有效期）由候选配置一次性替换；
+ * 当前 AK/SK 仍由 {@link com.xjicloud.eci.credential.RuntimeCredentialService} 持有和热切。
+ * {@code enabled=false} 或目标不完整时服务仍可启动，使用 OSS 时才返回明确错误。
  */
 @Service
 public class OssStorageService {
@@ -35,8 +38,7 @@ public class OssStorageService {
     private static final Logger log = LoggerFactory.getLogger(OssStorageService.class);
 
     private final OssProperties properties;
-    private volatile S3Client s3Client;
-    private volatile S3Presigner s3Presigner;
+    private volatile ActiveClients active = ActiveClients.notConfigured();
 
     public OssStorageService(OssProperties properties) {
         this.properties = properties;
@@ -52,7 +54,15 @@ public class OssStorageService {
                     properties.isEnabled(), properties.isConfigured());
             return;
         }
-        rebuildClients(properties.getAccessKey(), properties.getSecretKey());
+        applyRuntime(prepare(
+                properties.isEnabled(),
+                properties.getEndpoint(),
+                properties.getRegion(),
+                properties.getBucket(),
+                properties.isPathStyleAccess(),
+                properties.getPresignExpirationMinutes(),
+                properties.getAccessKey(),
+                properties.getSecretKey()));
     }
 
     /**
@@ -69,19 +79,70 @@ public class OssStorageService {
                     properties.isEnabled());
             return;
         }
-        rebuildClients(accessKeyId.trim(), accessKeySecret.trim());
+        applyRuntime(prepare(
+                properties.isEnabled(),
+                properties.getEndpoint(),
+                properties.getRegion(),
+                properties.getBucket(),
+                properties.isPathStyleAccess(),
+                properties.getPresignExpirationMinutes(),
+                accessKeyId,
+                accessKeySecret));
     }
 
-    private void rebuildClients(String accessKey, String secretKey) {
-        String sdkEndpoint = normalizeEndpointForSdk(properties.getEndpoint());
+    /**
+     * 用候选配置构造客户端，但不替换当前引用；未启用或目标/凭证不完整时返回未就绪候选。
+     * 目标完整但 endpoint 无效等真正构造失败会抛出，由调用方在写库前回滚。
+     */
+    public PreparedClients prepare(
+            boolean enabled,
+            String endpoint,
+            String region,
+            String bucket,
+            boolean pathStyleAccess,
+            int presignExpirationMinutes,
+            String accessKeyId,
+            String accessKeySecret) {
+        if (!enabled || !StringUtils.hasText(endpoint) || !StringUtils.hasText(bucket)) {
+            return PreparedClients.notReady(endpoint, region, bucket, pathStyleAccess, presignExpirationMinutes);
+        }
+        if (!new AccessKeyPair(accessKeyId, accessKeySecret).isComplete()) {
+            return PreparedClients.notReady(endpoint, region, bucket, pathStyleAccess, presignExpirationMinutes);
+        }
+        return build(endpoint, region, bucket, pathStyleAccess, presignExpirationMinutes,
+                accessKeyId.trim(), accessKeySecret.trim());
+    }
+
+    /** 候选配置来自当前快照时的便捷入口。 */
+    public PreparedClients prepare(CloudResourceConfigSnapshot.Oss oss, String accessKeyId, String accessKeySecret) {
+        return prepare(
+                oss.enabled(),
+                oss.endpoint(),
+                oss.region(),
+                oss.bucket(),
+                oss.pathStyleAccess(),
+                oss.presignExpirationMinutes(),
+                accessKeyId,
+                accessKeySecret);
+    }
+
+    private PreparedClients build(
+            String endpoint,
+            String region,
+            String bucket,
+            boolean pathStyleAccess,
+            int presignExpirationMinutes,
+            String accessKey,
+            String secretKey) {
+        String sdkEndpoint = normalizeEndpointForSdk(endpoint);
         String sdkHost = extractHostFromEndpoint(sdkEndpoint);
         if (sdkHost == null || sdkHost.isBlank()) {
-            throw new IllegalStateException("OSS endpoint 无效: " + properties.getEndpoint());
+            throw new IllegalStateException("OSS endpoint 无效: " + endpoint);
         }
-        Region sdkRegion = resolveSdkRegion(sdkEndpoint, properties.getRegion());
-        boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, properties.isPathStyleAccess());
+        Region sdkRegion = resolveSdkRegion(sdkEndpoint, region);
+        boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, pathStyleAccess);
         log.info("OSS S3 client: endpoint={}, region={}, bucket={}, pathStyle={}",
-                sdkEndpoint, sdkRegion, properties.getBucket(), pathStyleForSdk);
+                sdkEndpoint, sdkRegion, bucket, pathStyleForSdk);
         AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
         S3Configuration s3Configuration = S3Configuration.builder()
                 .pathStyleAccessEnabled(pathStyleForSdk)
@@ -93,25 +154,54 @@ public class OssStorageService {
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(s3Configuration)
                 .build();
-        S3Presigner nextPresigner = S3Presigner.builder()
-                .endpointOverride(URI.create(sdkEndpoint))
-                .region(sdkRegion)
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .serviceConfiguration(s3Configuration)
-                .build();
-        swapClients(nextClient, nextPresigner);
+        try {
+            S3Presigner nextPresigner = S3Presigner.builder()
+                    .endpointOverride(URI.create(sdkEndpoint))
+                    .region(sdkRegion)
+                    .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                    .serviceConfiguration(s3Configuration)
+                    .build();
+            return new PreparedClients(
+                    nextClient,
+                    nextPresigner,
+                    sdkEndpoint,
+                    region,
+                    bucket,
+                    pathStyleForSdk,
+                    presignExpirationMinutes);
+        } catch (RuntimeException ex) {
+            closeQuietly(nextClient);
+            throw ex;
+        }
+    }
+
+    /** 一次性替换当前客户端和目标配置；旧的客户端在替换后关闭。 */
+    public void applyRuntime(PreparedClients next) {
+        ActiveClients previous = active;
+        active = new ActiveClients(
+                next.client(),
+                next.presigner(),
+                next.endpoint(),
+                next.region(),
+                next.bucket(),
+                next.pathStyleAccess(),
+                next.presignExpirationMinutes());
+        closeQuietly(previous.client());
+        closeQuietly(previous.presigner());
     }
 
     /**
      * 先赋新引用再关闭旧客户端。包可见以便测试 {@code close()}。
      */
     void swapClients(S3Client nextClient, S3Presigner nextPresigner) {
-        S3Client previousClient = this.s3Client;
-        S3Presigner previousPresigner = this.s3Presigner;
-        this.s3Client = nextClient;
-        this.s3Presigner = nextPresigner;
-        closeQuietly(previousClient);
-        closeQuietly(previousPresigner);
+        applyRuntime(new PreparedClients(
+                nextClient,
+                nextPresigner,
+                properties.getEndpoint(),
+                properties.getRegion(),
+                properties.getBucket(),
+                properties.isPathStyleAccess(),
+                properties.getPresignExpirationMinutes()));
     }
 
     private static void closeQuietly(AutoCloseable closeable) {
@@ -129,27 +219,27 @@ public class OssStorageService {
      * 签发 PUT 预签名 URL；{@code contentType} 会写入签名请求，客户端上传必须带相同 Content-Type。
      */
     public String presignPutUrl(String ossKey, String contentType) {
-        requireReady();
+        ActiveClients clients = requireReady();
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(properties.getBucket())
+                .bucket(clients.bucket())
                 .key(ossKey)
                 .contentType(contentType)
                 .build();
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(properties.getPresignExpirationMinutes()))
+                .signatureDuration(Duration.ofMinutes(clients.presignExpirationMinutes()))
                 .putObjectRequest(putObjectRequest)
                 .build();
-        PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(presignRequest);
+        PresignedPutObjectRequest presigned = clients.presigner().presignPutObject(presignRequest);
         return presigned.url().toString();
     }
 
     public String presignGetUrl(String ossKey) {
-        requireReady();
+        ActiveClients clients = requireReady();
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(properties.getPresignExpirationMinutes()))
-                .getObjectRequest(builder -> builder.bucket(properties.getBucket()).key(ossKey))
+                .signatureDuration(Duration.ofMinutes(clients.presignExpirationMinutes()))
+                .getObjectRequest(builder -> builder.bucket(clients.bucket()).key(ossKey))
                 .build();
-        PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(presignRequest);
+        PresignedGetObjectRequest presigned = clients.presigner().presignGetObject(presignRequest);
         return presigned.url().toString();
     }
 
@@ -169,7 +259,7 @@ public class OssStorageService {
     }
 
     /**
-     * 探测 Bucket 可达性：对 {@link OssProperties#getBucket()} 执行 {@code ListObjectsV2 maxKeys=1}。
+     * 探测 Bucket 可达性：对当前运行时 bucket 执行 {@code ListObjectsV2 maxKeys=1}。
      * <ul>
      *   <li>客户端未初始化 → {@link IllegalStateException}（「OSS 未配置/未启用」）</li>
      *   <li>HTTP 403 → {@link IllegalStateException}（鉴权失败）</li>
@@ -178,12 +268,10 @@ public class OssStorageService {
      * </ul>
      */
     public void testConnection() {
-        requireReady();
-        String sdkEndpoint = normalizeEndpointForSdk(properties.getEndpoint());
-        boolean pathStyleForSdk = resolvePathStyleForSdk(sdkEndpoint, properties.isPathStyleAccess());
+        ActiveClients clients = requireReady();
         try {
-            s3Client.listObjectsV2(ListObjectsV2Request.builder()
-                    .bucket(properties.getBucket())
+            clients.client().listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(clients.bucket())
                     .maxKeys(1)
                     .build());
         } catch (S3Exception ex) {
@@ -196,7 +284,7 @@ public class OssStorageService {
             }
             throw ex;
         } catch (SdkClientException ex) {
-            String hostHint = resolveRequestHost(properties.getBucket(), sdkEndpoint, pathStyleForSdk);
+            String hostHint = resolveRequestHost(clients.bucket(), clients.endpoint(), clients.pathStyleAccess());
             Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
             throw new IllegalStateException(
                     "OSS 连接失败，请检查 endpoint/密钥及服务器 DNS。请求主机: " + hostHint
@@ -206,10 +294,12 @@ public class OssStorageService {
         }
     }
 
-    private void requireReady() {
-        if (s3Presigner == null || s3Client == null) {
+    private ActiveClients requireReady() {
+        ActiveClients clients = active;
+        if (!clients.ready()) {
             throw new IllegalStateException("OSS 未配置/未启用");
         }
+        return clients;
     }
 
     /**
@@ -281,5 +371,50 @@ public class OssStorageService {
             return Region.of(configuredRegion.trim());
         }
         return Region.US_EAST_1;
+    }
+
+    /** 候选客户端；未就绪时 client/presigner 为 null，close() 可安全用于回滚清理。 */
+    public record PreparedClients(
+            S3Client client,
+            S3Presigner presigner,
+            String endpoint,
+            String region,
+            String bucket,
+            boolean pathStyleAccess,
+            int presignExpirationMinutes) implements AutoCloseable {
+
+        static PreparedClients notReady(
+                String endpoint,
+                String region,
+                String bucket,
+                boolean pathStyleAccess,
+                int presignExpirationMinutes) {
+            return new PreparedClients(null, null, endpoint, region, bucket, pathStyleAccess, presignExpirationMinutes);
+        }
+
+        @Override
+        public void close() {
+            closeQuietly(client);
+            closeQuietly(presigner);
+        }
+    }
+
+    /** 单次生效的客户端与目标配置；用单个 volatile 引用避免读到半套值。 */
+    private record ActiveClients(
+            S3Client client,
+            S3Presigner presigner,
+            String endpoint,
+            String region,
+            String bucket,
+            boolean pathStyleAccess,
+            int presignExpirationMinutes) {
+
+        static ActiveClients notConfigured() {
+            return new ActiveClients(null, null, "", "", "", false, 0);
+        }
+
+        boolean ready() {
+            return client != null && presigner != null;
+        }
     }
 }

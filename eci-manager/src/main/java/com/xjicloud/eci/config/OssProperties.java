@@ -112,4 +112,15 @@ public class OssProperties {
                 && StringUtils.hasText(accessKey)
                 && StringUtils.hasText(secretKey);
     }
+
+    /** 将云资源配置快照投影到兼容字段；AK/SK 仍由运行时凭证表持有，不在这里替换。 */
+    public void applyCloudConfig(CloudResourceConfigSnapshot snapshot) {
+        CloudResourceConfigSnapshot.Oss oss = snapshot.oss();
+        this.enabled = oss.enabled();
+        this.endpoint = oss.endpoint();
+        this.region = oss.region();
+        this.bucket = oss.bucket();
+        this.pathStyleAccess = oss.pathStyleAccess();
+        this.presignExpirationMinutes = oss.presignExpirationMinutes();
+    }
 }

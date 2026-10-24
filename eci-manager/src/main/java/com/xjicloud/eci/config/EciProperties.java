@@ -343,4 +343,19 @@ public class EciProperties {
             this.openBrowser = openBrowser;
         }
     }
+
+    /** 将云资源配置快照投影到兼容字段；Api-Key、Mock、控制台和生命周期调度仍由进程配置管理。 */
+    public void applyCloudConfig(CloudResourceConfigSnapshot snapshot) {
+        CloudResourceConfigSnapshot.Network network = snapshot.network();
+        this.regionId = network.regionId();
+        this.vpcId = network.vpcId();
+        this.vswitchId = network.vswitchId();
+        this.securityGroupId = network.securityGroupId();
+        CloudResourceConfigSnapshot.Advanced advanced = snapshot.advanced();
+        this.defaultImage = advanced.defaultImage();
+        this.defaultShmSize = advanced.defaultShmSize();
+        this.createTimeoutSec = advanced.createTimeoutSec();
+        this.failureLogTailLines = advanced.failureLogTailLines();
+        this.failureLogGraceSec = advanced.failureLogGraceSec();
+    }
 }
