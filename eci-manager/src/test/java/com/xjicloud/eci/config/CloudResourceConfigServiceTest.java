@@ -7,10 +7,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -368,5 +376,49 @@ class CloudResourceConfigServiceTest {
         assertThat(service.snapshot()).isSameAs(published);
         assertThat(service.snapshot().oss().bucket()).isEqualTo("task-output");
         assertThat(repository.findById("ECI_OSS_BUCKET").orElseThrow().getConfigValue()).isEqualTo("task-output");
+    }
+
+    /** 提交后发布必须和 snapshot() 抢同一把锁，否则并发读线程可能看不到已提交快照。 */
+    @Test
+    void afterCommitPublicationTakesSnapshotMonitor() throws Exception {
+        CountDownLatch bodyFinished = new CountDownLatch(1);
+        CountDownLatch commitGate = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<CloudResourceConfigSnapshot> commit = executor.submit(() -> transactions.execute(status -> {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void beforeCommit(boolean readOnly) {
+                        bodyFinished.countDown();
+                        awaitQuietly(commitGate);
+                    }
+                });
+                return service.saveOss(Map.of("ECI_OSS_BUCKET", "task-output"));
+            }));
+
+            assertThat(bodyFinished.await(10, TimeUnit.SECONDS)).isTrue();
+
+            synchronized (service) {
+                commitGate.countDown();
+                assertThatThrownBy(() -> commit.get(500, TimeUnit.MILLISECONDS))
+                        .isInstanceOf(TimeoutException.class);
+            }
+
+            assertThat(commit.get(10, TimeUnit.SECONDS).oss().bucket()).isEqualTo("task-output");
+        } finally {
+            commitGate.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(service.snapshot().oss().bucket()).isEqualTo("task-output");
+        assertThat(repository.findById("ECI_OSS_BUCKET").orElseThrow().getConfigValue()).isEqualTo("task-output");
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

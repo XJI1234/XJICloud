@@ -114,13 +114,18 @@ public class CloudResourceConfigService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    current = next;
+                    publish(next);
                 }
             });
         } else {
-            current = next;
+            publish(next);
         }
         return next;
+    }
+
+    /** 与 snapshot() 共用同一把锁发布，保证其他线程可见且不产生数据竞争。 */
+    private synchronized void publish(CloudResourceConfigSnapshot next) {
+        current = next;
     }
 
     /** 数据库覆盖值 > 环境变量值 > 集中定义默认值。 */
