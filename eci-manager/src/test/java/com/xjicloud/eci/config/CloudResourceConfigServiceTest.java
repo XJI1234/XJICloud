@@ -15,6 +15,7 @@ import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * 配置来源优先级、集中默认值、校验和分类保存/恢复默认；数据库使用内存 H2。
@@ -286,5 +287,86 @@ class CloudResourceConfigServiceTest {
         assertThat(snapshot.advanced().createTimeoutSec()).isEqualTo(1800);
         assertThat(snapshot.advanced().failureLogGraceSec()).isEqualTo(90);
         assertThat(repository.count()).isZero();
+    }
+
+    @Test
+    void definitionsExposeAllowEmptyAndValidationRuleMetadata() {
+        assertThat(CloudResourceConfigDefinition.all()).hasSize(15);
+        for (CloudResourceConfigDefinition definition : CloudResourceConfigDefinition.all()) {
+            assertThat(definition.validationRule()).as("校验规则 %s", definition.key()).isNotBlank();
+            if (definition.allowEmpty()) {
+                assertThat(CloudResourceConfigRules.parseAndValidate(definition, "").text())
+                        .as("允许为空 %s", definition.key()).isEmpty();
+            } else {
+                assertThatThrownBy(() -> CloudResourceConfigRules.parseAndValidate(definition, ""))
+                        .as("不允许为空 %s", definition.key())
+                        .isInstanceOf(BusinessException.class);
+            }
+        }
+
+        assertThat(CloudResourceConfigDefinition.of(CloudResourceConfigKey.OSS_ENABLED).allowEmpty()).isFalse();
+        assertThat(CloudResourceConfigDefinition.of(CloudResourceConfigKey.OSS_ENABLED).validationRule())
+                .contains("true", "false");
+        assertThat(CloudResourceConfigDefinition.of(CloudResourceConfigKey.OSS_ENDPOINT).allowEmpty()).isTrue();
+        assertThat(CloudResourceConfigDefinition.of(CloudResourceConfigKey.CREATE_TIMEOUT_SEC).allowEmpty()).isFalse();
+        assertThat(CloudResourceConfigDefinition.of(CloudResourceConfigKey.DEFAULT_SHM_SIZE).allowEmpty()).isTrue();
+    }
+
+    @Test
+    void advancedSubgroupsArePreserved() {
+        assertThat(CloudResourceConfigDefinition.inCategory(CloudResourceConfigKey.Category.ADVANCED))
+                .extracting(CloudResourceConfigDefinition::groupLabel, CloudResourceConfigDefinition::key)
+                .containsExactlyInAnyOrder(
+                        tuple("镜像与共享内存", "ECI_DEFAULT_IMAGE"),
+                        tuple("镜像与共享内存", "ECI_DEFAULT_SHM_SIZE"),
+                        tuple("创建超时", "ECI_CREATE_TIMEOUT_SEC"),
+                        tuple("失败取证与清理", "ECI_FAILURE_LOG_TAIL_LINES"),
+                        tuple("失败取证与清理", "ECI_FAILURE_LOG_GRACE_SEC"));
+    }
+
+    @Test
+    void rolledBackSaveDoesNotPublishSnapshot() {
+        CloudResourceConfigSnapshot published =
+                transactional(() -> service.saveOss(Map.of("ECI_OSS_BUCKET", "task-output")));
+
+        transactions.execute(status -> {
+            service.saveOss(Map.of("ECI_OSS_BUCKET", "rolled-back"));
+            status.setRollbackOnly();
+            return null;
+        });
+
+        assertThat(service.snapshot()).isSameAs(published);
+        assertThat(service.snapshot().oss().bucket()).isEqualTo("task-output");
+        assertThat(repository.findById("ECI_OSS_BUCKET").orElseThrow().getConfigValue()).isEqualTo("task-output");
+    }
+
+    @Test
+    void rolledBackResetDoesNotPublishSnapshot() {
+        CloudResourceConfigSnapshot published =
+                transactional(() -> service.saveNetwork(Map.of("ECI_VPC_ID", "vpc-1")));
+
+        transactions.execute(status -> {
+            service.resetNetwork();
+            status.setRollbackOnly();
+            return null;
+        });
+
+        assertThat(service.snapshot()).isSameAs(published);
+        assertThat(service.snapshot().network().vpcId()).isEqualTo("vpc-1");
+        assertThat(repository.findById("ECI_VPC_ID")).isPresent();
+    }
+
+    @Test
+    void failedWriteInsideTransactionDoesNotPublishSnapshot() {
+        CloudResourceConfigSnapshot published =
+                transactional(() -> service.saveOss(Map.of("ECI_OSS_BUCKET", "task-output")));
+
+        assertThatThrownBy(() -> transactional(() -> service.saveOss(
+                Map.of("ECI_OSS_BUCKET", "x".repeat(4096)))))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(service.snapshot()).isSameAs(published);
+        assertThat(service.snapshot().oss().bucket()).isEqualTo("task-output");
+        assertThat(repository.findById("ECI_OSS_BUCKET").orElseThrow().getConfigValue()).isEqualTo("task-output");
     }
 }

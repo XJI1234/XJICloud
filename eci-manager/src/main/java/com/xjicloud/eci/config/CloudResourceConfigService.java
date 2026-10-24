@@ -3,6 +3,8 @@ package com.xjicloud.eci.config;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.EnumMap;
@@ -95,8 +97,7 @@ public class CloudResourceConfigService {
             repository.save(entity);
         }
 
-        current = toSnapshot(candidate);
-        return current;
+        return publishAfterCommit(toSnapshot(candidate));
     }
 
     private CloudResourceConfigSnapshot reset(CloudResourceConfigKey.Category category) {
@@ -104,8 +105,22 @@ public class CloudResourceConfigService {
                 .map(CloudResourceConfigDefinition::key)
                 .toList();
         repository.deleteByConfigKeyIn(keys);
-        current = toSnapshot(parseAll());
-        return current;
+        return publishAfterCommit(toSnapshot(parseAll()));
+    }
+
+    /** 快照只在事务提交后替换；提交失败时内存快照保持与数据库一致。 */
+    private CloudResourceConfigSnapshot publishAfterCommit(CloudResourceConfigSnapshot next) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    current = next;
+                }
+            });
+        } else {
+            current = next;
+        }
+        return next;
     }
 
     /** 数据库覆盖值 > 环境变量值 > 集中定义默认值。 */

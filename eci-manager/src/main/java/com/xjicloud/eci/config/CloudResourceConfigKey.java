@@ -51,14 +51,30 @@ public enum CloudResourceConfigKey {
         }
     }
 
-    /** 文本转型和校验方式。 */
+    /** 文本转型和校验方式：同时决定该类型是否允许空值和展示用校验规则。 */
     public enum ValueType {
-        TEXT,
-        URL,
-        BOOLEAN,
-        POSITIVE_INTEGER,
-        NON_NEGATIVE_INTEGER,
-        SHM_SIZE
+        TEXT(true, "任意文本"),
+        URL(true, "须为带协议和主机名的 URL，如 https://oss-cn-hangzhou-internal.aliyuncs.com"),
+        BOOLEAN(false, "只能填写 true 或 false"),
+        POSITIVE_INTEGER(false, "必须是大于 0 的整数"),
+        NON_NEGATIVE_INTEGER(false, "必须是不小于 0 的整数"),
+        SHM_SIZE(true, "带单位的大小，如 256Mi 或 8Gi");
+
+        private final boolean allowEmpty;
+        private final String validationRule;
+
+        ValueType(boolean allowEmpty, String validationRule) {
+            this.allowEmpty = allowEmpty;
+            this.validationRule = validationRule;
+        }
+
+        public boolean allowEmpty() {
+            return allowEmpty;
+        }
+
+        public String validationRule() {
+            return validationRule;
+        }
     }
 
     private final String key;

@@ -12,7 +12,9 @@ public record CloudResourceConfigDefinition(
         String groupLabel,
         String displayName,
         String defaultValue,
-        CloudResourceConfigKey.ValueType valueType) {
+        CloudResourceConfigKey.ValueType valueType,
+        boolean allowEmpty,
+        String validationRule) {
 
     private static final List<CloudResourceConfigDefinition> ALL =
             Arrays.stream(CloudResourceConfigKey.values()).map(CloudResourceConfigDefinition::of).toList();
@@ -35,6 +37,8 @@ public record CloudResourceConfigDefinition(
                 id.groupLabel(),
                 id.displayName(),
                 id.defaultValue(),
-                id.valueType());
+                id.valueType(),
+                id.valueType().allowEmpty(),
+                id.valueType().validationRule());
     }
 }
