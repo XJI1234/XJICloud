@@ -208,15 +208,12 @@ void main() {
           ),
         ),
       );
+      final original = tester.getRect(find.byType(TextButton));
       final gesture = await tester.startGesture(
         tester.getCenter(find.text('Submit')),
       );
       await tester.pump();
-      expect(
-        tester.widget<AnimatedScale>(find.byType(AnimatedScale)).duration,
-        Duration.zero,
-      );
-      expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1);
+      expect(tester.getRect(find.byType(TextButton)), original);
       await gesture.up();
       await tester.pumpAndSettle();
       expect(calls, 1);

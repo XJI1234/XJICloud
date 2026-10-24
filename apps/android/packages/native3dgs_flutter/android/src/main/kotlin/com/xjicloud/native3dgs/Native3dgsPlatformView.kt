@@ -115,10 +115,14 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
     }
     fun stopInput() = input.clear()
     override fun getView() = view
-    private fun attach() {
+    private fun attach(width: Int? = null, height: Int? = null) {
         val surface = view as? SurfaceView ?: return
         if (!disposed && lifecycleVisibility.active && surface.holder.surface.isValid) {
-            try { session?.attach(surface.holder.surface, surface.width, surface.height) }
+            // The holder describes physical buffer pixels. View bounds can
+            // already reflect the next Flutter layout while its buffer lags.
+            val buffer = surface.holder.surfaceFrame
+            try { session?.attach(surface.holder.surface,
+                width ?: buffer.width(), height ?: buffer.height()) }
             catch (error: Exception) { session?.failure(error) }
         }
     }
@@ -128,7 +132,7 @@ internal class Native3dgsPlatformView(context: Context, val viewId: Int, val ses
     }
     override fun surfaceCreated(holder: SurfaceHolder) = attach()
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        try { session?.resize(width, height) } catch (error: Exception) { session?.failure(error) }
+        attach(width, height)
     }
     override fun surfaceDestroyed(holder: SurfaceHolder) = detach()
     override fun onListen(arguments: Any?, sink: EventChannel.EventSink) {

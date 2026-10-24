@@ -13,6 +13,7 @@ import 'package:xjicloud_mobile/features/viewer/presentation/viewer_page.dart';
 import 'package:xjicloud_mobile/features/viewer/domain/model_source.dart';
 import 'package:xjicloud_mobile/shared/domain/result.dart';
 import 'package:xjicloud_mobile/shared/domain/domain_error.dart';
+import 'package:xjicloud_mobile/shared/presentation/error_text.dart';
 import 'package:xjicloud_mobile/shared/l10n/app_localizations.dart';
 
 import '../identity/session_policy_test.dart' show MemoryStore, session;
@@ -27,7 +28,121 @@ class DelayedEngine extends Engine {
   Future<Result<ViewerCapabilities>> initialize() => initialized.future;
 }
 
+class RecreatedEngine extends Engine {
+  final discoveries = <Completer<Result<ViewerCapabilities>>>[];
+  @override
+  Future<Result<ViewerCapabilities>> initialize() {
+    final result = Completer<Result<ViewerCapabilities>>();
+    discoveries.add(result);
+    return result.future;
+  }
+}
+
 void main() {
+  test(
+    'detached initialization cannot consume a new account pending source',
+    () async {
+      final sessions = SessionCoordinator(MemoryStore());
+      await sessions.activate(session());
+      final sources = Sources(), engine = RecreatedEngine();
+      final c = ViewerController(sources, engine, sessions);
+      sessions.addListener(c.synchronize);
+      c.synchronize();
+      await c.open(const LocalModelSource());
+      final old = c.initialize();
+      await sessions.invalidate();
+      c.surfaceRemoved();
+      await sessions.activate(session('bob'));
+      await c.open(const LocalModelSource());
+      final current = c.initialize();
+      engine.discoveries.first.complete(
+        const Failure(DomainError('cancelled')),
+      );
+      await old;
+      expect(sources.pending, isEmpty);
+      engine.discoveries.last.complete(
+        const Success(ViewerCapabilities(supported: true)),
+      );
+      await current;
+      await Future<void>.delayed(Duration.zero);
+      expect(sources.pending, hasLength(1));
+      sources.pending.last.complete(const Failure(DomainError('cancelled')));
+      await c.close();
+      sessions.removeListener(c.synchronize);
+      c.dispose();
+      sessions.dispose();
+    },
+  );
+  for (final operation in ['cancel', 'close']) {
+    test(
+      '$operation invalidates opens awaiting capability initialization and permits a later open',
+      () async {
+        final sessions = SessionCoordinator(MemoryStore());
+        await sessions.activate(session());
+        final sources = Sources(), engine = DelayedEngine();
+        final c = ViewerController(sources, engine, sessions);
+        await c.open(const LocalModelSource());
+        final initializing = c.initialize();
+        final waiting = c.open(const LocalModelSource());
+        if (operation == 'cancel') {
+          await c.cancel();
+        } else {
+          await c.close();
+        }
+        engine.initialized.complete(
+          const Success(ViewerCapabilities(supported: true)),
+        );
+        await initializing;
+        await waiting;
+        expect(sources.pending, isEmpty);
+        final later = c.open(const LocalModelSource());
+        await Future<void>.delayed(Duration.zero);
+        expect(sources.pending, hasLength(1));
+        sources.pending.last.complete(const Failure(DomainError('cancelled')));
+        await later;
+        c.dispose();
+        sessions.dispose();
+      },
+    );
+  }
+  testWidgets('empty model library never constructs an Android canvas', (
+    tester,
+  ) async {
+    final sessions = SessionCoordinator(MemoryStore());
+    await sessions.activate(session());
+    final c = ViewerController(Sources(), Engine(), sessions);
+    var surfaces = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        home: ViewerPage(
+          controller: c,
+          surfaceBuilder: () {
+            surfaces++;
+            return const SizedBox();
+          },
+          onChooseCloud: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      surfaces,
+      0,
+      reason: 'An empty native Surface can retain another tab image',
+    );
+    expect(
+      find.byKey(const Key('viewer-open-local')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Fullscreen'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    sessions.dispose();
+  });
   test(
     'a queued initial download cannot block a newer model request',
     () async {
@@ -124,8 +239,25 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('nav-viewer')));
       await tester.pumpAndSettle();
-      expect(surfaces, 1);
+      expect(surfaces, 0);
       expect(viewer.visible, isTrue);
+      await viewer.open(const LocalModelSource());
+      await tester.pump();
+      await tester.pump();
+      expect(surfaces, 1);
+      sources.pending.last.complete(
+        Success(
+          LocalModelRef(
+            handle: 'test',
+            fileName: 'A',
+            releaseResource: () async {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      engine.ready(1);
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Fullscreen'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('nav-home')), findsNothing);
@@ -151,15 +283,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpAndSettle();
       expect(surfaces, 1);
-      await tester.tap(find.byKey(const Key('viewer-tools')));
-      await tester.pumpAndSettle();
-      expect(find.text('Flip Y'), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('viewer-tools')), findsOneWidget);
       await sessions.invalidate();
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('username')), findsOneWidget);
-      expect(sources.pending, isEmpty);
+      expect(sources.pending.every((request) => request.isCompleted), isTrue);
+      expect(viewer.session.active, isNull);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },
@@ -188,6 +317,8 @@ void main() {
         ProductApp(container: container, initialLocation: '/viewer'),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('viewer-open-local')));
+      await tester.pumpAndSettle();
       expect(c.session.phase, ViewerPhase.unsupported);
       expect(
         find.textContaining('Native viewer is unsupported'),
@@ -195,7 +326,7 @@ void main() {
       );
       expect(
         tester
-            .widget<OutlinedButton>(find.byKey(const Key('viewer-open-local')))
+            .widget<IconButton>(find.byKey(const Key('viewer-open-local')))
             .onPressed,
         isNull,
       );
@@ -251,16 +382,30 @@ void main() {
         ),
       );
       await opened;
+      await tester.pump();
       engine.ready(1);
       await tester.pumpAndSettle();
+      c.reportError(const DomainError('network'));
+      await tester.pump();
+      final text = tester.widget<Text>(
+        find.text(
+          errorText(
+            AppLocalizations.of(tester.element(find.byType(ViewerPage))),
+            const DomainError('network'),
+          ),
+        ),
+      );
+      expect(text.style?.color, Colors.white);
+      await c.cancel();
+      await tester.pump();
       await tester.tap(find.byKey(const Key('viewer-tools')));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Free mode'));
-      await tester.tap(find.text('Free mode'));
+      await tester.ensureVisible(find.byTooltip('Free mode'));
+      await tester.tap(find.byTooltip('Free mode'));
       await tester.pumpAndSettle();
       expect(c.session.free, isTrue);
-      await tester.ensureVisible(find.text('Flip Y'));
-      await tester.tap(find.text('Flip Y'));
+      await tester.ensureVisible(find.byTooltip('Flip Y'));
+      await tester.tap(find.byTooltip('Flip Y'));
       await tester.pumpAndSettle();
       expect(c.session.flipped, isTrue);
       await tester.binding.handlePopRoute();
@@ -270,7 +415,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(builds, 1);
       expect(find.byKey(const Key('viewer-tools')), findsNothing);
-      expect(find.text('Flip Y'), findsOneWidget);
+      expect(find.byTooltip('Flip Y'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       c.dispose();

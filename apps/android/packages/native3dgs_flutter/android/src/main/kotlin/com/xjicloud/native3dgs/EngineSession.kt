@@ -79,8 +79,11 @@ class EngineSession(private val engine: EnginePort, private val scope: Coroutine
     }
     fun attach(surface: Any, width: Int, height: Int) {
         check(!closing) { "Session is closing" }
-        if (generation != null) return
-        generation = engine.attach(surface)
+        // Surface creation/visibility can precede its first buffer allocation.
+        if (width <= 0 || height <= 0) return
+        if (generation == null) generation = engine.attach(surface)
+        // A retained View may return with a new buffer size before another
+        // surfaceChanged callback. Reconcile without allocating a generation.
         resize(width, height)
     }
     fun resize(width: Int, height: Int) {

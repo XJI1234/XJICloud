@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../../../shared/l10n/app_localizations.dart';
 import '../../../shared/presentation/error_text.dart';
@@ -34,19 +35,24 @@ class HomePage extends StatelessWidget {
               children: [
                 Text(
                   l.welcome,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  style: Theme.of(context).textTheme.headlineLarge,
                 ),
-                const SizedBox(height: 12),
-                Text(l.projectsIntro),
+                const SizedBox(height: 8),
+                Text(
+                  l.projectsIntro,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 20),
                 if (onOpenLocal != null)
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: OutlinedButton(
+                    child: FilledButton.icon(
                       onPressed: onOpenLocal,
-                      child: Text(l.viewerOpenLocal),
+                      icon: const Icon(CupertinoIcons.cube),
+                      label: Text(l.viewerOpenLocal),
                     ),
                   ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 if (viewModel.loading)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
@@ -70,6 +76,11 @@ class HomePage extends StatelessWidget {
                 if (viewModel.current case final current?)
                   Card(
                     child: ListTile(
+                      leading: const Icon(CupertinoIcons.folder_fill, size: 28),
+                      trailing: const Icon(
+                        CupertinoIcons.chevron_right,
+                        size: 16,
+                      ),
                       title: Text(current.name),
                       subtitle: Text(current.description),
                       onTap: () => onOpen(current.id),
@@ -86,19 +97,34 @@ class HomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 if (viewModel.recent.isEmpty) Text(l.noRecentProjects),
-                for (final project in viewModel.recent)
-                  Card(
-                    child: ListTile(
-                      key: Key('recent-${project.id}'),
-                      title: Text(project.name),
-                      subtitle: Text(project.description),
-                      onTap: () => onOpen(project.id),
-                    ),
+                Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      for (final project in viewModel.recent) ...[
+                        ListTile(
+                          key: Key('recent-${project.id}'),
+                          leading: const Icon(CupertinoIcons.folder),
+                          trailing: const Icon(
+                            CupertinoIcons.chevron_right,
+                            size: 16,
+                          ),
+                          title: Text(project.name),
+                          subtitle: Text(project.description),
+                          onTap: () => onOpen(project.id),
+                        ),
+                        if (project != viewModel.recent.last)
+                          const Divider(height: 1, indent: 60),
+                      ],
+                    ],
                   ),
+                ),
                 const SizedBox(height: 24),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: FilledButton.icon(
+                  child: OutlinedButton.icon(
                     key: const Key('create-project'),
                     onPressed: onCreate,
                     icon: const Icon(Icons.add),

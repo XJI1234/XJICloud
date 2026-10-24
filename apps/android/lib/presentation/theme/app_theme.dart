@@ -18,6 +18,10 @@ abstract final class AppTheme {
         onPrimary: Colors.white,
         primaryContainer: tokens.accentSoft,
         onPrimaryContainer: tokens.accent,
+        secondary: tokens.accent,
+        onSecondary: Colors.white,
+        secondaryContainer: tokens.accentSoft,
+        onSecondaryContainer: tokens.accent,
         surface: tokens.card,
         onSurface: tokens.text,
         onSurfaceVariant: tokens.textSecondary,
@@ -47,6 +51,50 @@ abstract final class AppTheme {
         bodySmall: TextStyle(fontSize: 14, color: tokens.textSecondary),
         labelLarge: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
+      cardTheme: CardThemeData(
+        color: tokens.card,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        margin: const EdgeInsets.only(bottom: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.cardRadius),
+        ),
+        clipBehavior: Clip.antiAlias,
+      ),
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        iconColor: tokens.accent,
+        selectedColor: tokens.accent,
+        selectedTileColor: tokens.accentSoft,
+        titleTextStyle: TextStyle(
+          color: tokens.text,
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+        ),
+        subtitleTextStyle: TextStyle(
+          color: tokens.textSecondary,
+          fontSize: 14,
+          height: 1.5,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+      splashFactory: NoSplash.splashFactory,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: tokens.card,
@@ -83,10 +131,18 @@ abstract final class AppTheme {
       ),
       dividerColor: tokens.divider,
       appBarTheme: AppBarTheme(
-        backgroundColor: tokens.card,
+        backgroundColor: tokens.background,
         foregroundColor: tokens.text,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: tokens.text,
+          fontSize: 24,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -.4,
+        ),
       ),
     );
   }

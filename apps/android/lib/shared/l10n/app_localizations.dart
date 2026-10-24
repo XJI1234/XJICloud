@@ -1115,7 +1115,7 @@ abstract class AppLocalizations {
   /// No description provided for @viewerChooseCloud.
   ///
   /// In zh, this message translates to:
-  /// **'选择当前工程模型'**
+  /// **'浏览云端模型'**
   String get viewerChooseCloud;
 
   /// No description provided for @viewerOpen.
@@ -1303,6 +1303,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'训练产物须为有效 Gaussian PLY；任务完成不代表格式兼容。'**
   String get viewerOutputNote;
+
+  /// No description provided for @viewerCloudTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端模型'**
+  String get viewerCloudTitle;
+
+  /// No description provided for @viewerLocalTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机模型'**
+  String get viewerLocalTitle;
+
+  /// No description provided for @viewerRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新模型'**
+  String get viewerRefresh;
+
+  /// No description provided for @viewerProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'所属工程'**
+  String get viewerProject;
 }
 
 class _AppLocalizationsDelegate

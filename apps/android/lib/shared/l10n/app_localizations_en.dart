@@ -560,7 +560,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewerOpenLocal => 'Open local PLY/SPZ';
 
   @override
-  String get viewerChooseCloud => 'Choose current project model';
+  String get viewerChooseCloud => 'Browse cloud models';
 
   @override
   String get viewerOpen => 'View model';
@@ -659,4 +659,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get viewerOutputNote =>
       'Training output must be valid Gaussian PLY; completion does not guarantee format compatibility.';
+
+  @override
+  String get viewerCloudTitle => 'Cloud models';
+
+  @override
+  String get viewerLocalTitle => 'On this device';
+
+  @override
+  String get viewerRefresh => 'Refresh models';
+
+  @override
+  String get viewerProject => 'Project';
 }

@@ -533,7 +533,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewerOpenLocal => '打开本机 PLY/SPZ';
 
   @override
-  String get viewerChooseCloud => '选择当前工程模型';
+  String get viewerChooseCloud => '浏览云端模型';
 
   @override
   String get viewerOpen => '查看模型';
@@ -628,4 +628,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get viewerOutputNote => '训练产物须为有效 Gaussian PLY；任务完成不代表格式兼容。';
+
+  @override
+  String get viewerCloudTitle => '云端模型';
+
+  @override
+  String get viewerLocalTitle => '本机模型';
+
+  @override
+  String get viewerRefresh => '刷新模型';
+
+  @override
+  String get viewerProject => '所属工程';
 }

@@ -169,7 +169,7 @@
   "jobFailed": "Failed",
   "jobCancelled": "Cancelled",
   "viewerOpenLocal": "Open local PLY/SPZ",
-  "viewerChooseCloud": "Choose current project model",
+  "viewerChooseCloud": "Browse cloud models",
   "viewerOpen": "View model",
   "viewerTools": "Viewer tools",
   "viewerFixed": "Fixed mode",
@@ -200,5 +200,9 @@
   "viewerUp": "Move up",
   "viewerDown": "Move down",
   "viewerOutput": "Open training output",
-  "viewerOutputNote": "Training output must be valid Gaussian PLY; completion does not guarantee format compatibility."
+  "viewerOutputNote": "Training output must be valid Gaussian PLY; completion does not guarantee format compatibility.",
+  "viewerCloudTitle": "Cloud models",
+  "viewerLocalTitle": "On this device",
+  "viewerRefresh": "Refresh models",
+  "viewerProject": "Project"
 }

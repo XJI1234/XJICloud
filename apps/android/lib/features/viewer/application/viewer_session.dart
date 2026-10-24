@@ -43,6 +43,11 @@ final class ViewerSession {
     _subscription ??= engine.states.listen(_event);
     final epoch = _epoch;
     final initialized = await engine.initialize();
+    // Capability belongs to this engine, even if a file request was cancelled
+    // while discovery was pending. Do not let that cancellation poison retries.
+    if (initialized case Success<ViewerCapabilities>(:final value)) {
+      _supported = value.supported;
+    }
     if (epoch != _epoch) return;
     switch (initialized) {
       case Success<ViewerCapabilities>(:final value):

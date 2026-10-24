@@ -180,19 +180,23 @@ void main() {
       ),
     );
     await mount(false);
+    final original = tester.getRect(find.byType(TextButton));
     final gesture = await tester.startGesture(
       tester.getCenter(find.text('Submit')),
     );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, .97);
+    expect(
+      tester.getRect(find.byType(TextButton)).width,
+      lessThan(original.width),
+    );
     await gesture.up();
     await mount(true);
     final reducedGesture = await tester.startGesture(
       tester.getCenter(find.text('Submit')),
     );
     await tester.pump(const Duration(milliseconds: 100));
-    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1);
+    expect(tester.getRect(find.byType(TextButton)), original);
     await reducedGesture.up();
   });
 

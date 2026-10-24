@@ -157,6 +157,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await controller.open(const LocalModelSource());
+      await tester.pump();
       await controller.initialize();
       if (controller.session.phase == ViewerPhase.unsupported) {
         expect(controller.session.active, isNull);
@@ -187,7 +189,7 @@ void main() {
         );
       }
 
-      await openMeasured(0);
+      await until(() => controller.session.phase == ViewerPhase.ready);
       final original = controller.session.active;
       selected = badUri;
       await controller.open(const LocalModelSource());

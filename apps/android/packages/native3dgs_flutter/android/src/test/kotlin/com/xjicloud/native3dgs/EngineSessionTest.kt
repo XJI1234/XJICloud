@@ -12,6 +12,8 @@ class EngineSessionTest {
         override val state = MutableStateFlow(RenderState())
         val cancelled = mutableListOf<Long>()
         val detached = mutableListOf<Long>()
+        var attaches = 0
+        val sizes = mutableListOf<Pair<Int, Int>>()
         var suspendedCancelled = false
         var suspendOpen = false
         var closed = false
@@ -24,8 +26,8 @@ class EngineSessionTest {
             return 42
         }
         override fun cancel(requestId: Long) { cancelled.add(requestId); if (cancelFails) error("stale request") }
-        override fun attach(surface: Any) = 1L
-        override fun resize(generation: Long, width: Int, height: Int) {}
+        override fun attach(surface: Any): Long { attaches++; return attaches.toLong() }
+        override fun resize(generation: Long, width: Int, height: Int) { sizes.add(width to height) }
         override fun detach(generation: Long) { detached.add(generation); if (detachFails) error("invalid surface") }
         override fun closeScene() {}
         override fun camera(command: String, values: List<Double>) {}
@@ -37,6 +39,22 @@ class EngineSessionTest {
         session.attach(Any(), 100, 100)
         session.detach(); session.detach()
         assertEquals(listOf(1L), engine.detached)
+        session.shutdown(); runCurrent()
+    }
+    @Test fun surfaceWaitsForPositiveBufferSizeAndReconcilesRepeatedAttachment() = runTest {
+        val engine = FakeEngine()
+        val session = EngineSession(engine, this, StandardTestDispatcher(testScheduler))
+        val surface = Any()
+        session.attach(surface, 0, 0)
+        assertEquals(0, engine.attaches)
+        session.attach(surface, 800, 600)
+        session.attach(surface, 600, 800)
+        assertEquals(1, engine.attaches)
+        assertEquals(listOf(800 to 600, 600 to 800), engine.sizes)
+        session.detach()
+        session.attach(surface, 1200, 700)
+        assertEquals(2, engine.attaches)
+        assertEquals(1200 to 700, engine.sizes.last())
         session.shutdown(); runCurrent()
     }
     @Test fun cancelSuspendedOpenCancelsCoroutineNotRequestId() = runTest {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -59,6 +60,7 @@ class ProjectListPage extends StatelessWidget {
                 Card(
                   child: ListTile(
                     key: Key('project-${p.id}'),
+                    leading: const Icon(CupertinoIcons.folder),
                     selected: p.id == selected,
                     title: Text(p.name),
                     subtitle: Column(

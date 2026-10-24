@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+
+import '../../../presentation/widgets/press_feedback.dart';
 
 import '../../../shared/l10n/app_localizations.dart';
 import '../domain/viewer_capabilities.dart';
@@ -16,11 +19,16 @@ class ViewerTools extends StatelessWidget {
         ready = c.session.active != null;
     Widget button(
       String label,
-      ViewerCamera command, [
+      ViewerCamera command,
+      IconData icon, [
       List<double> values = const [],
-    ]) => OutlinedButton(
-      onPressed: ready ? () => c.camera(command, values) : null,
-      child: Text(label),
+    ]) => PressFeedback(
+      enabled: ready,
+      child: IconButton(
+        tooltip: label,
+        onPressed: ready ? () => c.camera(command, values) : null,
+        icon: Icon(icon),
+      ),
     );
     return Wrap(
       spacing: 8,
@@ -29,40 +37,60 @@ class ViewerTools extends StatelessWidget {
         button(
           c.session.free ? l.viewerFixed : l.viewerFree,
           c.session.free ? ViewerCamera.fixed : ViewerCamera.free,
+          c.session.free ? CupertinoIcons.lock : CupertinoIcons.move,
         ),
-        button(l.viewerFit, ViewerCamera.fit),
-        button(l.viewerReset, ViewerCamera.reset),
-        button(l.viewerFlip, ViewerCamera.flip, [c.session.flipped ? 0 : 1]),
-        button(l.viewerZoomIn, ViewerCamera.dolly, [.8]),
-        button(l.viewerZoomOut, ViewerCamera.dolly, [-.8]),
+        button(l.viewerFit, ViewerCamera.fit, CupertinoIcons.viewfinder),
+        button(
+          l.viewerReset,
+          ViewerCamera.reset,
+          CupertinoIcons.arrow_counterclockwise,
+        ),
+        button(
+          l.viewerFlip,
+          ViewerCamera.flip,
+          CupertinoIcons.arrow_up_arrow_down,
+          [c.session.flipped ? 0 : 1],
+        ),
+        button(l.viewerZoomIn, ViewerCamera.dolly, CupertinoIcons.zoom_in, [
+          .8,
+        ]),
+        button(l.viewerZoomOut, ViewerCamera.dolly, CupertinoIcons.zoom_out, [
+          -.8,
+        ]),
         if (c.session.free && ready) ...[
           FlyControl(
             label: l.viewerForward,
+            icon: CupertinoIcons.arrow_up_right,
             controller: c,
             direction: const [0, 0, 1],
           ),
           FlyControl(
             label: l.viewerBackward,
+            icon: CupertinoIcons.arrow_down_left,
             controller: c,
             direction: const [0, 0, -1],
           ),
           FlyControl(
             label: l.viewerLeft,
+            icon: CupertinoIcons.arrow_left,
             controller: c,
             direction: const [-1, 0, 0],
           ),
           FlyControl(
             label: l.viewerRight,
+            icon: CupertinoIcons.arrow_right,
             controller: c,
             direction: const [1, 0, 0],
           ),
           FlyControl(
             label: l.viewerUp,
+            icon: CupertinoIcons.arrow_up,
             controller: c,
             direction: const [0, 1, 0],
           ),
           FlyControl(
             label: l.viewerDown,
+            icon: CupertinoIcons.arrow_down,
             controller: c,
             direction: const [0, -1, 0],
           ),
@@ -77,10 +105,12 @@ class FlyControl extends StatefulWidget {
   const FlyControl({
     super.key,
     required this.label,
+    required this.icon,
     required this.controller,
     required this.direction,
   });
   final String label;
+  final IconData icon;
   final ViewerController controller;
   final List<double> direction;
   @override
@@ -120,6 +150,12 @@ class _FlyControlState extends State<FlyControl> {
     onPointerDown: (_) => start(),
     onPointerUp: (_) => stop(),
     onPointerCancel: (_) => stop(),
-    child: OutlinedButton(onPressed: move, child: Text(widget.label)),
+    child: PressFeedback(
+      child: IconButton(
+        tooltip: widget.label,
+        onPressed: move,
+        icon: Icon(widget.icon),
+      ),
+    ),
   );
 }

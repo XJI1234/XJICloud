@@ -26,6 +26,7 @@ import '../shared/presentation/error_text.dart';
 import 'app.dart';
 import 'app_container.dart';
 import 'router.dart';
+import 'viewer_model_library.dart';
 
 /// A destination must exist before it can be retained through a login redirect.
 String controlledTarget(String? target) {
@@ -250,6 +251,14 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
                   controller: viewer,
                   surfaceBuilder: container.viewerSurface!,
                   onChooseCloud: () => showViewerModels(context),
+                  libraryBuilder: container.modelAssets == null
+                      ? null
+                      : (context) => ViewerModelLibrary(
+                          workspace: container.workspace!,
+                          models: container.modelAssets!,
+                          onOpen: (model) => openCloud(context, model),
+                          onManageProjects: () => context.go('/projects'),
+                        ),
                 );
               },
             ),
@@ -268,14 +277,12 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
   }
 
   Future<void> showViewerModels(BuildContext context) async {
-    final id = container.workspace?.activeProjectId,
-        models = container.modelAssets;
-    if (id == null || models == null) {
+    final workspace = container.workspace, models = container.modelAssets;
+    if (workspace == null || models == null) {
       context.go('/projects');
       return;
     }
     final generation = container.sessions.generation;
-    unawaited(models.refresh(id));
     final selected = await sessionSheet<ModelAsset>(
       context: context,
       useSafeArea: true,
@@ -284,29 +291,14 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * .75,
         ),
-        child: ListenableBuilder(
-          listenable: models,
-          builder: (context, _) => SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(AppLocalizations.of(context).viewerChooseCloud),
-                if (models.loading(id))
-                  Text(AppLocalizations.of(context).loading),
-                if (models.listError(id) case final error?)
-                  Text(errorText(AppLocalizations.of(context), error)),
-                if (!models.loading(id) && models.modelsFor(id).isEmpty)
-                  Text(AppLocalizations.of(context).modelEmpty),
-                for (final model in models.modelsFor(id))
-                  ListTile(
-                    title: Text(model.fileName),
-                    subtitle: Text('${model.format} · ${model.sizeBytes} B'),
-                    onTap: () => Navigator.pop(context, model),
-                  ),
-              ],
-            ),
-          ),
+        child: ViewerModelLibrary(
+          workspace: workspace,
+          models: models,
+          onOpen: (model) => Navigator.pop(context, model),
+          onManageProjects: () {
+            Navigator.pop(context);
+            context.go('/projects');
+          },
         ),
       ),
     );

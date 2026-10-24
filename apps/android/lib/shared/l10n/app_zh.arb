@@ -169,7 +169,7 @@
   "jobFailed": "失败",
   "jobCancelled": "已取消",
   "viewerOpenLocal": "打开本机 PLY/SPZ",
-  "viewerChooseCloud": "选择当前工程模型",
+  "viewerChooseCloud": "浏览云端模型",
   "viewerOpen": "查看模型",
   "viewerTools": "查看工具",
   "viewerFixed": "固定模式",
@@ -200,5 +200,9 @@
   "viewerUp": "上移",
   "viewerDown": "下移",
   "viewerOutput": "打开训练产物",
-  "viewerOutputNote": "训练产物须为有效 Gaussian PLY；任务完成不代表格式兼容。"
+  "viewerOutputNote": "训练产物须为有效 Gaussian PLY；任务完成不代表格式兼容。",
+  "viewerCloudTitle": "云端模型",
+  "viewerLocalTitle": "本机模型",
+  "viewerRefresh": "刷新模型",
+  "viewerProject": "所属工程"
 }
