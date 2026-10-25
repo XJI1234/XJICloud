@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { PhCloud, PhCloudArrowUp, PhFolderOpen, PhPlus, PhClockCounterClockwise } from '@phosphor-icons/vue'
 import AppButton from '@/presentation/components/AppButton.vue'
 import AppSheet from '@/presentation/components/AppSheet.vue'
@@ -32,7 +32,13 @@ const { waitView } = wait
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const localInputRef = ref<HTMLInputElement | null>(null)
 const models = ref<ModelAsset[]>([])
+// Identity belongs to the successfully imported scene, never the picker or URL.
 const selectedModelId = ref<string | null>(null)
+const sceneReady = ref(false)
+const frameGeneration = ref(0)
+let disposed = false
+const lifetime = new AbortController()
+const switching = ref(false)
 const localFileName = ref<string | null>(null)
 const pickerVisible = ref(false)
 const versionsVisible = ref(false)
@@ -49,12 +55,11 @@ const statusMessage = ref('')
 const downloadById = ref<Record<string, true>>({})
 const errorMessage = ref('')
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
-let localFile: File | null = null
 
 const editorLang = computed(() => (locale.value === 'en-US' ? 'en' : 'zh-CN'))
 const selectedCloudModel = computed(() => models.value.find((model) => model.id === selectedModelId.value) ?? null)
-const canSaveToCloud = computed(() => Boolean(activeProjectId.value) && !loadingEditor.value && !saving.value)
-const canManageVersions = computed(() => Boolean(selectedModelId.value) && !saving.value && !restoring.value)
+const canSaveToCloud = computed(() => sceneReady.value && Boolean(activeProjectId.value) && !loadingEditor.value && !saving.value && !restoring.value && !switching.value)
+const canManageVersions = computed(() => Boolean(selectedModelId.value) && !saving.value && !restoring.value && !loadingEditor.value && !switching.value)
 const sessionLabel = computed(() => {
   if (selectedCloudModel.value) {
     return selectedCloudModel.value.fileName
@@ -81,19 +86,49 @@ function openExportSheet() {
   exportVisible.value = true
 }
 
+async function permitReplacement() {
+  if (saving.value || loadingEditor.value || restoring.value || switching.value || disposed) return false
+  if (!sceneReady.value) return true
+  switching.value = true
+  try {
+    const frame = editorFrame()
+    if (!frame) return false
+    const [error, dirty] = await editor.isDirty(frame, lifetime.signal)
+    if (disposed) return false
+    if (error) {
+      errorMessage.value = formatDomainError(t, error)
+      return false
+    }
+    return !dirty || window.confirm(t('supersplat.leaveConfirm'))
+  } finally {
+    switching.value = false
+  }
+}
+
 async function navigateEditor(src: string) {
-  if (saving.value) {
-    return
-  }
+  // The host has obtained discard permission. Replace the node so vendor beforeunload
+  // cannot ask a second time; browser/tab close still uses the vendor's own guard.
+  sceneReady.value = false
+  selectedModelId.value = null
+  localFileName.value = null
+  frameGeneration.value++
+  await nextTick()
   const iframe = iframeRef.value
-  if (!iframe) {
-    return
-  }
-  const loaded = new Promise<void>((resolve) => {
-    iframe.addEventListener('load', () => resolve(), { once: true })
+  if (!iframe || disposed) return new DomainError('OPERATION_CANCELLED')
+  return new Promise<DomainError | null>((resolve) => {
+    const finish = (error: DomainError | null) => {
+      clearTimeout(timer)
+      iframe.removeEventListener('load', loaded)
+      lifetime.signal.removeEventListener('abort', cancelled)
+      resolve(error)
+    }
+    const loaded = () => finish(null)
+    const cancelled = () => finish(new DomainError('OPERATION_CANCELLED'))
+    const timer = setTimeout(() => finish(new DomainError('EDITOR_TIMEOUT')), 30_000)
+    iframe.addEventListener('load', loaded, { once: true })
+    lifetime.signal.addEventListener('abort', cancelled, { once: true })
+    iframe.src = `${src}${src.includes('?') ? '&' : '?'}s=${Date.now()}`
   })
-  iframe.src = `${src}${src.includes('?') ? '&' : '?'}s=${Date.now()}`
-  await loaded
 }
 
 function editorFrame() {
@@ -116,87 +151,68 @@ function dismissWait() {
   saving.value = false
 }
 
-async function loadBlankEditor() {
-  loadingEditor.value = true
-  errorMessage.value = ''
-  wait.showBusy(t('wait.loading'))
-  await nextTick()
+async function importScene(file?: File) {
   const [srcError, src] = editor.src(editor.blank(editorLang.value))
-  if (srcError || !src) {
-    errorMessage.value = formatDomainError(t, srcError)
-    loadingEditor.value = false
-    wait.hide()
-    return
+  if (srcError || !src) return srcError ?? new DomainError('EDITOR_NOT_READY')
+  const navigationError = await navigateEditor(src)
+  if (navigationError) return navigationError
+  const frame = editorFrame()
+  if (!frame?.contentWindow) return new DomainError('EDITOR_NOT_READY')
+  const [readyError] = await editor.waitReady(frame, lifetime.signal)
+  if (readyError || disposed) return readyError ?? new DomainError('OPERATION_CANCELLED')
+  if (file) {
+    const [importError] = await editor.importLocal(frame, file, lifetime.signal)
+    if (importError || disposed) return importError ?? new DomainError('OPERATION_CANCELLED')
   }
-  await navigateEditor(src)
-  loadingEditor.value = false
-  wait.hide()
+  sceneReady.value = true
+  return null
 }
 
-async function loadCloudEditor(model: ModelAsset) {
+async function loadBlankEditor() {
+  loadingEditor.value = true
+  wait.showBusy(t('wait.loading'))
+  try {
+    const error = await importScene()
+    if (error) errorMessage.value = formatDomainError(t, error)
+    return !error
+  } finally {
+    loadingEditor.value = false
+    wait.hide()
+  }
+}
+
+async function loadCloudEditor(model: ModelAsset, syncRoute = true) {
   pickerVisible.value = false
   loadingEditor.value = true
   errorMessage.value = ''
-  localFile = null
-  localFileName.value = null
   const tracker = createTransferRateTracker()
-  downloadById.value = {
-    ...downloadById.value,
-    [model.id]: true,
-  }
+  downloadById.value = { ...downloadById.value, [model.id]: true }
   wait.showBusy(t('wait.downloading'))
   try {
-    const [downloadError, buffer] = await modelsApi.downloadBytes(
-    model.id,
-    (loadedBytes, total) => {
-      const percent = total > 0 ? Math.min(99, Math.round((loadedBytes / total) * 100)) : 0
-      const rate = tracker.push(loadedBytes, Date.now())
-      wait.showProgress(
-        t('wait.downloading'),
-        percent,
-        rate != null ? formatTransferSpeed(rate) : waitView.value.speed,
-      )
-    },
-    { cacheBust: `${model.version}-${model.updatedAt || Date.now()}`, revision: { updatedAt: model.updatedAt, sizeBytes: model.sizeBytes, fileName: model.fileName } },
-  )
+    const [downloadError, buffer] = await modelsApi.downloadBytes(model.id, (loaded, total) => {
+      if (disposed) return
+      const rate = tracker.push(loaded, Date.now())
+      wait.showProgress(t('wait.downloading'), total > 0 ? Math.min(99, Math.round(loaded / total * 100)) : 0,
+        rate != null ? formatTransferSpeed(rate) : waitView.value.speed)
+    }, { signal: lifetime.signal, cacheBust: `${model.version}-${model.updatedAt}`, revision: {
+      updatedAt: model.updatedAt, sizeBytes: model.sizeBytes, fileName: model.fileName,
+    } })
+    if (disposed) return false
     if (downloadError || !buffer) {
       errorMessage.value = formatDomainError(t, downloadError)
-      return
+      return false
     }
     const file = new File([buffer], model.fileName, { type: 'application/octet-stream' })
     const [prepareError] = editor.prepareLocal(file)
-    if (prepareError) {
-      errorMessage.value = formatDomainError(t, prepareError)
-      return
-    }
-    const [srcError, src] = editor.src(editor.blank(editorLang.value))
-    if (srcError || !src) {
-      errorMessage.value = formatDomainError(t, srcError)
-      return
-    }
-    await navigateEditor(src)
-    const frame = editorFrame()
-    if (!frame?.contentWindow) {
-      errorMessage.value = formatDomainError(t, new DomainError('EDITOR_NOT_READY'))
-      return
-    }
-    wait.showBusy(t('wait.loading'))
-    statusMessage.value = t('supersplat.loadingEditor')
-    const [readyError] = await editor.waitReady(frame)
-    if (readyError) {
-      errorMessage.value = formatDomainError(t, readyError)
-      statusMessage.value = ''
-      return
-    }
-    const [importError] = await editor.importLocal(frame, file)
+    const importError = prepareError ?? await importScene(file)
     if (importError) {
       errorMessage.value = formatDomainError(t, importError)
-      statusMessage.value = ''
-      return
+      return false
     }
+    selectedModelId.value = model.id
     statusMessage.value = ''
-    pickerVisible.value = false
-    await router.replace({ path: route.path, query: { ...route.query, modelId: model.id } })
+    if (syncRoute) await router.replace({ path: route.path, query: { ...route.query, modelId: model.id } })
+    return true
   } finally {
     const next = { ...downloadById.value }
     delete next[model.id]
@@ -226,29 +242,18 @@ async function refreshModels() {
     return
   }
   models.value = data ?? []
-  const queryModelId = typeof route.query.modelId === 'string' ? route.query.modelId : null
-  if (queryModelId && models.value.some((model) => model.id === queryModelId)) {
-    selectedModelId.value = queryModelId
-  } else if (selectedModelId.value && !models.value.some((model) => model.id === selectedModelId.value)) {
-    selectedModelId.value = null
-  }
 }
 
 async function openBlankSession() {
-  selectedModelId.value = null
-  localFile = null
-  localFileName.value = null
-  statusMessage.value = ''
-  await router.replace({ path: route.path, query: { ...route.query, modelId: undefined } })
-  await loadBlankEditor()
+  if (!await permitReplacement()) return
+  if (await loadBlankEditor()) {
+    statusMessage.value = ''
+    await router.replace({ path: route.path, query: { ...route.query, modelId: undefined } })
+  }
 }
 
 async function selectCloudModel(model: ModelAsset) {
-  if (downloadById.value[model.id]) {
-    return
-  }
-  selectedModelId.value = model.id
-  statusMessage.value = ''
+  if (!await permitReplacement()) return
   await loadCloudEditor(model)
 }
 
@@ -258,14 +263,16 @@ async function deletePickedModel(model: ModelAsset, event: Event) {
   if (!window.confirm(t('supersplat.deleteConfirm'))) {
     return
   }
+  const deletingScene = selectedModelId.value === model.id
+  if (deletingScene && !await permitReplacement()) return
   const [error] = await modelsApi.remove(model.id)
   if (error) {
     errorMessage.value = formatDomainError(t, error)
     return
   }
   models.value = models.value.filter((item) => item.id !== model.id)
-  if (selectedModelId.value === model.id) {
-    await openBlankSession()
+  if (deletingScene && await loadBlankEditor()) {
+    await router.replace({ path: route.path, query: { ...route.query, modelId: undefined } })
   }
 }
 
@@ -273,60 +280,35 @@ function triggerLocalOpen() {
   localInputRef.value?.click()
 }
 
-async function loadLocalEditor(file: File) {
+async function handleLocalFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const [prepareError] = editor.prepareLocal(file)
+  if (prepareError) {
+    errorMessage.value = formatDomainError(t, prepareError)
+    return
+  }
+  if (!await permitReplacement()) return
   loadingEditor.value = true
-  errorMessage.value = ''
   wait.showBusy(t('wait.loading'))
   try {
-    const [srcError, src] = editor.src(editor.blank(editorLang.value))
-    if (srcError || !src) {
-      errorMessage.value = formatDomainError(t, srcError)
+    const error = await importScene(file)
+    if (error) {
+      errorMessage.value = formatDomainError(t, error)
       return
     }
-    await navigateEditor(src)
-    const frame = editorFrame()
-    if (!frame?.contentWindow) {
-      errorMessage.value = formatDomainError(t, new DomainError('EDITOR_NOT_READY'))
-      return
-    }
-    const [readyError] = await editor.waitReady(frame)
-    if (readyError) {
-      errorMessage.value = formatDomainError(t, readyError)
-      return
-    }
-    const [importError] = await editor.importLocal(frame, file)
-    if (importError) {
-      errorMessage.value = formatDomainError(t, importError)
-    }
+    localFileName.value = file.name
+    await router.replace({ path: route.path, query: { ...route.query, modelId: undefined } })
   } finally {
     loadingEditor.value = false
     wait.hide()
   }
 }
 
-async function handleLocalFile(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) {
-    return
-  }
-
-  const [prepareError, prepared] = editor.prepareLocal(file)
-  if (prepareError || !prepared) {
-    errorMessage.value = formatDomainError(t, prepareError)
-    return
-  }
-
-  selectedModelId.value = null
-  localFile = file
-  localFileName.value = prepared.fileName
-  statusMessage.value = ''
-  await loadLocalEditor(file)
-  await router.replace({ path: route.path, query: { ...route.query, modelId: undefined } })
-}
-
 async function saveToCloud() {
+  if (!canSaveToCloud.value) return
   const frame = editorFrame()
   if (!frame?.contentWindow) {
     errorMessage.value = formatDomainError(t, new DomainError('EDITOR_NOT_READY'))
@@ -378,11 +360,14 @@ async function saveToCloud() {
   if (exportMode.value === 'overwrite' && selectedModelId.value) {
     const [error, saved] = await editor.saveExport({
       modelId: selectedModelId.value,
+      sceneModelId: selectedModelId.value,
+      signal: lifetime.signal,
       frame,
       format: exportFormat.value,
       fileName: selectedCloudModel.value?.fileName ?? exportFileName.value,
       onProgress,
     })
+    if (disposed) return
     if (error || !saved) {
       errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
       statusMessage.value = ''
@@ -398,11 +383,13 @@ async function saveToCloud() {
 
   const [error, created] = await editor.saveAsNew({
     projectId: activeProjectId.value,
+    signal: lifetime.signal,
     frame,
     format: exportFormat.value,
     fileName: exportFileName.value,
     onProgress,
   })
+  if (disposed) return
   if (error || !created) {
     errorMessage.value = formatDomainError(t, error ?? new DomainError('EDITOR_EXPORT_FAILED'))
     statusMessage.value = ''
@@ -411,7 +398,6 @@ async function saveToCloud() {
     return
   }
   selectedModelId.value = created.id
-  localFile = null
   localFileName.value = null
   statusMessage.value = t('supersplat.savedAsNewModel', { name: created.fileName })
   await refreshModels()
@@ -424,7 +410,9 @@ async function openVersions() {
     return
   }
   errorMessage.value = ''
-  const [error, data] = await modelsApi.listVersions(selectedModelId.value)
+  const modelId = selectedModelId.value
+  const [error, data] = await modelsApi.listVersions(modelId)
+  if (disposed || modelId !== selectedModelId.value) return
   if (error) {
     errorMessage.value = formatDomainError(t, error)
     return
@@ -434,31 +422,17 @@ async function openVersions() {
 }
 
 async function importBufferIntoEditor(file: File) {
-  const [prepareError] = editor.prepareLocal(file)
-  if (prepareError) {
-    return prepareError
-  }
-  const [srcError, src] = editor.src(editor.blank(editorLang.value))
-  if (srcError || !src) {
-    return srcError ?? new DomainError('EDITOR_NOT_READY')
-  }
-  await navigateEditor(src)
-  const frame = editorFrame()
-  if (!frame?.contentWindow) {
-    return new DomainError('EDITOR_NOT_READY')
-  }
-  const [readyError] = await editor.waitReady(frame)
-  if (readyError) {
-    return readyError
-  }
-  const [importError] = await editor.importLocal(frame, file)
-  return importError
+  const target = selectedModelId.value
+  const error = await importScene(file)
+  if (!error) selectedModelId.value = target
+  return error
 }
 
 async function previewVersion(version: ModelVersion) {
   if (!selectedModelId.value || version.current) {
     return
   }
+  if (!await permitReplacement()) return
   restoring.value = true
   versionsVisible.value = false
   errorMessage.value = ''
@@ -482,7 +456,9 @@ async function previewVersion(version: ModelVersion) {
       sizeBytes: version.sizeBytes,
       fileName: version.fileName,
     },
+    lifetime.signal,
   )
+  if (disposed) return
   if (downloadError || !buffer) {
     restoring.value = false
     errorMessage.value = formatDomainError(t, downloadError)
@@ -510,6 +486,7 @@ async function restoreVersion(version: ModelVersion) {
   if (!window.confirm(t('supersplat.restoreConfirm'))) {
     return
   }
+  if (!await permitReplacement()) return
   restoring.value = true
   versionsVisible.value = false
   errorMessage.value = ''
@@ -558,7 +535,9 @@ async function downloadHistoryVersion(version: ModelVersion) {
       sizeBytes: version.sizeBytes,
       fileName: version.fileName,
     },
+    lifetime.signal,
   )
+  if (disposed) return
   downloadingHistory.value = false
   if (downloadError || !buffer) {
     errorMessage.value = formatDomainError(t, downloadError)
@@ -569,56 +548,32 @@ async function downloadHistoryVersion(version: ModelVersion) {
   wait.showDone(t('wait.done'), 100, lastSpeed)
 }
 
-watch(activeProjectId, async () => {
-  await refreshModels()
-})
-
-watch(locale, async () => {
-  if (!iframeRef.value || saving.value || restoring.value) {
-    return
-  }
-  if (selectedCloudModel.value) {
-    await loadCloudEditor(selectedCloudModel.value)
-    return
-  }
-  if (localFile) {
-    await loadLocalEditor(localFile)
-    return
-  }
-  await loadBlankEditor()
+onBeforeRouteUpdate(async (to) => {
+  const id = typeof to.query.modelId === 'string' ? to.query.modelId : null
+  if (sceneReady.value && id === selectedModelId.value) return true
+  if (!await permitReplacement()) return false
+  if (!id) return loadBlankEditor()
+  const model = models.value.find(item => item.id === id)
+  return model ? loadCloudEditor(model, false) : false
 })
 
 onMounted(async () => {
   await nextTick()
   await ensureProjects()
   await refreshModels()
-  if (selectedModelId.value) {
-    const model = models.value.find((item) => item.id === selectedModelId.value)
-    if (model) {
-      await loadCloudEditor(model)
-      return
-    }
-  }
-  await loadBlankEditor()
+  if (disposed) return
+  const model = models.value.find(item => item.id === route.query.modelId)
+  if (model) await loadCloudEditor(model, false)
+  else await loadBlankEditor()
 })
 
 onBeforeUnmount(() => {
-  localFile = null
+  disposed = true
+  lifetime.abort()
 })
 
-onBeforeRouteLeave(async (_to, _from, next) => {
-  const iframe = iframeRef.value
-  if (!iframe?.contentWindow) {
-    next()
-    return
-  }
-  const [error, dirty] = await editor.isDirty(iframe)
-  if (!error && dirty && !window.confirm(t('supersplat.leaveConfirm'))) {
-    next(false)
-    return
-  }
-  next()
-})
+onBeforeRouteLeave(() => permitReplacement())
+
 </script>
 
 <template>
@@ -656,7 +611,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
     <p v-if="errorMessage" class="supersplat-chrome__error">{{ errorMessage }}</p>
 
     <section class="supersplat-stage">
-      <iframe ref="iframeRef" class="supersplat-iframe" :title="t('supersplat.title')" allow="fullscreen" />
+      <iframe :key="frameGeneration" ref="iframeRef" class="supersplat-iframe" :title="t('supersplat.title')" allow="fullscreen" />
     </section>
 
     <input

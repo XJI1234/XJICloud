@@ -35,8 +35,9 @@ export async function openEditorUseCase(
 export async function confirmLeaveIfDirtyUseCase(
   deps: { bridge: EditorBridgePort },
   frame: EditorFrame,
+  signal?: AbortSignal,
 ): Promise<Result<boolean>> {
-  return deps.bridge.isDirty(frame)
+  return deps.bridge.isDirty(frame, signal)
 }
 
 function resolveExportName(fileName: string | undefined, format: ExportModelFormat) {
@@ -53,17 +54,23 @@ export async function saveEditorExportUseCase(
   deps: { models: ModelAssetRepository; bridge: EditorBridgePort },
   input: {
     modelId: string
+    sceneModelId: string | null
+    signal?: AbortSignal
     frame: EditorFrame
     format: ExportModelFormat
     fileName?: string
     onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
   },
 ): Promise<Result<ModelAsset>> {
+  if (!input.sceneModelId || input.sceneModelId !== input.modelId) {
+    return err(new DomainError('EDITOR_NOT_READY'))
+  }
   const [nameError, fileName] = resolveExportName(input.fileName, input.format)
   if (nameError || !fileName) {
     return err(nameError ?? new DomainError('MODEL_INVALID_FORMAT'))
   }
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
+    signal: input.signal,
     compressed: input.format === 'spz',
     fileName,
     onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
@@ -71,9 +78,10 @@ export async function saveEditorExportUseCase(
   if (exportError || !exported) {
     return err(exportError ?? new DomainError('EDITOR_EXPORT_FAILED'))
   }
+  if (input.signal?.aborted) return err(new DomainError('OPERATION_CANCELLED'))
   return deps.models.uploadExport(input.modelId, exported.blob, exported.fileName, (loaded, total) => {
     input.onProgress?.({ phase: 'upload', loaded, total })
-  })
+  }, input.signal)
 }
 
 export async function saveEditorAsNewModelUseCase(
@@ -98,6 +106,7 @@ export async function saveEditorAsNewModelUseCase(
     return err(nameError ?? new DomainError('MODEL_INVALID_FORMAT'))
   }
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
+    signal: input.signal,
     compressed: input.format === 'spz',
     fileName,
     onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
@@ -125,10 +134,11 @@ export async function importLocalEditorFileUseCase(
   deps: { bridge: EditorBridgePort },
   frame: EditorFrame,
   file: File,
+  signal?: AbortSignal,
 ): Promise<Result<void>> {
   const formatError = assertModelFile(file)
   if (formatError) {
     return err(formatError)
   }
-  return deps.bridge.importLocal(frame, file)
+  return deps.bridge.importLocal(frame, file, signal)
 }

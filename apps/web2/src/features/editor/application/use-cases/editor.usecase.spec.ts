@@ -6,6 +6,11 @@ import type { EditorBridgePort } from '../../domain/repositories/editor-bridge.p
 import { buildSuperSplatSrc, isDirtyResponse, isExportProgress, isTrustedIframeMessage } from '../../infrastructure/supersplat-protocol'
 
 describe('editor use cases', () => {
+  it('rejects overwrite when the target differs from the committed scene', async () => {
+    const [error] = await saveEditorExportUseCase({ models: {} as ModelAssetRepository, bridge: {} as EditorBridgePort },
+      { modelId: 'B', sceneModelId: 'A', frame: { contentWindow: window, src: '/' }, format: 'ply' })
+    expect(error?.code).toBe('EDITOR_NOT_READY')
+  })
   it('opens via download token', async () => {
     const models = {
       createDownloadToken: async () => ok({ url: 'https://signed', expiresAt: 't' }),
@@ -51,7 +56,7 @@ describe('editor use cases', () => {
     }
     const [error] = await saveEditorExportUseCase(
       { models, bridge },
-      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply' },
+      { modelId: 'm1', sceneModelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'ply' },
     )
     expect(error).toBeNull()
     expect(uploaded[0]?.name).toBe('out.ply')
@@ -87,7 +92,7 @@ describe('editor use cases', () => {
     const [error] = await saveEditorExportUseCase(
       { models, bridge },
       {
-        modelId: 'm1',
+        modelId: 'm1', sceneModelId: 'm1',
         frame: { contentWindow: {} as Window, src: '/supersplat/' },
         format: 'ply',
         onProgress: (progress) => phases.push(`${progress.phase}:${progress.loaded}`),
@@ -165,7 +170,7 @@ describe('editor use cases', () => {
     }
     const [error] = await saveEditorExportUseCase(
       { models, bridge },
-      { modelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'spz', fileName: 'scan' },
+      { modelId: 'm1', sceneModelId: 'm1', frame: { contentWindow: {} as Window, src: '/supersplat/' }, format: 'spz', fileName: 'scan' },
     )
     expect(error).toBeNull()
     expect(compressed).toBe(true)
@@ -194,7 +199,7 @@ describe('supersplat protocol', () => {
     const src = buildSuperSplatSrc({
       signedUrl: 'https://x/file',
       fileName: 'a.ply',
-      modelId: 'm1',
+      modelId: 'm1', sceneModelId: 'm1',
       lang: 'en-US',
     })
     expect(src).toContain('/supersplat/index.html')

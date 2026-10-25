@@ -19,10 +19,10 @@ export function useEditorSession() {
     src: (params: Parameters<typeof editorSrc>[1]) => editorSrc({ bridge: container.editorBridge }, params),
     blank: (lang?: string) => blankEditorLaunch(lang),
     prepareLocal: (file: File) => prepareLocalEditorLaunch(file),
-    waitReady: (frame: EditorFrame) => container.editorBridge.waitReady(frame),
-    importLocal: (frame: EditorFrame, file: File) =>
-      importLocalEditorFileUseCase({ bridge: container.editorBridge }, frame, file),
-    isDirty: (frame: EditorFrame) => confirmLeaveIfDirtyUseCase({ bridge: container.editorBridge }, frame),
+    waitReady: (frame: EditorFrame, signal?: AbortSignal) => container.editorBridge.waitReady(frame, signal),
+    importLocal: (frame: EditorFrame, file: File, signal?: AbortSignal) =>
+      importLocalEditorFileUseCase({ bridge: container.editorBridge }, frame, file, signal),
+    isDirty: (frame: EditorFrame, signal?: AbortSignal) => confirmLeaveIfDirtyUseCase({ bridge: container.editorBridge }, frame, signal),
     saveExport: (input: Parameters<typeof saveEditorExportUseCase>[1]) =>
       saveEditorExportUseCase({ models: container.models, bridge: container.editorBridge }, input),
     saveAsNew: (input: Parameters<typeof saveEditorAsNewModelUseCase>[1]) =>
