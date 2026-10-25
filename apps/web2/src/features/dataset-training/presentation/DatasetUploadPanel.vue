@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import AppButton from '@/presentation/components/AppButton.vue'
 import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
 import { useWaitSession } from '@/presentation/composables/useWaitSession'
@@ -16,6 +17,11 @@ const props = defineProps<{
   projectId: string
 }>()
 
+const workspace = useProjectWorkspace()
+const stopWorkspace = workspace.subscribe(() => {
+  if (workspace.activeProjectId() !== props.projectId) { cancelUpload() }
+})
+onBeforeUnmount(stopWorkspace)
 const training = useDatasetTraining()
 const { t } = useI18n()
 const { formatDateTime } = useFormatDateTime()
@@ -24,6 +30,15 @@ const folderInputRef = ref<HTMLInputElement | null>(null)
 const datasetName = ref('')
 const archive = ref<DatasetArchive | null>(null)
 const pending = ref(false)
+let uploadOwner: AbortController | null = null
+function cancelUpload() {
+  uploadOwner?.abort()
+  uploadOwner = null
+  pending.value = false
+  wait.hide()
+}
+onBeforeUnmount(cancelUpload)
+watch(() => props.projectId, cancelUpload)
 const uploadProgress = ref(0)
 const { speedLabel, noteLoaded, resetSpeed } = useTransferSpeed()
 const wait = useWaitSession()
@@ -59,41 +74,50 @@ function handleFolderSelect(event: Event) {
 }
 
 async function uploadArchive() {
+  if (pending.value) return
   if (!archive.value) {
     errorMessage.value = t('dataset.selectFolderFirst')
     return
   }
+  const owner = new AbortController()
+  uploadOwner = owner
   pending.value = true
   uploadProgress.value = 0
   resetSpeed()
   errorMessage.value = ''
   statusMessage.value = t('dataset.requestingUrls')
   wait.showBusy(t('wait.uploading'), true)
-  const [error, job] = await training.submit({
-    projectId: props.projectId,
-    name: datasetName.value.trim() || defaultDatasetName(),
-    archive: archive.value,
-    onProgress: (progress: { percent: number; loaded: number }) => {
-      uploadProgress.value = progress.percent
-      noteLoaded(progress.loaded)
-      statusMessage.value = t('dataset.uploadingOss')
-      wait.showProgress(t('wait.uploading'), progress.percent, speedLabel.value, true)
-    },
-  })
-  pending.value = false
-  if (error || !job) {
-    errorMessage.value = formatDomainError(t, error)
-    statusMessage.value = ''
-    resetSpeed()
-    wait.hide()
-    return
+  try {
+    const [error, job] = await training.submit({
+      signal: owner.signal,
+      projectId: props.projectId,
+      name: datasetName.value.trim() || defaultDatasetName(),
+      archive: archive.value,
+      onProgress: (progress: { percent: number; loaded: number }) => {
+        if (owner.signal.aborted || uploadOwner !== owner) return
+        uploadProgress.value = progress.percent
+        noteLoaded(progress.loaded)
+        statusMessage.value = t('dataset.uploadingOss')
+        wait.showProgress(t('wait.uploading'), progress.percent, speedLabel.value, true)
+      },
+    })
+    if (owner.signal.aborted || uploadOwner !== owner) return
+    if (error || !job) {
+      errorMessage.value = formatDomainError(t, error)
+      statusMessage.value = ''
+      resetSpeed()
+      wait.hide()
+      return
+    }
+    training.watchHub.upsert(job)
+    training.watchHub.watch(job.id)
+    uploadProgress.value = 100
+    statusMessage.value = t('dataset.jobSubmitted')
+    archive.value = null
+    wait.showDone(t('wait.done'), 100, speedLabel.value)
+  } finally {
+    if (uploadOwner === owner) { pending.value = false; uploadOwner = null }
   }
-  training.watchHub.upsert(job)
-  training.watchHub.watch(job.id)
-  uploadProgress.value = 100
-  statusMessage.value = t('dataset.jobSubmitted')
-  archive.value = null
-  wait.showDone(t('wait.done'), 100, speedLabel.value)
 }
 </script>
 
@@ -122,6 +146,8 @@ async function uploadArchive() {
     <p v-if="statusMessage" class="upload-status">{{ statusMessage }}</p>
     <p v-if="errorMessage" class="upload-error">{{ errorMessage }}</p>
     <WaitOverlay
+      :cancellable="!waitView.complete"
+      @cancel="cancelUpload()"
       :visible="waitView.visible"
       :phase="waitView.phase"
       :title="waitView.title"

@@ -28,9 +28,10 @@ export function createWeb2Container(options: CreateContainerOptions = {}): Web2C
     clearJobs: () => undefined as void,
   }
   const unauthorized = {
-    notifyUnauthorized() {
-      session.clear()
+    notifyUnauthorized(token?: string | null) {
+      if (token !== undefined && token !== session.getToken()) return
       workspace.setActiveProjectId(null)
+      session.clear()
       workspaceReset.clearJobs()
       options.onUnauthorized?.()
     },
@@ -48,10 +49,11 @@ export function createWeb2Container(options: CreateContainerOptions = {}): Web2C
     baseUrl: options.baseUrl ?? resolveApiBaseUrl(),
     fetchImpl: options.fetchImpl,
     tokenProvider: session,
+    unauthorized,
   })
   const jobWatch = createJobWatchHub({ jobs, events: jobEvents })
   workspaceReset.clearJobs = () => jobWatch.clear()
-  const models = createHttpModelAssetRepository(http, createOpfsModelCache())
+  const models = createHttpModelAssetRepository(http, () => createOpfsModelCache(session.read()?.userId ?? null), () => session.read()?.userId ?? null)
 
   const container: Web2Container = {
     auth: createHttpAuthRepository(http),

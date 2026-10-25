@@ -26,3 +26,13 @@ describe('dataset archive', () => {
     expect(archive?.manifest.imageCount).toBe(2)
   })
 })
+
+// The filename contract remains JPG/PNG/WebP, including empty or misleading MIME values.
+it.each(['photo.JPG', 'photo.jpeg', 'photo.PNG', 'photo.webp'])('accepts a supported extension: %s', name => {
+  const [error, archive] = buildDatasetArchive([new File(['x'], name)])
+  expect(error).toBeNull()
+  expect(archive?.files).toHaveLength(1)
+})
+it.each(['a.gif', 'a.svg', 'a.bmp', 'a.txt'])('rejects unsupported image/* files: %s', name => {
+  expect(buildDatasetArchive([new File(['x'], name, { type: 'image/gif' })])[0]?.code).toBe('DATASET_NO_IMAGES')
+})

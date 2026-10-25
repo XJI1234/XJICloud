@@ -182,6 +182,7 @@ export default {
     uploadFailed: 'Upload failed',
   },
   training: {
+    connectionLost: 'Connection lost. Recovering; you can also retry.',
     eyebrow: 'Training Jobs',
     title: 'Training Progress',
     refresh: 'Refresh',

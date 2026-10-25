@@ -5,6 +5,43 @@ import type { HttpClient } from '@/shared/infrastructure/http-client'
 import { liveModelCacheKey } from '../../domain/services/model-cache.service'
 
 describe('http model asset cache', () => {
+  it('rejects a cached read that completes after a successful mutation', async () => {
+    const cache = createMemoryModelCache()
+    await cache.put({ cacheKey: 'live:m', modelId: 'm', versionId: null, fileName: 'a.ply', sizeBytes: 1, updatedAt: '', cachedAt: '' }, new ArrayBuffer(1))
+    let finish!: (value: ArrayBuffer) => void
+    const get = vi.spyOn(cache, 'get').mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const repo = createHttpModelAssetRepository({ request: async () => undefined } as unknown as HttpClient, cache)
+    const download = repo.downloadBytes('m')
+    await vi.waitFor(() => expect(get).toHaveBeenCalledOnce())
+    await repo.delete('m')
+    finish(new ArrayBuffer(1))
+    expect((await download)[0]?.code).toBe('OPERATION_CANCELLED')
+  })
+  it('forwards cancellation for historical files', async () => {
+    const owner = new AbortController()
+    const downloadBytes = vi.fn(async (_path, _progress, signal) => { expect(signal).toBe(owner.signal); owner.abort(); return new ArrayBuffer(1) })
+    const repo = createHttpModelAssetRepository({ downloadBytes } as unknown as HttpClient, createMemoryModelCache())
+    expect((await repo.downloadVersionBytes('m', 'v', undefined, { signal: owner.signal }))[0]?.code).toBe('OPERATION_CANCELLED')
+  })
+  it('captures the account before cache awaits and rejects a changed owner', async () => {
+    let owner = 'a'
+    const cache = createMemoryModelCache()
+    vi.spyOn(cache, 'list').mockImplementation(async () => { owner = 'b'; return [] })
+    const downloadBytes = vi.fn()
+    const repo = createHttpModelAssetRepository({ downloadBytes } as unknown as HttpClient, cache, () => owner)
+    expect((await repo.downloadBytes('m'))[0]?.code).toBe('OPERATION_CANCELLED')
+    expect(downloadBytes).not.toHaveBeenCalled()
+  })
+  it('does not serve old bytes after successful deletion with failed cache invalidation', async () => {
+    const cache = createMemoryModelCache()
+    await cache.put({ cacheKey: 'live:m', modelId: 'm', versionId: null, fileName: 'm.ply', sizeBytes: 1, updatedAt: '', cachedAt: '' }, new ArrayBuffer(1))
+    vi.spyOn(cache, 'remove').mockRejectedValue(new Error('denied'))
+    const downloadBytes = vi.fn(async () => new ArrayBuffer(2))
+    const repo = createHttpModelAssetRepository({ request: async () => undefined, downloadBytes } as unknown as HttpClient, cache)
+    expect((await repo.delete('m'))[0]).toBeNull()
+    expect((await repo.downloadBytes('m'))[1]?.byteLength).toBe(2)
+    expect(downloadBytes).toHaveBeenCalledOnce()
+  })
   it('skips the network when the live revision is cached', async () => {
     const downloadBytes = vi.fn()
     const cache = createMemoryModelCache()

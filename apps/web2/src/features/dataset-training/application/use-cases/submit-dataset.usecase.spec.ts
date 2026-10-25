@@ -37,6 +37,19 @@ function job(status: TrainingJob['status'] = 'QUEUED'): TrainingJob {
 }
 
 describe('submit dataset', () => {
+  it('passes cancellation to OSS and never uploads manifest or completes afterwards', async () => {
+    const owner = new AbortController()
+    const cancel = vi.fn(async () => ok(job('CANCELLED')))
+    const completeDataset = vi.fn()
+    const jobs = { createDataset: async () => ok({ jobId: 'j', manifestUploadUrl: 'manifest', uploads: [{ archivedName: '0001.jpg', uploadUrl: 'image' }] }), cancel, completeDataset } as unknown as TrainingJobRepository
+    const put = vi.fn(async (_url, _blob, _type, _progress, signal) => { expect(signal).toBe(owner.signal); owner.abort() })
+    const [error] = await submitDatasetUseCase({ jobs, objectStorage: { put } }, { projectId: 'p', name: 'a', archive: archive(), signal: owner.signal })
+    expect(error?.code).toBe('OPERATION_CANCELLED')
+    expect(error?.details?.jobId).toBe('j')
+    expect(put).toHaveBeenCalledOnce()
+    expect(completeDataset).not.toHaveBeenCalled()
+    expect(cancel).toHaveBeenCalledWith('j')
+  })
   it('uploads files and manifest then completes', async () => {
     const puts: string[] = []
     const ticket: DatasetUploadTicket = {

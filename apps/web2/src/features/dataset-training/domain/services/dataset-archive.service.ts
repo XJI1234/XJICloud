@@ -25,7 +25,7 @@ function isImageFile(file: File) {
   if (IMAGE_EXTENSIONS.has(extension)) {
     return true
   }
-  return file.type.startsWith('image/')
+  return false
 }
 
 export function buildDatasetArchive(rawFiles: File[]): Result<DatasetArchive> {
@@ -42,7 +42,7 @@ export function buildDatasetArchive(rawFiles: File[]): Result<DatasetArchive> {
     return {
       archivedName,
       originalName: file.name,
-      contentType: file.type || detectContentType(file.name),
+      contentType: detectContentType(file.name),
       sizeBytes: file.size,
       file,
     }

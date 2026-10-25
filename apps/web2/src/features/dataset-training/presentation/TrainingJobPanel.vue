@@ -16,6 +16,9 @@ const { t } = useI18n()
 const { formatDateTime } = useFormatDateTime()
 
 const jobs = ref<TrainingJob[]>([])
+const disconnected = ref<string[]>([])
+let disposed = false
+let loadEpoch = 0
 const loading = ref(false)
 const loadError = ref('')
 const actionError = ref('')
@@ -45,6 +48,8 @@ function badgeClass(status: JobStatus) {
 }
 
 async function loadJobs() {
+  const generation = ++loadEpoch
+  const projectId = props.projectId
   if (!props.projectId) {
     jobs.value = []
     return
@@ -52,6 +57,7 @@ async function loadJobs() {
   loading.value = true
   loadError.value = ''
   const [error, data] = await training.list(props.projectId)
+  if (disposed || generation !== loadEpoch || projectId !== props.projectId) return
   loading.value = false
   if (error) {
     loadError.value = formatDomainError(t, error)
@@ -68,6 +74,7 @@ async function loadJobs() {
 
 const stopWatch = training.watchHub.subscribe(() => {
   jobs.value = training.watchHub.jobs()
+  disconnected.value = jobs.value.filter(job => training.watchHub.connectionFailed(job.id)).map(job => job.id)
 })
 
 watch(
@@ -83,6 +90,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
+  loadEpoch++
   stopWatch()
   training.watchHub.clear()
 })
@@ -134,6 +143,10 @@ async function mutate(job: TrainingJob) {
         </div>
         <p v-if="job.stage || job.message" class="training-job-message">
           {{ job.stage }}<span v-if="job.message"> · {{ job.message }}</span>
+        </p>
+        <p v-if="disconnected.includes(job.id)" class="upload-error">
+          {{ t('training.connectionLost') }}
+          <AppButton compact @click="training.watchHub.stop(job.id); training.watchHub.watch(job.id)">{{ t('common.refresh') }}</AppButton>
         </p>
         <p v-if="job.errorMessage" class="upload-error">{{ job.errorMessage }}</p>
         <div v-if="job.downloadUrl" class="training-job-actions">
