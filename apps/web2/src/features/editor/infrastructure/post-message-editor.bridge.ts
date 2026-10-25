@@ -148,7 +148,7 @@ export function createPostMessageEditorBridge(options?: {
       if (readyError) return err(readyError)
       exportOptions?.onProgress?.(0)
       return exchange(frame, { type: EXPORT_PLY, compressed: exportOptions?.compressed ?? false,
-        fileName: exportOptions?.fileName }, EXPORT_MAX_TIMEOUT_MS,
+        fileName: exportOptions?.fileName, spzVersion: exportOptions?.spzVersion }, EXPORT_MAX_TIMEOUT_MS,
         data => isExportResult(data) ? ok({ blob: new Blob([data.buffer], { type: 'application/octet-stream' }), fileName: data.fileName })
           : isExportError(data) ? err(new DomainError('EDITOR_EXPORT_FAILED', data.message)) : undefined,
         exportOptions?.signal, undefined, exportOptions?.onProgress ?? (() => undefined))

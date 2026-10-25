@@ -10,7 +10,7 @@ import {
   withModelExtension,
 } from '@/features/model-asset/domain/services/model-format.service'
 import type { EditorBridgePort, EditorFrame } from '../../domain/repositories/editor-bridge.port'
-import type { EditorLaunchParams } from '../../domain/entities/editor-session.entity'
+import type { EditorLaunchParams, SpzVersion } from '../../domain/entities/editor-session.entity'
 import { createBlankEditorLaunch } from '../../domain/services/editor-launch.service'
 
 export function prepareLocalEditorLaunch(file: File): Result<{ fileName: string }> {
@@ -55,6 +55,7 @@ export async function saveEditorExportUseCase(
   input: {
     modelId: string
     sceneModelId: string | null
+    spzVersion?: SpzVersion
     signal?: AbortSignal
     frame: EditorFrame
     format: ExportModelFormat
@@ -72,6 +73,7 @@ export async function saveEditorExportUseCase(
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
     signal: input.signal,
     compressed: input.format === 'spz',
+    spzVersion: input.format === 'spz' ? input.spzVersion ?? 3 : undefined,
     fileName,
     onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
   })
@@ -90,6 +92,7 @@ export async function saveEditorAsNewModelUseCase(
     projectId: string | null
     frame: EditorFrame
     format: ExportModelFormat
+    spzVersion?: SpzVersion
     fileName: string
     onProgress?: (progress: { phase: 'export' | 'upload'; loaded: number; total: number }) => void
     signal?: AbortSignal
@@ -108,6 +111,7 @@ export async function saveEditorAsNewModelUseCase(
   const [exportError, exported] = await deps.bridge.exportPly(input.frame, {
     signal: input.signal,
     compressed: input.format === 'spz',
+    spzVersion: input.format === 'spz' ? input.spzVersion ?? 3 : undefined,
     fileName,
     onProgress: (loaded) => input.onProgress?.({ phase: 'export', loaded, total: 0 }),
   })

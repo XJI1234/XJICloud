@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { ok } from '@/shared/result'
+import { err, ok } from '@/shared/result'
+import { DomainError } from '@/shared/domain-error'
+import type { SpzVersion } from '../../domain/entities/editor-session.entity'
 import type { ModelAssetRepository } from '@/features/model-asset/domain/repositories/model-asset.repository'
 import { openEditorUseCase, prepareLocalEditorLaunch, saveEditorAsNewModelUseCase, saveEditorExportUseCase, importLocalEditorFileUseCase } from './editor.usecase'
 import type { EditorBridgePort } from '../../domain/repositories/editor-bridge.port'
 import { buildSuperSplatSrc, isDirtyResponse, isExportProgress, isTrustedIframeMessage } from '../../infrastructure/supersplat-protocol'
 
 describe('editor use cases', () => {
+  it.each([3, 4] as const)('passes SPZ v%s through overwrite and save-as commands', async spzVersion => {
+    const observed: Array<SpzVersion | undefined> = []
+    const bridge = { exportPly: async (_frame, options) => {
+      observed.push(options?.spzVersion)
+      return err(new DomainError('EDITOR_EXPORT_FAILED'))
+    } } as EditorBridgePort
+    const deps = { models: {} as ModelAssetRepository, bridge }
+    const input = { frame: { contentWindow: window, src: '/' }, format: 'spz' as const, spzVersion, fileName: 'test.spz' }
+    await saveEditorExportUseCase(deps, { ...input, modelId: 'A', sceneModelId: 'A' })
+    await saveEditorAsNewModelUseCase(deps, { ...input, projectId: 'p1' })
+    expect(observed).toEqual([spzVersion, spzVersion])
+  })
   it('rejects overwrite when the target differs from the committed scene', async () => {
     const [error] = await saveEditorExportUseCase({ models: {} as ModelAssetRepository, bridge: {} as EditorBridgePort },
       { modelId: 'B', sceneModelId: 'A', frame: { contentWindow: window, src: '/' }, format: 'ply' })
@@ -145,6 +159,7 @@ describe('editor use cases', () => {
 
   it('exports spz when the save format is compressed', async () => {
     let compressed: boolean | undefined
+    let spzVersion: SpzVersion | undefined
     const models = {
       uploadExport: async () =>
         ok({
@@ -165,6 +180,7 @@ describe('editor use cases', () => {
       importLocal: async () => ok(undefined),
       exportPly: async (_frame, options) => {
         compressed = options?.compressed
+        spzVersion = options?.spzVersion
         return ok({ blob: new Blob(['spz']), fileName: options?.fileName ?? 'out.spz' })
       },
     }
@@ -174,6 +190,7 @@ describe('editor use cases', () => {
     )
     expect(error).toBeNull()
     expect(compressed).toBe(true)
+    expect(spzVersion).toBe(3)
   })
 
   it('requires a name when saving as a new model', async () => {

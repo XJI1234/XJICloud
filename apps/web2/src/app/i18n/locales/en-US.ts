@@ -272,6 +272,7 @@ export default {
     exportFormat: 'File format',
     formatPly: 'PLY',
     formatSpz: 'SPZ',
+    spzV3: 'v3 (better compatibility)',
     exportMode: 'Save mode',
     overwriteExisting: 'Overwrite current model',
     saveAsNewModel: 'Save as new model',

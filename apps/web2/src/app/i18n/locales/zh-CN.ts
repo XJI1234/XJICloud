@@ -272,6 +272,7 @@ export default {
     exportFormat: '文件格式',
     formatPly: 'PLY',
     formatSpz: 'SPZ',
+    spzV3: 'v3（兼容性更佳）',
     exportMode: '保存方式',
     overwriteExisting: '覆盖现有模型',
     saveAsNewModel: '另存为新模型',

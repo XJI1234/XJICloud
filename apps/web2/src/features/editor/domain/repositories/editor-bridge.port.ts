@@ -1,5 +1,5 @@
 import type { Result } from '@/shared/result'
-import type { EditorExportResult, EditorLaunchParams } from '../entities/editor-session.entity'
+import type { EditorExportResult, EditorLaunchParams, SpzVersion } from '../entities/editor-session.entity'
 
 export type EditorFrame = {
   contentWindow: Window | null
@@ -17,6 +17,7 @@ export interface EditorBridgePort {
     options?: {
       signal?: AbortSignal
       compressed?: boolean
+      spzVersion?: SpzVersion
       fileName?: string
       onProgress?: (loaded: number) => void
     },

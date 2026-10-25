@@ -4,6 +4,17 @@ import { createPostMessageEditorBridge } from './post-message-editor.bridge'
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 describe('editor bridge lifecycle', () => {
   const frame = () => ({ src: location.origin, contentWindow: { postMessage: vi.fn() } as unknown as Window })
+  it.each([3, 4] as const)('sends SPZ v%s to the iframe exporter', async spzVersion => {
+    const target = frame()
+    const pending = createPostMessageEditorBridge().exportPly(target, { fileName: 'out.spz', spzVersion })
+    window.dispatchEvent(new MessageEvent('message', { source: target.contentWindow, origin: location.origin,
+      data: { type: 'supersplat:is-scene-dirty', result: false } }))
+    await Promise.resolve(); await Promise.resolve()
+    expect(target.contentWindow!.postMessage).toHaveBeenCalledWith(expect.objectContaining({ spzVersion }), location.origin)
+    window.dispatchEvent(new MessageEvent('message', { source: target.contentWindow, origin: location.origin,
+      data: { type: 'supersplat:export-ply-result', fileName: 'out.spz', buffer: new ArrayBuffer(1) } }))
+    expect((await pending)[0]).toBeNull()
+  })
   it('maps a file read rejection to a Result', async () => {
     const file = new File(['x'], 'a.ply')
     Object.defineProperty(file, 'arrayBuffer', { value: async () => { throw new Error('read failed') } })

@@ -14,6 +14,7 @@ import { mapCloudSaveBar } from '@/features/editor/domain/services/cloud-save-pr
 import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import { useModelAssets } from '@/features/model-asset/presentation/composables/useModelAssets'
 import { useEditorSession } from '@/features/editor/presentation/composables/useEditorSession'
+import type { SpzVersion } from '@/features/editor/domain/entities/editor-session.entity'
 import type { ModelAsset, ModelVersion } from '@/features/model-asset/domain/entities/model-asset.entity'
 import { detectModelFormat, type ExportModelFormat } from '@/features/model-asset/domain/services/model-format.service'
 import { useFormatDateTime } from '@/presentation/composables/useAppLocale'
@@ -44,6 +45,7 @@ const pickerVisible = ref(false)
 const versionsVisible = ref(false)
 const exportVisible = ref(false)
 const exportFormat = ref<ExportModelFormat>('ply')
+const spzVersion = ref<SpzVersion>(3)
 const exportMode = ref<'overwrite' | 'saveAs'>('saveAs')
 const exportFileName = ref('')
 const downloadingHistory = ref(false)
@@ -364,6 +366,7 @@ async function saveToCloud() {
       signal: lifetime.signal,
       frame,
       format: exportFormat.value,
+      spzVersion: exportFormat.value === 'spz' ? spzVersion.value : undefined,
       fileName: selectedCloudModel.value?.fileName ?? exportFileName.value,
       onProgress,
     })
@@ -386,6 +389,7 @@ async function saveToCloud() {
     signal: lifetime.signal,
     frame,
     format: exportFormat.value,
+    spzVersion: exportFormat.value === 'spz' ? spzVersion.value : undefined,
     fileName: exportFileName.value,
     onProgress,
   })
@@ -706,6 +710,16 @@ onBeforeRouteLeave(() => permitReplacement())
           <label class="export-sheet-option">
             <input v-model="exportFormat" type="radio" value="spz" />
             {{ t('supersplat.formatSpz') }}
+          </label>
+        </div>
+        <div v-if="exportFormat === 'spz'" class="export-sheet-options">
+          <label class="export-sheet-option">
+            <input v-model="spzVersion" type="radio" name="spz-version" :value="3" />
+            {{ t('supersplat.spzV3') }}
+          </label>
+          <label class="export-sheet-option">
+            <input v-model="spzVersion" type="radio" name="spz-version" :value="4" />
+            v4
           </label>
         </div>
         <p class="supersplat-picker-hint">{{ t('supersplat.exportMode') }}</p>

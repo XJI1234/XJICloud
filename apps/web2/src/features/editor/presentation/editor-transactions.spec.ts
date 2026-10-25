@@ -54,6 +54,19 @@ async function mountEditor() {
 afterEach(() => { app?.unmount(); app = null; host?.remove(); host = null; vi.restoreAllMocks(); vi.resetAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); localStorage.clear() })
 
 describe('editor scene transactions', () => {
+  it.each([3, 4])('exports the selected SPZ v%s and hides version choices for PLY', async version => {
+    await mountEditor()
+    click(i18n.global.t('supersplat.saveToCloud')); await flush()
+    expect(host!.querySelector('input[name="spz-version"]')).toBeNull()
+    host!.querySelector<HTMLInputElement>('input[value="spz"]')!.click(); await flush()
+    const choice = host!.querySelector<HTMLInputElement>(`input[name="spz-version"][value="${version}"]`)
+    expect(choice).not.toBeNull()
+    expect(host!.querySelector<HTMLInputElement>('input[name="spz-version"][value="3"]')!.checked).toBe(true)
+    expect(host!.textContent).toContain('v3（兼容性更佳）')
+    choice!.click(); await flush()
+    click(i18n.global.t('supersplat.confirmExport')); await flush()
+    expect(mocks.saveExport).toHaveBeenCalledWith(expect.objectContaining({ format: 'spz', spzVersion: version }))
+  })
   it('keeps A as the overwrite target when downloading B fails', async () => {
     await mountEditor()
     mocks.downloadBytes.mockResolvedValueOnce(err(new DomainError('NETWORK')))
