@@ -33,3 +33,7 @@
 MSDK 文档未明确两个原始高度的垂直基准，heightReference 固定 unknown，当前按平面定位显示，相对起飞点高度只展示在详情中。KeyCompassHeading 归一化到 [0,360)，罗盘错误时隐藏航向。
 
 网站使用 SDK 0.2.19 和 Sky-Command TS 源码重建嵌入包。旧包的地图性能代码提取到 scripts/embedded-route-map.mjs；旧包航点进度修复补回 Sky-Command 源码。build-sky-operator.mjs 保留地图模块并记录源码提交，不依赖维护者个人桌面路径。普通运行使用仓库内静态产物，不要求相邻 Sky-Command。
+
+## 最终验收与后续
+
+浏览器模拟已覆盖 18 项正式链路行为，包含不更改任务对象、选中高亮、断连重连及请求挂起时过期。图标创建即按相机投影给定方向，避免刷新瞬间朝北；白模拾取失败采用图标附近 20 像素只读命中。所有高度仍标注平面定位，后续取得真机再核实磁航向、位置频率及垂直基准。完整交付与已知全仓失败见 docs/AIRCRAFT_MAP_DELIVERY.md。

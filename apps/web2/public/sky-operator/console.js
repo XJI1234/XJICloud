@@ -7275,6 +7275,14 @@ ${failure3.message}` };
   var aircraftImage = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><path fill="white" stroke="#13212b" stroke-width="1.5" d="M20 2 24 16 36 24 35 28 23 24 23 32 28 36 28 39 20 36 12 39 12 36 17 32 17 24 5 28 4 24 16 16Z"/></svg>')}`;
   var unknownImage = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="12" fill="white" stroke="#13212b" stroke-width="3"/><circle cx="20" cy="20" r="3" fill="#13212b"/></svg>')}`;
   var statusText = (status) => ({ live: "\u5B9E\u65F6\u4F4D\u7F6E", stale: "\u4F4D\u7F6E\u5DF2\u8FC7\u671F", disconnected: "\u5DF2\u65AD\u8FDE \xB7 \u6700\u540E\u4F4D\u7F6E", unknown: "\u4F4D\u7F6E\u65F6\u6548\u672A\u77E5 \xB7 \u8BF7\u66F4\u65B0 Relay" })[status];
+  function projectedRotation(Cesium, viewer2, position, heading) {
+    const angle = Cesium.Math.toRadians(heading);
+    const local = new Cesium.Cartesian3(Math.sin(angle) * 100, Math.cos(angle) * 100, 0);
+    const ahead = Cesium.Matrix4.multiplyByPoint(Cesium.Transforms.eastNorthUpToFixedFrame(position), local, new Cesium.Cartesian3());
+    const a = Cesium.SceneTransforms.worldToWindowCoordinates(viewer2.scene, position);
+    const b = Cesium.SceneTransforms.worldToWindowCoordinates(viewer2.scene, ahead);
+    return a === void 0 || b === void 0 ? void 0 : screenHeadingRotation(b.x - a.x, b.y - a.y);
+  }
   function createAircraftMapOverlay() {
     let currentViewer;
     let source;
@@ -7326,12 +7334,8 @@ ${failure3.message}` };
       void viewer2.dataSources.add(source);
       removePreRender = viewer2.scene.preRender.addEventListener(() => {
         for (const { position, heading, property } of rotations.values()) {
-          const angle = Cesium.Math.toRadians(heading);
-          const local = new Cesium.Cartesian3(Math.sin(angle) * 100, Math.cos(angle) * 100, 0);
-          const ahead = Cesium.Matrix4.multiplyByPoint(Cesium.Transforms.eastNorthUpToFixedFrame(position), local, new Cesium.Cartesian3());
-          const a = Cesium.SceneTransforms.worldToWindowCoordinates(viewer2.scene, position);
-          const b = Cesium.SceneTransforms.worldToWindowCoordinates(viewer2.scene, ahead);
-          if (a !== void 0 && b !== void 0) property.setValue(screenHeadingRotation(b.x - a.x, b.y - a.y));
+          const rotation = projectedRotation(Cesium, viewer2, position, heading);
+          if (rotation !== void 0) property.setValue(rotation);
         }
       });
       panel = document.createElement("section");
@@ -7356,8 +7360,21 @@ ${failure3.message}` };
       handler.setInputAction((event) => {
         const picked = viewer2.scene.pick(event.position);
         const id = picked?.id?.id;
-        if (typeof id !== "string" || !id.startsWith("aircraft:")) return;
-        inspectedId = latest.find((item) => `aircraft:${item.deviceId}` === id)?.deviceId ?? null;
+        let item = typeof id === "string" ? latest.find((entry) => `aircraft:${entry.deviceId}` === id) : void 0;
+        if (item === void 0) {
+          let nearest = 20;
+          for (const candidate of latest) {
+            const point = Cesium.SceneTransforms.worldToWindowCoordinates(viewer2.scene, Cesium.Cartesian3.fromDegrees(candidate.longitude, candidate.latitude, 0));
+            if (point === void 0) continue;
+            const distance = Math.hypot(point.x - event.position.x, point.y - event.position.y);
+            if (distance <= nearest) {
+              item = candidate;
+              nearest = distance;
+            }
+          }
+        }
+        if (item === void 0) return;
+        inspectedId = item.deviceId;
         showDetails();
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
     };
@@ -7385,7 +7402,7 @@ ${failure3.message}` };
           const position = Cesium.Cartesian3.fromDegrees(item.longitude, item.latitude, 0);
           const heading = item.headingDegrees;
           const color = Cesium.Color.fromCssColorString(item.status !== "live" ? "#a9b2bc" : item.selected ? "#ffda6a" : "#53d8ef");
-          const rotation = new Cesium.ConstantProperty(0);
+          const rotation = new Cesium.ConstantProperty(heading === null ? 0 : projectedRotation(Cesium, viewer2, position, heading) ?? 0);
           rotations.delete(item.deviceId);
           if (heading !== null) rotations.set(item.deviceId, { position, heading, property: rotation });
           source.entities.add({

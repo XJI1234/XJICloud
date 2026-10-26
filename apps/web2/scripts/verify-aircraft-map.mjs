@@ -63,13 +63,13 @@ function publish(item) {
 try {
   const first = await phone('map-sim-1', 32.0602, 118.7969, 0)
   const second = await phone('map-sim-2', 32.0607, 118.7980, 90)
-  const missing = await phone('map-sim-no-gps', null, null, null)
+  await phone('map-sim-no-gps', null, null, null)
   timer = setInterval(() => phones.forEach(publish), 300)
   phones.forEach(publish)
-  console.log('SDK navigation build:', requireWeb('@xjicloud/sky-command-sdk/package.json').version)
   browser = await chromium.launch({ channel: process.env.AIRCRAFT_BROWSER_CHANNEL ?? 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error' && message.text().includes('sky-render')) console.log(message.text()) })
   // Expose the existing viewer for assertions only; production files remain unchanged.
   await page.route('**/sky-operator/console.js*', async route => {
     const body = await readFile(join(appRoot, 'public/sky-operator/console.js'), 'utf8')
@@ -88,13 +88,14 @@ try {
         latitude: Cesium.Math.toDegrees(point.latitude), longitude: Cesium.Math.toDegrees(point.longitude), height: point.height }
     })
   })
-  let markers = await readMarkers()
-  console.log('Initial simulated markers:', JSON.stringify(markers))
+  const markers = await readMarkers()
   const raw = await fetch('http://127.0.0.1:8767/invoke', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: 'state-snapshot' }) }).then(result => result.json())
   await writeFile(join(evidence, 'simulated-gateway-snapshot.json'), JSON.stringify(raw, null, 2))
   assert.ok(markers.every(marker => marker.label.includes('实时位置') && marker.label.includes('平面定位')))
   assert.ok(markers.every(marker => Math.abs(marker.height) < 0.01))
-  await page.evaluate(() => globalThis.__aircraftTestViewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(118.7974, 32.0604, 900) }))
+  await page.evaluate(() => globalThis.__aircraftTestViewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(118.7974, 32.0604, 900), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 } }))
+  await page.waitForTimeout(1_500)
+  await page.screenshot({ path: join(evidence, 'screenshots/00-before-click.png') })
   async function clickAircraft(id) {
     const point = await page.evaluate(id => {
       const viewer = globalThis.__aircraftTestViewer
@@ -128,14 +129,34 @@ try {
   second.socket.close()
   await poll(async () => (await readMarkers()).find(item => item.id.endsWith(second.id)).label.includes('已断连'))
   await page.screenshot({ path: join(evidence, 'screenshots/03-disconnected.png') })
-  await page.locator('[data-workspace="devices"]').click()
+  await phone(second.id, second.lat, second.lon, 270)
+  await poll(async () => (await readMarkers()).find(item => item.id.endsWith(second.id)).label.includes('实时位置'))
+  await page.locator('[data-workspace="flight"]').click()
+  await page.locator('#mission-select').selectOption(first.id)
+  await page.locator('[data-workspace="routes"]').click()
+  await poll(async () => (await readMarkers()).find(item => item.id.endsWith(first.id)).label.includes('当前选中'))
+  await clickAircraft(second.id)
+  await page.locator('[data-workspace="flight"]').click()
+  assert.equal(await page.locator('#mission-select').inputValue(), first.id, 'Marker click must retain mission target')
   await page.locator('[data-workspace="routes"]').click()
   assert.equal((await readMarkers()).length, 2)
+  // The independent display clock must still expire locations when snapshot fetch is stuck.
+  const pending = []
+  let hang = true
+  await page.route('http://127.0.0.1:8767/invoke', route => {
+    if (hang && route.request().postDataJSON()?.method === 'state-snapshot') pending.push(route)
+    else return route.continue()
+  })
+  await poll(async () => (await readMarkers()).every(item => item.label.includes('位置已过期')), 12_000)
+  hang = false
+  await Promise.all(pending.map(route => route.continue()))
+  await poll(async () => (await readMarkers()).every(item => item.label.includes('实时位置')))
+  await page.screenshot({ path: join(evidence, 'screenshots/04-reconnected-selected.png') })
   assert.deepEqual(forbidden, [], 'Marker viewing must not emit flight or task commands')
   assert.deepEqual(errors, [], 'No renderer exception')
   await writeFile(join(evidence, 'aircraft-browser-results.json'), JSON.stringify({
     passed: true, mode: 'simulated phone telemetry → real local gateway → shipped Cesium renderer',
-    checks: ['no route', 'two aircraft', 'missing coordinates', 'planar height', 'read-only click', 'movement', 'heading', 'camera rotation', 'route clear isolation', 'stale despite battery telemetry', 'recovery', 'missing heading', 'disconnect retains last point', 'workspace switching', 'no flight/task commands'],
+    checks: ['no route', 'two aircraft', 'missing coordinates', 'planar height', 'read-only click retains mission target', 'movement', 'heading', 'camera rotation', 'route clear isolation', 'stale despite battery telemetry', 'recovery', 'missing heading', 'disconnect retains last point', 'reconnect', 'selected highlight', 'workspace switching', 'stale while snapshot request hangs', 'no flight/task commands'],
     markers: await readMarkers(), errors, forbidden,
     limitations: ['No physical aircraft', 'Imagery/building network availability and flight accuracy are not acceptance results'],
   }, null, 2))
