@@ -1,6 +1,24 @@
 # 手机号验证码注册：交付与验收入口
 
-## 当前工作区移植审查（2026-10-26）
+## 当前：PNVS生成校验及统一部署配置（2026-10-26）
+
+- 仅保留号码认证PNVS SDK，删除普通短信SDK/适配器。本地SecureRandom验证码、HMAC计算、摘要密钥配置和consume.lua已删除；阿里云生成并核验验证码，API请求/响应契约保持不变。
+- SendSmsVerifyCode传入##code##、纯数字6位、300秒、60秒、覆盖旧码、不返回验证码/不自动重试；CheckSmsVerifyCode发送同一SchemeName/CountryCode，必须Code=OK、Success=true、Model.VerifyResult=PASS。OutId用于关联，安全绑定由Redis执行。
+- Redis Lua先绑定手机号/challenge并获取核验锁，限制5次在线尝试，再调用阿里云，最后单次消费；并发只允许一个核验，重发或过期时丢弃旧PASS。网络异常不放行，无本地校验回退。
+- 生产业务配置集中于application-prod.yml.example及生成的实际YAML，不再加载backend.env。向导隐藏短信凭据、校验方案/模板变量/预算、限制文件权限。upgrade保留服务器配置，--update-config备份后整体替换；检测到旧backend.env时要求先迁移。默认Maven构建运行测试。
+- 验证：Windows JDK21、独立Redis7.0.15端口16379，SMS_TEST_REDIS_PORT=16379执行mvn -B package，41项通过，0失败、0跳过。包含真实PNVS SDK的本机HTTP序列化/响应与HTTP400错误解析、Spring实际prod模板加载、12项API/Redis注册集成测试。WSL Bash语法检查及6项部署向导/临时安装测试通过。
+- JAR检查：仅含PNVS SDK，4个SMS Lua脚本，不含旧consume.lua、普通短信SDK或浏览器测试Fixture。本轮未改UI、未重跑浏览器E2E，未操作生产systemd/数据库。
+- 真实接口测试：经用户授权从本机CSV读取RAM凭据，未写入仓库或输出。初次被Forbidden.NoPermission拒绝；为对应RAM用户绑定最小SendSmsVerifyCode/CheckSmsVerifyCode自定义策略后，生产适配器真实SendSmsVerifyCode受理成功，用户收到短信并提供验证码，真实CheckSmsVerifyCode返回PASS。另测错误/失效码返回isv.ValidateFail，修复后适配器返回REJECTED。使用用户提供的赠送签名/模板与code/min变量，不记录手机号或验证码。此处为真实SDK发送/校验验证，不代表生产部署或完整网页真实短信E2E。
+
+### Code Review
+
+使用OCR delegate解析文件范围与规则，由当前Agent自审全部diff；手工补查OCR默认排除的测试、文档、模板和systemd文件。已修复：默认方案须不超过20字符；旧模板profile内active导致启动失败；隐藏输入stdout换行导致密码变化；凭据文件写入前权限限制；核验异常和重发/过期竞态；升级配置丢失/覆盖风险；真实接口isv.ValidateFail误报503（已改为验证码失败）及官方频控别名处理。未发现未修复High/Critical。
+
+剩余限制：单节点Redis，不支持Cluster跨槽；代理后仍共享socket IP额度；进程核验中崩溃会保留challenge核验锁直至过期，用户可等冷却后重发；阿里云核验已消费但数据库失败时需重发。生产迁移和systemd发布仍需环境验收；本机测试手机号已确认真实送达。当前部署步骤见[最新后端部署指南](./PHONE_REGISTRATION_DEPLOYMENT.md)。以下均为旧实现历史记录，不能作为当前配置依据。
+
+---
+
+## 历史：首次移植审查（2026-10-26）
 
 - 来源：`origin/li-chengtao` 最新提交 `3684e015d53751863e858c66b639793ff611b180`，应用到 `ceshi`。只取该注册提交，保留注册后必须的资料页和后端门槛；未合并整个分支，也未引入源分支的任务执行、查看器或锁文件改动。
 - 提交前同步远端 `ceshi` 到 `a69dadd`，保留该分支已有8个提交，再重放本次注册改动；没有合并 `li-chengtao` 的其他功能。

@@ -8,29 +8,33 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "xjicloud.sms")
 public class SmsProperties {
     private boolean enabled;
-    private String provider = "aliyun-sms";
+    // Retained only to reject obsolete deployment settings rather than silently change products.
+    private String provider = "aliyun-pnvs";
+    private String schemeName = "xjicloud-register";
     private String codeVariable = "code";
     private String minutesVariable = "min";
     private String accessKeyId = "";
     private String accessKeySecret = "";
     private String signName = "";
     private String templateCode = "";
-    private String codeSecret = "";
     private int dailyLimit = 1000;
 
     @PostConstruct
     void validate() {
-        if (!"aliyun-sms".equals(provider) && !"aliyun-pnvs".equals(provider)) {
-            throw new IllegalStateException("SMS provider must be aliyun-sms or aliyun-pnvs");
+        if (!"aliyun-pnvs".equals(provider)) {
+            throw new IllegalStateException("Only Alibaba PNVS SMS authentication is supported; remove obsolete SMS_PROVIDER");
         }
-        if ("aliyun-pnvs".equals(provider) && (!codeVariable.matches("[A-Za-z][A-Za-z0-9_]{0,31}")
-                || !minutesVariable.matches("[A-Za-z][A-Za-z0-9_]{0,31}") || codeVariable.equals(minutesVariable))) {
+        if (!codeVariable.matches("[A-Za-z][A-Za-z0-9_]{0,31}")
+                || !minutesVariable.matches("[A-Za-z][A-Za-z0-9_]{0,31}") || codeVariable.equals(minutesVariable)) {
             throw new IllegalStateException("SMS template variable names must be valid and distinct");
+        }
+        if (schemeName.isBlank() || schemeName.codePointCount(0, schemeName.length()) > 20) {
+            throw new IllegalStateException("SMS scheme name must contain 1 to 20 characters");
         }
         if (dailyLimit < 1) throw new IllegalStateException("SMS daily limit must be positive");
         if (enabled && (accessKeyId.isBlank() || accessKeySecret.isBlank() || signName.isBlank()
-                || templateCode.isBlank() || codeSecret.length() < 32)) {
-            throw new IllegalStateException("SMS configuration incomplete; configure credentials, sign, template and code secret");
+                || templateCode.isBlank())) {
+            throw new IllegalStateException("SMS configuration incomplete; configure credentials, sign and template");
         }
     }
 
@@ -50,8 +54,8 @@ public class SmsProperties {
     public void setSignName(String value) { signName = value; }
     public String getTemplateCode() { return templateCode; }
     public void setTemplateCode(String value) { templateCode = value; }
-    public String getCodeSecret() { return codeSecret; }
-    public void setCodeSecret(String value) { codeSecret = value; }
+    public String getSchemeName() { return schemeName; }
+    public void setSchemeName(String value) { schemeName = value; }
     public int getDailyLimit() { return dailyLimit; }
     public void setDailyLimit(int value) { dailyLimit = value; }
 }

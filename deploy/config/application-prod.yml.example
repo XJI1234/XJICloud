@@ -13,8 +13,6 @@
 #   - 运行时 OSS 可在管理后台「OSS 对象存储」热更新（写入 system_config 表）
 
 spring:
-  profiles:
-    active: prod
   datasource:
     url: jdbc:postgresql://127.0.0.1:5432/xjicloud
     username: xjicloud
@@ -36,6 +34,18 @@ server:
   port: 8080
 
 xjicloud:
+  # 仅阿里云号码认证 PNVS；验证码由阿里云生成并校验，无本地验证码密钥。
+  # RAM最小权限: dypns:SendSmsVerifyCode、dypns:CheckSmsVerifyCode，Resource: "*"
+  sms:
+    enabled: false
+    scheme-name: xjicloud-register # 发送与校验必须相同，1至20字符
+    access-key-id: ""
+    access-key-secret: ""
+    sign-name: "" # 控制台赠送签名，必须搭配赠送模板
+    template-code: "" # 选择含验证码与有效分钟数变量的模板
+    code-variable: code
+    minutes-variable: min
+    daily-limit: 1000 # 24小时全局发送上限；失败发送同样计数
   jwt:
     secret: replace-with-a-long-random-secret-at-least-32-characters
     expiration-ms: 86400000

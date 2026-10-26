@@ -16,40 +16,13 @@
 
 ## 阿里云开通与配置
 
-支持两种发送服务，均使用官方 Java SDK。验证码由平台安全随机生成，经 Redis HMAC 摘要、限次和单次消费校验。短信认证采用官方支持的“自定义验证码”发送模式，不调用 CheckSmsVerifyCode；阿里云控制台测试时生成的验证码不属于平台注册 challenge，不能直接用来注册。
+当前仅集成阿里云号码认证PNVS，官方Java SDK `com.aliyun:dypnsapi20170525:2.0.0`，HTTPS连接 `dypnsapi.aliyuncs.com`。验证码由阿里云生成并校验：发送使用 `##code##` 和6位数字规则，核验调用 `CheckSmsVerifyCode`，仅明确 `PASS` 可注册。Redis只存注册challenge、手机号哈希、限流、尝试次数和核验互斥状态，不再存验证码或其摘要，也不需要摘要密钥。
 
-- **个人开发者短信认证**：SMS_PROVIDER=aliyun-pnvs，SDK com.aliyun:dypnsapi20170525:2.0.0，HTTPS dypnsapi.aliyuncs.com，调用 SendSmsVerifyCode；免企业资质、签名/模板申请，使用控制台提供的预置签名与模板。模板包含验证码和有效分钟数，默认变量 code/min，可用 SMS_CODE_VARIABLE/SMS_MINUTES_VARIABLE 指定。RAM 最小权限为 dypns:SendSmsVerifyCode；此前同时授予 CheckSmsVerifyCode 的凭证可用，但本接法不需要该权限。
-- **原短信服务**：SMS_PROVIDER=aliyun-sms（兼容默认值），SDK com.aliyun:dysmsapi20170525:4.6.0，HTTPS dysmsapi.aliyuncs.com，调用 SendSms；需要自行申请并报备签名、模板，模板变量为 code。RAM 最小权限为 dysms:SendSms。
+RAM需同时具备 `dypns:SendSmsVerifyCode` 和 `dypns:CheckSmsVerifyCode`。使用号码认证控制台赠送签名及匹配的赠送模板，模板应含验证码和有效分钟数变量（默认code/min）。发送与校验使用同一方案，默认 `xjicloud-register`，不要与别的业务或控制台测试共用。使用平台页面先获取challenge，控制台独立发送不能代替本平台注册流程。
 
-两者资源包不通用。个人接入请选择“号码认证服务 → 短信认证套餐包”，不要购买普通短信服务、号码认证或融合认证套餐代替。SMS_ENABLED 默认 false。启用但缺凭证、签名、模板或至少32字符的独立摘要密钥，启动失败；未启用时发送/注册拒绝，旧账号登录不受影响。
+生产统一配置在 `deploy/config/application-prod.yml.example` 对应的 `xjicloud.sms` 中，由向导生成实际YAML；不再加载额外 `backend.env`，旧文件应先迁移。SMS_ENABLED默认false；启用但缺配置会启动失败，关闭时拒绝发送/注册，旧账号密码登录继续。Compose开发模式可继续使用环境变量，但不支持普通短信供应商，须移除旧SMS_PROVIDER设置。连接3秒、读取5秒、SDK不重试、供应商AutoRetry=0、ReturnVerifyCode=false。API/日志不输出原始SDK异常、手机号、验证码或凭据。
 
-两个 SDK 均连接超时3秒、读取超时5秒，禁 SDK 自动重试；短信认证额外指定 AutoRetry=0、ReturnVerifyCode=false，避免平台外重试与明文验证码回传。仅成功受理响应才返回成功，短信认证同时要求 Code=OK 与 Success=true；受理成功不保证运营商最终送达。SDK 原始异常不会向接口或日志输出。
-
-本机填写和启动步骤见 [个人短信认证本机接入](./SMS_PERSONAL_SETUP.md)。正式部署配置模板见 deploy/config/backend.env.example：
-
-~~~dotenv
-SMS_ENABLED=false
-SMS_PROVIDER=aliyun-pnvs
-ALIBABA_CLOUD_ACCESS_KEY_ID=
-ALIBABA_CLOUD_ACCESS_KEY_SECRET=
-SMS_SIGN_NAME=
-SMS_TEMPLATE_CODE=
-SMS_CODE_VARIABLE=code
-SMS_MINUTES_VARIABLE=min
-SMS_CODE_SECRET=
-SMS_DAILY_LIMIT=1000
-~~~
-
-SMS_CODE_SECRET 使用独立密码学随机值（例如服务器本地 openssl rand -hex 32），至少32字符，所有副本一致，不复用 JWT 或 AccessKeySecret。先填齐配置，再设置 SMS_ENABLED=true 并重启后端。没有万能验证码或生产模拟发送路径。
-
-systemd 使用权限600的 /etc/xjicloud/backend.env。Docker Compose 从部署环境/本地 .env 读取并传递配置，不自动读取本机 /home/li/.config/xjicloud/sms.env。不要提交实际 .env，不要把 docker compose config 完整输出发到聊天。浏览器只调用本平台 API，不接触阿里云密钥。
-
-官方依据：
-
-- [短信认证新手指引](https://help.aliyun.com/zh/pnvs/getting-started/sms-authentication-service-novice-guide)
-- [SendSmsVerifyCode：预置签名、模板与自定义验证码](https://help.aliyun.com/zh/pnvs/developer-reference/api-dypnsapi-2017-05-25-sendsmsverifycode)
-- [短信认证计费与资源包区别](https://help.aliyun.com/zh/pnvs/product-overview/product-pricing)
-- [传统短信 SendSms](https://help.aliyun.com/zh/sms/developer-reference/api-dysmsapi-2017-05-25-sendsms)
+具体配置、迁移、向导和升级命令见 [最新部署指南](./PHONE_REGISTRATION_DEPLOYMENT.md)，控制台准备见 [短信认证接入](./SMS_PERSONAL_SETUP.md)。
 
 ## 数据库与上线顺序
 
@@ -78,10 +51,10 @@ DATABASE_URL 来自服务器配置，不要粘贴带密码的连接串。迁移�
 
 ## 短信风控与存储
 
-- 安全随机6位数字；Redis 仅存手机号/用途/随机 challenge 绑定的 HMAC 摘要，验证成功原子删除。
-- 有效5分钟；每条 challenge 最多5次错误（包括手机号不匹配）；新短信成功受理后废弃前一条 challenge。
+- 阿里云生成6位数字并在线核验；Redis存绑定手机号哈希的随机challenge和核验状态，成功后原子删除。
+- 有效5分钟；每条challenge最多5次在线核验尝试；手机号不匹配直接拒绝且不调用阿里云；新短信成功受理后废弃前一条 challenge。
 - 同手机号60秒间隔、24小时最多10次；同连接来源 IP 每小时30次；全局24小时默认1000次，可用 SMS_DAILY_LIMIT 调整。窗口从第一次请求起计算；失败和已注册手机号请求也占配额。
-- Lua 原子判断并计数，防并发突破；多个后端须共享同一个 Redis 和摘要密钥。目前按现有**单节点 Redis**部署，脚本不支持 Redis Cluster 跨槽。
+- Lua 原子判断并计数，防并发突破；多个后端须共享同一个Redis和相同短信方案。目前按现有**单节点 Redis**部署，脚本不支持 Redis Cluster 跨槽。
 - 默认只按 socket 来源限流，不信任请求自行填写的 X-Forwarded-For。反向代理后的用户会共享代理 IP 配额；正式上线要由运维在可信边缘做逐客户端限流和短信预算告警。若需应用识别真实 IP，另行明确可信代理范围，不能直接放开任意转发头。
 - 网络超时可能已经受理短信，因此失败仍保留60秒冷却和配额；页面只有确认成功才显示倒计时。用户遇到频繁提示后需等待再重试。
 - 验证码先在 Redis 消费再写数据库；数据库失败时需重新获取，不允许已消费验证码重放。唯一索引阻止同手机号并发创建多个账号。

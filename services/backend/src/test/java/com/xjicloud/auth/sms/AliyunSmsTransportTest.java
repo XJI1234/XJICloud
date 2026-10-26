@@ -9,16 +9,19 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.xjicloud.common.BusinessException;
+import org.springframework.http.HttpStatus;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Both real SDK clients use a loopback HTTP stub; no Alibaba requests or paid SMS. */
+/** Real PNVS SDK against loopback HTTP; no paid SMS. */
 class AliyunSmsTransportTest {
     @Test
-    void bothSdkClientsSerializeAndParseWithTheSharedDependencyVersions() throws Exception {
+    void pnvsSdkSerializesSendAndCheckAndHandlesHttpErrors() throws Exception {
         var captured = new AtomicReference<Map<String, String>>();
         var calls = new AtomicInteger();
+        var status = new AtomicInteger(200);
         var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             String query = exchange.getRequestURI().getRawQuery();
@@ -32,9 +35,13 @@ class AliyunSmsTransportTest {
             }
             captured.set(parameters);
             calls.incrementAndGet();
-            byte[] response = "{\"Code\":\"OK\",\"Success\":true,\"RequestId\":\"test-request\"}".getBytes(StandardCharsets.UTF_8);
+            byte[] response = (status.get() == 200
+                    ? "{\"Code\":\"OK\",\"Success\":true,\"Model\":{\"VerifyResult\":\"PASS\"}}"
+                    : status.get() == 401 ? "{\"Code\":\"isv.ValidateFail\",\"Success\":false}"
+                    : "{\"Code\":\"FREQUENCY_FAIL\",\"Message\":\"secret phone=13800138000\",\"Success\":false}")
+                    .getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, response.length);
+            exchange.sendResponseHeaders(status.get(), response.length);
             try (var output = exchange.getResponseBody()) { output.write(response); }
         });
         server.start();
@@ -48,20 +55,33 @@ class AliyunSmsTransportTest {
             var pnvs = new com.aliyun.dypnsapi20170525.Client(new Config()
                     .setAccessKeyId("test-only").setAccessKeySecret("test-only")
                     .setEndpoint(endpoint).setProtocol("http"));
-            new AliyunPnvsSmsSender(p, pnvs, json).sendRegistrationCode("13800138000", "012345");
+            var sender = new AliyunPnvsSmsSender(p, pnvs, json);
+            sender.sendRegistrationCode("13800138000", "challenge-id");
             assertEquals("13800138000", captured.get().get("PhoneNumber"));
             assertEquals("0", captured.get().get("AutoRetry"));
             assertEquals("false", captured.get().get("ReturnVerifyCode"));
             var sent = json.readTree(captured.get().get("TemplateParam"));
-            assertEquals("012345", sent.path("code").asText());
+            assertEquals("##code##", sent.path("code").asText());
+            assertEquals("1", captured.get().get("CodeType"));
+            assertEquals("1", captured.get().get("DuplicatePolicy"));
+            assertEquals("6", captured.get().get("CodeLength"));
+            assertEquals("300", captured.get().get("ValidTime"));
             assertEquals("5", sent.path("min").asText());
-            var sms = new com.aliyun.dysmsapi20170525.Client(new Config()
-                    .setAccessKeyId("test-only").setAccessKeySecret("test-only")
-                    .setEndpoint(endpoint).setProtocol("http"));
-            new AliyunSmsSender(p, sms).sendRegistrationCode("13800138000", "012345");
-            assertEquals("13800138000", captured.get().get("PhoneNumbers"));
-            assertEquals("012345", json.readTree(captured.get().get("TemplateParam")).path("code").asText());
+            assertTrue(sender.verifyRegistrationCode("13800138000", "challenge-id", "012345"));
+            assertEquals("012345", captured.get().get("VerifyCode"));
+            assertEquals("challenge-id", captured.get().get("OutId"));
+            assertEquals("xjicloud-register", captured.get().get("SchemeName"));
+            assertEquals("86", captured.get().get("CountryCode"));
             assertEquals(2, calls.get());
+            status.set(400);
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, assertThrows(BusinessException.class,
+                    () -> sender.sendRegistrationCode("13800138000", "id")).getStatus());
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, assertThrows(BusinessException.class,
+                    () -> sender.verifyRegistrationCode("13800138000", "id", "012345")).getStatus());
+            assertEquals(4, calls.get());
+            status.set(401);
+            assertFalse(sender.verifyRegistrationCode("13800138000", "id", "000000"));
+            assertEquals(5, calls.get());
         } finally {
             server.stop(0);
         }

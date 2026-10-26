@@ -7,12 +7,9 @@ import com.xjicloud.common.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -24,11 +21,11 @@ import org.springframework.stereotype.Service;
 public class RegistrationSmsService {
     public static final int EXPIRES_SECONDS = 300;
     public static final int RETRY_SECONDS = 60;
-    private static final SecureRandom RANDOM = new SecureRandom();
     private static final String PREFIX = "xjicloud:registration-sms:";
     private static final DefaultRedisScript<Long> RESERVE = script("reserve");
     private static final DefaultRedisScript<Long> ACTIVATE = script("activate");
-    private static final DefaultRedisScript<Long> CONSUME = script("consume");
+    private static final DefaultRedisScript<Long> BEGIN_VERIFY = script("begin-verify");
+    private static final DefaultRedisScript<Long> FINISH_VERIFY = script("finish-verify");
     private final StringRedisTemplate redis;
     private final SmsSender sender;
     private final SmsProperties properties;
@@ -66,10 +63,9 @@ public class RegistrationSmsService {
             throw new BusinessException("该手机号无法注册，请尝试登录或联系管理员", HttpStatus.CONFLICT);
         }
         String id = UUID.randomUUID().toString();
-        String code = String.format(java.util.Locale.ROOT, "%06d", RANDOM.nextInt(1_000_000));
-        sender.sendRegistrationCode(phone, code);
+        sender.sendRegistrationCode(phone, id);
         Long activated = execute(ACTIVATE, List.of(PREFIX + "active:" + phoneHash, PREFIX + "challenge:" + id),
-                id, digest(id, phone, code), Integer.toString(EXPIRES_SECONDS), PREFIX + "challenge:");
+                id, phoneHash, Integer.toString(EXPIRES_SECONDS), PREFIX + "challenge:");
         if (!Long.valueOf(1).equals(activated)) {
             throw new BusinessException("短信验证暂不可用，请稍后重新获取", HttpStatus.SERVICE_UNAVAILABLE);
         }
@@ -80,10 +76,25 @@ public class RegistrationSmsService {
         if (!properties.isEnabled()) {
             throw new BusinessException("短信注册尚未开通，请联系管理员", HttpStatus.SERVICE_UNAVAILABLE);
         }
-        Long result = execute(CONSUME, List.of(PREFIX + "challenge:" + id), digest(id, phone, code));
-        if (!Long.valueOf(1).equals(result)) {
-            throw new BusinessException("短信验证码错误、已过期或尝试次数过多，请重新获取");
+        String phoneHash = hash(phone);
+        String token = UUID.randomUUID().toString();
+        List<String> keys = List.of(PREFIX + "challenge:" + id, PREFIX + "active:" + phoneHash);
+        Long acquired = execute(BEGIN_VERIFY, keys, phoneHash, id, token);
+        if (!Long.valueOf(1).equals(acquired)) throw invalidCode();
+        boolean passed;
+        try {
+            passed = sender.verifyRegistrationCode(phone, id, code);
+        } catch (RuntimeException ex) {
+            // Release this attempt, but never authorize after an ambiguous provider/network failure.
+            execute(FINISH_VERIFY, keys, token, "0", id);
+            throw ex;
         }
+        Long consumed = execute(FINISH_VERIFY, keys, token, passed ? "1" : "0", id);
+        if (!passed || !Long.valueOf(1).equals(consumed)) throw invalidCode();
+    }
+
+    private static BusinessException invalidCode() {
+        return new BusinessException("短信验证码错误、已过期或尝试次数过多，请重新获取");
     }
 
     private Long execute(DefaultRedisScript<Long> script, List<String> keys, String... arguments) {
@@ -91,17 +102,6 @@ public class RegistrationSmsService {
             return redis.execute(script, keys, (Object[]) arguments);
         } catch (DataAccessException ex) {
             throw new BusinessException("短信验证暂不可用，请稍后重试", HttpStatus.SERVICE_UNAVAILABLE);
-        }
-    }
-
-    private String digest(String id, String phone, String code) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(properties.getCodeSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            return HexFormat.of().formatHex(mac.doFinal(("register:" + id + ":" + phone + ":" + code)
-                    .getBytes(StandardCharsets.UTF_8)));
-        } catch (GeneralSecurityException ex) {
-            throw new IllegalStateException("SMS digest unavailable");
         }
     }
 

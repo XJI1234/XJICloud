@@ -17,13 +17,14 @@ LoginView / RegisterForm / AccountView
   → Spring Boot /api/v1
 ```
 
-Spring Boot 3.3.5、Java 17+，沿用 Spring Security、JPA、BCrypt 和用户 JWT。业务入口为 `AuthController` / `AuthService`，短信由 `RegistrationSmsService` 编排，`SmsSender` 隔离阿里云两种官方 SDK。
+Spring Boot 3.3.5、Java 17+，沿用 Spring Security、JPA、BCrypt 和用户 JWT。业务入口为 `AuthController` / `AuthService`，短信由 `RegistrationSmsService` 编排，`SmsSender` 仅接入阿里云号码认证 PNVS 官方 SDK。
 
 1. `GET /api/v1/auth/captcha` 获取图形码。`POST /api/v1/auth/registration-sms` 提交 `{phone,captchaKey,captchaCode}`，消费图形码后限流并发送短信，只返回 challenge ID、300秒有效期及60秒重发间隔。
-2. 平台使用 `SecureRandom` 生成6位码；Redis只保存绑定用途、手机号和 challenge ID 的 HMAC-SHA256 摘要。Lua 脚本原子限流、替换旧 challenge、限制5次错误及成功后删除，防止重放和并发重复消费。
-3. `POST /api/v1/auth/register` 提交 `{phone,password,smsChallengeId,smsCode}`。后端验证短信、检查手机号及历史用户名冲突、BCrypt存储密码，返回7天用户 JWT。手机号唯一索引防止并发重复建号。密码8至64字符，UTF-8不超过72字节。
-4. 注册成功自动进入 `/app/account`。`GET/PUT /api/v1/account` 仅允许用户修改本人昵称、邮箱和单位；前端守卫与后端 Filter 都要求新用户补全资料。旧账号不强制补资料，仍用原用户名和密码登录；新账号使用手机号和密码。
-5. 发送成功收起图形码；主动重发或更换手机号才恢复图形验证。注册提交不再次要求图形码。邮箱只是资料字段，尚未验证所有权。
+2. `SendSmsVerifyCode` 传入 `{"code":"##code##","min":"5"}`、`CodeType=1`、`CodeLength=6`、`ValidTime=300`、`Interval=60`、`DuplicatePolicy=1`；阿里云生成验证码并发送。`ReturnVerifyCode=false`，不回传验证码，`AutoRetry=0` 禁止运营商换签名重试，SDK也不自动重试。
+3. 注册提交通过 `CheckSmsVerifyCode` 在线校验；发送和校验使用同一方案（默认 `xjicloud-register`）、国家码86和对应 OutId。OutId仅用于关联请求，不依赖它做安全绑定。只有 `Code=OK`、`Success=true` 且 `Model.VerifyResult=PASS` 才可通过。Redis只存手机号SHA-256、尝试次数和核验锁，不生成/保存/比对验证码或验证码摘要。Lua负责手机号与challenge绑定、5次尝试、核验互斥、重发失效及成功后单次消费；过期或重发期间返回的旧PASS也会被拒绝。
+4. `POST /api/v1/auth/register` 提交 `{phone,password,smsChallengeId,smsCode}`。后端验证短信、检查手机号及历史用户名冲突、BCrypt存储密码，返回7天用户 JWT。手机号唯一索引防止并发重复建号。密码8至64字符，UTF-8不超过72字节。
+5. 注册成功自动进入 `/app/account`。`GET/PUT /api/v1/account` 仅允许用户修改本人昵称、邮箱和单位；前端守卫与后端 Filter 都要求新用户补全资料。旧账号不强制补资料，仍用原用户名和密码登录；新账号使用手机号和密码。
+6. 发送成功收起图形码；主动重发或更换手机号才恢复图形验证。注册提交不再次要求图形码。邮箱只是资料字段，尚未验证所有权。
 
 本功能改变了注册契约；使用旧用户名注册请求的其他客户端会收到400。升级前应协调这些客户端，保留的旧账号登录接口不变。
 
@@ -31,29 +32,51 @@ Spring Boot 3.3.5、Java 17+，沿用 Spring Security、JPA、BCrypt 和用户 J
 
 完整基础设施、网络、PostgreSQL、OSS和systemd首次安装见 [Deploy.md §5.2](./Deploy.md#52-服务器-b--后端)。本节补充手机号注册的上线步骤，以Linux已有部署升级为例。
 
-- JDK 17或21、Maven、PostgreSQL、单节点Redis；多个后端实例共享Redis与 `SMS_CODE_SECRET`。Lua多键操作不支持Redis Cluster跨槽。
-- 保留现有数据库、JWT、Worker、OSS和本地模型目录配置。启动应用仍需要合法OSS配置；只测试注册时不要求OSS服务在线。PLY/SPZ仍存本地磁盘。
-- 个人开发者选择 `aliyun-pnvs`，使用号码认证服务的短信认证、匹配的预置签名/模板及 `dypns:SendSmsVerifyCode` 权限。企业已有短信签名/模板可选 `aliyun-sms` 和 `dysms:SendSms`。两种产品的资源包不互通。
-- 后端需能通过HTTPS连接对应的 `dypnsapi.aliyuncs.com` 或 `dysmsapi.aliyuncs.com`。
+- JDK 17或21、Maven、PostgreSQL、单节点Redis；多个后端实例共享Redis与相同短信方案。Lua多键操作不支持Redis Cluster跨槽。
+- 保留现有数据库、JWT、Worker、OSS和本地模型目录配置。启动应用需要合法OSS配置；只测试注册时不要求OSS服务在线。PLY/SPZ仍存本地磁盘。
+- 仅使用“号码认证服务 → 短信认证”，开通服务并使用控制台赠送签名和匹配赠送模板。普通短信服务的签名/模板/资源包不通用。RAM最小策略：
 
-将 [backend.env.example](../deploy/config/backend.env.example) 中的短信项填入服务器 `/etc/xjicloud/backend.env`，保留该文件已有配置。示例为空值，不能直接用于启用短信：
+  ```json
+  {"Version":"1","Statement":[{"Effect":"Allow","Action":["dypns:SendSmsVerifyCode","dypns:CheckSmsVerifyCode"],"Resource":"*"}]}
+  ```
 
-```dotenv
-SMS_ENABLED=false
-SMS_PROVIDER=aliyun-pnvs
-ALIBABA_CLOUD_ACCESS_KEY_ID=
-ALIBABA_CLOUD_ACCESS_KEY_SECRET=
-SMS_SIGN_NAME=
-SMS_TEMPLATE_CODE=
-SMS_CODE_VARIABLE=code
-SMS_MINUTES_VARIABLE=min
-SMS_CODE_SECRET=
-SMS_DAILY_LIMIT=1000
+- 只读系统策略 `AliyunDypnsReadOnlyAccess` 不覆盖上述调用。使用主账号/RAM管理员在 **权限管理 → 权限策略 → 创建权限策略 → 脚本编辑** 粘贴上述JSON并创建，再到 **身份管理 → 用户 → 对应用户 → 添加权限 → 自定义策略** 选中绑定；没有创建按钮时需由管理员操作。[官方自定义策略步骤](https://help.aliyun.com/zh/ram/user-guide/create-a-custom-policy)。
+- 后端需能通过HTTPS连接 `dypnsapi.aliyuncs.com`。`Forbidden.NoPermission` 表示调用被拒绝，应检查对应RAM用户权限及账号服务状态；`FUNCTION_NOT_OPENED` 表示未开通功能。
+
+短信配置统一放入现有 [application-prod.yml.example](../deploy/config/application-prod.yml.example) 对应的 `xjicloud.sms`，生产实际文件为 `/etc/xjicloud/application-prod.yml`。不再使用额外 `backend.env`，不再需要 `SMS_CODE_SECRET` 或选择短信供应商：
+
+```yaml
+xjicloud:
+  sms:
+    enabled: false
+    scheme-name: xjicloud-register
+    access-key-id: ""
+    access-key-secret: ""
+    sign-name: ""        # 控制台赠送签名
+    template-code: ""    # 匹配的赠送模板CODE
+    code-variable: code
+    minutes-variable: min
+    daily-limit: 1000
 ```
 
-`SMS_CODE_SECRET` 用服务器本地 `openssl rand -hex 32` 生成，至少32字符，不复用JWT或阿里云密钥。所有副本保持一致。密钥文件由root维护并限制访问，例如 `sudo chmod 600 /etc/xjicloud/backend.env`。systemd会读取该文件；直接用服务账号执行 `java -jar` 不会自动加载它。
+合并进现有 `xjicloud` 节点，勿重复创建根键。凭据、签名和模板填齐后设置 `enabled: true`，重启后端。启用但配置缺失会启动失败；关闭时新注册/发短信返回503，旧账号登录继续。短信方案1至20字符，专用于注册，勿与其他业务/测试共用；所有后端副本须一致。模板变量以控制台模板正文为准（如 `${code}`、`${min}`）；分钟数固定为5。密钥留在服务器配置中，勿提交到Git或发到聊天。向导生成文件权限600，安装后的配置root持有、服务组只读（640）。示例默认关闭短信，不能直接启用空配置。
 
-配置齐全后设置 `SMS_ENABLED=true` 并重启。启用但配置缺失会启动失败；关闭时新注册和发短信返回503，旧账号登录可继续。生产不得运行 `RegistrationBrowserFixture`；它仅在测试classpath提供短信替身。
+一键向导新增短信开关、隐藏输入RAM凭据和签名/模板、方案/变量校验、全局限额输入；向导输出和摘要不包含短信凭据。首次安装：
+
+```bash
+sudo bash deploy/deploy-backend.sh configure
+sudo bash deploy/deploy-backend.sh install --non-interactive
+```
+
+已有服务器建议直接编辑 `/etc/xjicloud/application-prod.yml`，保留原JWT/数据库/Worker等设置。若原服务使用 `backend.env`，必须先把其中配置迁入YAML，并将旧文件改名备份；脚本检测到旧文件会在替换JAR前停止。旧文件中的 `JAVA_TOOL_OPTIONS` 等JVM参数应迁入单独的systemd drop-in，不属于业务YAML。检查自定义systemd drop-in和进程环境，移除遗留短信/数据库覆盖项。开发和Compose仍支持环境变量覆盖；`SMS_PROVIDER=aliyun-sms` 会明确启动失败，须移除。
+
+升级命令默认保留服务器YAML，不再要求仓库本地YAML：
+
+```bash
+sudo bash deploy/deploy-backend.sh upgrade --skip-build --non-interactive
+```
+
+需要应用仓库本地完整配置时才使用 `upgrade --update-config --skip-build --non-interactive`；该选项备份旧YAML后整体替换。先将服务器现有配置安全复制到本地配置位置再编辑，勿用向导默认值重建并覆盖生产密钥。安装/升级会重写systemd单元，统一只加载生产YAML。不要在profile文件内写 `spring.profiles.active`，启动命令已指定prod。
 
 ## 上线步骤
 
@@ -78,17 +101,16 @@ SMS_DAILY_LIMIT=1000
 
    SQL在事务内新增可空唯一 `phone`、`email`、`organization`、`profile_completed_at`，保留旧数据；它不负责建立完整空库。首次空库安装需先按基础部署流程建立其余表。生产迁移完成后使用 `spring.jpa.hibernate.ddl-auto: validate`；现有部署模板/向导可能设置 `update`，应显式核对。
 
-3. 填好短信环境变量。已有systemd部署可在确认目标目录后安装已经测试过的JAR：
+3. 完成上方YAML配置和旧环境文件迁移。已有systemd部署执行以下命令，安装已验证JAR并更新服务单元：
 
    ```bash
-   sudo install -m 0644 services/backend/target/xjicloud-backend-1.0.0.jar /opt/xjicloud/backend/xjicloud-backend-1.0.0.jar
-   sudo systemctl restart xjicloud-backend
+   sudo bash deploy/deploy-backend.sh upgrade --skip-build --non-interactive
    sudo systemctl is-active xjicloud-backend
    curl -fsS http://127.0.0.1:8080/actuator/health
    sudo journalctl -u xjicloud-backend -n 80 --no-pager
    ```
 
-   健康检查需返回 `UP`。首次安装可使用 `deploy/deploy-backend.sh`；已有 `upgrade` 子命令仍要求仓库本机的 `deploy/config/application-prod.yml` 存在，并会在 `deploy/config/backend.env` 存在时覆盖服务器环境文件。脚本内部构建会跳过测试，因此先执行步骤1，使用 `--skip-build` 安装已验证产物。不要将默认示例误覆盖到现有生产密钥文件。
+   健康检查需返回 `UP`。脚本默认Maven构建会执行测试，但注册集成测试仍要求独立Redis与 `SMS_TEST_REDIS_PORT`。先完成步骤1，再用 `--skip-build` 安装已验证产物。旧版HMAC challenge与新状态不兼容，升级时已发出的验证码需重新获取；旧验证码最多等待300秒自然过期，不必清空Redis或删除其他业务键。
 
 4. 按实际Nginx根目录发布整个 `apps/web2/dist/`，并保留 `/api` 到后端8080的同源代理。账号页需支持SPA history fallback。前端资源部署细节沿用 [Deploy.md §5.3](./Deploy.md#53-服务器-a--前端)。
 
@@ -100,4 +122,17 @@ SMS_DAILY_LIMIT=1000
 
 回滚：关闭短信注册、回退配套前后端产物并重启；保留新增列和用户数据。源版本的旧注册接口可能重新开放，维护窗口应由网关继续禁止 `POST /api/v1/auth/register`，直至决定是否恢复旧注册方式。
 
+核验网络超时或进程在核验中退出时会拒绝注册；核验锁最多保留challenge剩余有效期，可等待60秒后重新获取短信。阿里云可能已经消费验证码，因此不要自动重试或在异常时本地放行。
+
 当前本机验证不等于生产发布。生产PostgreSQL迁移、正式域名代理、真实阿里云凭据/签名/模板与运营商送达需在部署环境验收。源分支文档中的 `/home/li`、`start-*.sh` 和历史测试数量属于原开发环境，本次验证记录见 [PHONE_REGISTRATION_REVIEW.md](./PHONE_REGISTRATION_REVIEW.md)。
+
+## 官方接口依据
+
+- [SendSmsVerifyCode](https://help.aliyun.com/zh/pnvs/developer-reference/api-dypnsapi-2017-05-25-sendsmsverifycode)：动态验证码占位符、CodeType、长度、有效期、重复策略、返回与重试参数。
+- [CheckSmsVerifyCode](https://help.aliyun.com/zh/pnvs/developer-reference/api-dypnsapi-2017-05-25-checksmsverifycode)：方案一致性及以 Model.VerifyResult=PASS 判断核验成功。
+
+- [PNVS接口返回码](https://help.aliyun.com/zh/pnvs/developer-reference/api-return-code)：isv.ValidateFail表示错码/过期/覆盖；biz.FREQUENCY和isv.BUSINESS_LIMIT_CONTROL表示限流。校验失败返回400，频控返回429，服务或权限故障返回503，原始供应商消息不会透传。
+
+## 本次验证（2026-10-26）
+
+Maven package 41项测试全部通过（包含12项独立Redis集成测试，无跳过），Bash语法及6项部署脚本测试通过。用户授权的本机CSV凭据已完成真实PNVS发送、用户收码后PASS核验、错误/失效码拒绝。密钥和短信码未写入仓库。未执行生产发布或本轮浏览器E2E，详细证据和限制见[Code Review记录](./PHONE_REGISTRATION_REVIEW.md)。

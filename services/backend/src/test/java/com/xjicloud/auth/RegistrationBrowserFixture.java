@@ -27,8 +27,7 @@ public class RegistrationBrowserFixture {
                 "--xjicloud.admin.default-password=test-only-admin-password",
                 "--xjicloud.sms.enabled=true",
                 "--xjicloud.sms.access-key-id=test-only", "--xjicloud.sms.access-key-secret=test-only",
-                "--xjicloud.sms.sign-name=test-only", "--xjicloud.sms.template-code=test-only",
-                "--xjicloud.sms.code-secret=browser-test-only-hmac-secret-at-least-32-characters"
+                "--xjicloud.sms.sign-name=test-only", "--xjicloud.sms.template-code=test-only"
         });
     }
 
@@ -36,20 +35,28 @@ public class RegistrationBrowserFixture {
     static class FakeSms {
         @Bean @Primary
         SmsSender browserSmsSender() {
-            return (phone, code) -> {
-                try {
-                    Path file = Path.of("target/registration-browser-code.txt");
-                    if (!Files.exists(file)) {
-                        if (Files.getFileStore(file.toAbsolutePath().getParent()).supportsFileAttributeView("posix")) {
-                            Files.createFile(file,
-                                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-                        } else {
-                            Files.createFile(file);
+            return new SmsSender() {
+                @Override
+                public void sendRegistrationCode(String phone, String challengeId) {
+                    String code = "012345";
+                    try {
+                        Path file = Path.of("target/registration-browser-code.txt");
+                        if (!Files.exists(file)) {
+                            if (Files.getFileStore(file.toAbsolutePath().getParent()).supportsFileAttributeView("posix")) {
+                                Files.createFile(file,
+                                        PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+                            } else {
+                                Files.createFile(file);
+                            }
                         }
+                        Files.writeString(file, phone + ":" + code);
+                    } catch (java.io.IOException ex) {
+                        throw new IllegalStateException("Cannot capture browser test SMS");
                     }
-                    Files.writeString(file, phone + ":" + code);
-                } catch (java.io.IOException ex) {
-                    throw new IllegalStateException("Cannot capture browser test SMS");
+                }
+                @Override
+                public boolean verifyRegistrationCode(String phone, String challengeId, String code) {
+                    return "012345".equals(code);
                 }
             };
         }

@@ -119,7 +119,7 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 ### 3.1 手机号注册（2026-10-21）
 
-web2 新注册改为「大陆手机号 → 图形验证码 → 阿里云短信验证码 → 设置密码 → 自动登录 → 完善昵称/邮箱/单位」。旧用户名/密码登录保留，不自动把旧用户名认定为已验证手机号。auth/sms 使用官方 Java SDK、独立配置与 Redis HMAC 验证码状态；默认 SMS_ENABLED=false，缺真实配置时拒绝发送和注册。2026-10-25 新增 SMS_PROVIDER=aliyun-pnvs：个人开发者免企业资质的短信认证 SendSmsVerifyCode，使用预置签名/模板和平台生成的验证码，Redis本地校验；aliyun-sms 保留原 SendSms 接法。资源包不互通，详见 SMS_PERSONAL_SETUP.md。
+web2 新注册改为「大陆手机号 → 图形验证码 → 阿里云短信验证码 → 设置密码 → 自动登录 → 完善昵称/邮箱/单位」。旧用户名/密码登录保留，不自动把旧用户名认定为已验证手机号。2026-10-26 auth/sms仅集成阿里云号码认证PNVS官方Java SDK：SendSmsVerifyCode以##code##请求阿里云生成6位码，CheckSmsVerifyCode必须返回Model.VerifyResult=PASS；发送/校验方案一致。Redis只保留手机号哈希、challenge、限流、5次尝试和核验互斥/单次消费状态，本地随机码/HMAC及普通SendSms接法已删除。默认短信关闭，生产统一配置在application-prod.yml的xjicloud.sms，向导支持填写；不再使用backend.env或SMS_CODE_SECRET。RAM需SendSmsVerifyCode和CheckSmsVerifyCode权限，详见PHONE_REGISTRATION_DEPLOYMENT.md。
 
 新增 POST /api/v1/auth/registration-sms；POST /api/v1/auth/register 改为 phone/password/smsChallengeId/smsCode，不能使用旧用户名表单绕过。会话新增 profileRequired；GET/PUT /api/v1/account 仅 ROLE_USER 访问本人资料。新增手机号账号未完成资料前，JwtAuthenticationFilter 拒绝业务 API，旧账号不受影响。
 

@@ -10,6 +10,7 @@ BACKEND_DIR="$REPO_ROOT/services/backend"
 SKIP_BUILD=0
 NO_SYSTEMD=0
 NON_INTERACTIVE=0
+UPDATE_CONFIG=0
 COMMAND=""
 
 usage() {
@@ -26,6 +27,7 @@ usage() {
   --skip-build         跳过 Maven 构建
   --no-systemd         不注册 systemd，仅复制 JAR 与配置
   --non-interactive    不提问；configure 需已有 yml，install 直接部署
+  --update-config      upgrade 时备份并应用本地完整 application-prod.yml
   -h, --help           显示帮助
 
 推荐首次部署:
@@ -114,7 +116,7 @@ resolve_java_bin() {
     return 0
   fi
   if found="$(find_java17)"; then
-    log "使用 Java 17+: $found（默认 java 版本过低）"
+    log "使用 Java 17+: $found（默认 java 版本过低）" >&2
     printf '%s' "$found"
     return 0
   fi
@@ -130,7 +132,7 @@ prompt_with_default() {
     printf '%s' "$default"
     return
   fi
-  read -rp "$label [推荐: $default]: " value
+  read -rp "$label [推荐: $default]: " value || die "输入结束，配置未写入"
   if [[ -z "$value" ]]; then
     value="$default"
   fi
@@ -143,9 +145,9 @@ prompt_required() {
   if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
     die "非交互模式无法设置: $label"
   fi
-  while [[ -z "$value" ]]; do
-    read -rsp "$label: " value
-    echo ""
+  while [[ ! "$value" =~ [^[:space:]] ]]; do
+    read -rsp "$label: " value || die "输入结束，配置未写入"
+    printf '\n' >&2
   done
   printf '%s' "$value"
 }
@@ -170,19 +172,23 @@ yaml_quote() {
   local s="$1"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\t'/\\t}"
   printf '"%s"' "$s"
 }
 
 write_application_prod_yml() {
   local out="$CONFIG_SRC/application-prod.yml"
   mkdir -p "$CONFIG_SRC"
+  # Apply permissions before truncating/writing secrets, including existing files.
+  umask 077
+  [[ ! -e "$out" ]] || chmod 600 "$out"
   cat >"$out" <<EOF
 # 由 deploy-backend.sh configure 生成 — 勿提交到 Git
 # 场景: ${DEPLOY_SCENARIO_LABEL}
 
 spring:
-  profiles:
-    active: prod
   datasource:
     url: $(yaml_quote "$DB_URL")
     username: $(yaml_quote "$DB_USER")
@@ -204,6 +210,16 @@ server:
   port: ${SERVER_PORT}
 
 xjicloud:
+  sms:
+    enabled: ${SMS_ENABLED}
+    scheme-name: $(yaml_quote "$SMS_SCHEME_NAME")
+    access-key-id: $(yaml_quote "$SMS_ACCESS_KEY_ID")
+    access-key-secret: $(yaml_quote "$SMS_ACCESS_KEY_SECRET")
+    sign-name: $(yaml_quote "$SMS_SIGN_NAME")
+    template-code: $(yaml_quote "$SMS_TEMPLATE_CODE")
+    code-variable: $(yaml_quote "$SMS_CODE_VARIABLE")
+    minutes-variable: $(yaml_quote "$SMS_MINUTES_VARIABLE")
+    daily-limit: ${SMS_DAILY_LIMIT}
   jwt:
     secret: $(yaml_quote "$JWT_SECRET")
     expiration-ms: 86400000
@@ -249,10 +265,52 @@ OSS endpoint: ${OSS_ENDPOINT}
 OSS bucket: ${OSS_BUCKET}
 数据库: ${DB_URL}
 Redis: ${REDIS_HOST}:${REDIS_PORT}
+短信认证: Alibaba PNVS，启用=${SMS_ENABLED}，全局24小时限额=${SMS_DAILY_LIMIT}
 
 注意: 密钥未写入本摘要，请妥善保管 application-prod.yml
 EOF
   chmod 600 "$out" 2>/dev/null || true
+}
+
+configure_sms() {
+  SMS_ENABLED=false
+  SMS_ACCESS_KEY_ID=""; SMS_ACCESS_KEY_SECRET=""
+  SMS_SIGN_NAME=""; SMS_TEMPLATE_CODE=""
+  SMS_SCHEME_NAME=xjicloud-register
+  SMS_CODE_VARIABLE=code; SMS_MINUTES_VARIABLE=min; SMS_DAILY_LIMIT=1000
+  local answer
+  while true; do
+    answer="$(prompt_with_default "启用阿里云号码认证短信注册？[y/n]" "n")"
+    case "${answer,,}" in
+      y|yes) SMS_ENABLED=true; break ;;
+      n|no) return 0 ;;
+      *) log "请输入 y 或 n" ;;
+    esac
+  done
+  log "请先开通号码认证短信认证，使用匹配的赠送签名/模板。RAM需有 SendSmsVerifyCode 和 CheckSmsVerifyCode 权限。"
+  SMS_ACCESS_KEY_ID="$(prompt_required "短信 RAM AccessKey ID（隐藏输入）")"
+  SMS_ACCESS_KEY_SECRET="$(prompt_required "短信 RAM AccessKey Secret（隐藏输入）")"
+  SMS_SIGN_NAME="$(prompt_required "短信赠送签名（隐藏输入）")"
+  SMS_TEMPLATE_CODE="$(prompt_required "短信赠送模板 CODE（隐藏输入）")"
+  while true; do
+    SMS_SCHEME_NAME="$(prompt_with_default "短信方案名称（发送/校验须一致，1至20字符）" "xjicloud-register")"
+    [[ ${#SMS_SCHEME_NAME} -le 20 && "$SMS_SCHEME_NAME" =~ [^[:space:]] ]] && break
+    log "方案名称必须为1至20个字符"
+  done
+  while true; do
+    SMS_CODE_VARIABLE="$(prompt_with_default "模板验证码变量名" "code")"
+    SMS_MINUTES_VARIABLE="$(prompt_with_default "模板有效分钟数变量名" "min")"
+    [[ "$SMS_CODE_VARIABLE" =~ ^[A-Za-z][A-Za-z0-9_]{0,31}$ &&
+       "$SMS_MINUTES_VARIABLE" =~ ^[A-Za-z][A-Za-z0-9_]{0,31}$ &&
+       "$SMS_CODE_VARIABLE" != "$SMS_MINUTES_VARIABLE" ]] && break
+    log "变量名须为字母开头的字母/数字/下划线，最长32字符，且两者不同"
+  done
+  while true; do
+    SMS_DAILY_LIMIT="$(prompt_with_default "全局24小时短信发送限额（正整数）" "1000")"
+    [[ "$SMS_DAILY_LIMIT" =~ ^[1-9][0-9]{0,9}$ ]] &&
+      (( SMS_DAILY_LIMIT <= 2147483647 )) && break
+    log "限额必须是1至2147483647的整数"
+  done
 }
 
 print_postgres_hint() {
@@ -318,6 +376,7 @@ do_configure() {
   echo ""
   echo "Admin 初始密码（必填，用于管理后台登录）:"
   ADMIN_PASSWORD="$(prompt_required "Admin 密码")"
+  configure_sms
 
   JWT_SECRET="$(rand_base64)"
   WORKER_SECRET="$(rand_hex 24)"
@@ -365,9 +424,14 @@ do_install_or_upgrade() {
   SERVER_PORT="${SERVER_PORT:-8080}"
 
   PROD_YML_SRC="$CONFIG_SRC/application-prod.yml"
-  BACKEND_ENV_SRC="$CONFIG_SRC/backend.env"
-
-  [[ -f "$PROD_YML_SRC" ]] || die "缺少 $PROD_YML_SRC，请先运行: sudo $0 configure"
+  if [[ "$mode" != "upgrade" || "$UPDATE_CONFIG" -eq 1 ]]; then
+    [[ -f "$PROD_YML_SRC" ]] || die "缺少 $PROD_YML_SRC，请先运行: sudo $0 configure"
+  else
+    run_root test -f "$CONFIG_DIR/application-prod.yml" || die "升级需已有生产配置，首次部署请用 install"
+  fi
+  if run_root test -s "$CONFIG_DIR/backend.env"; then
+    die "检测到旧 backend.env：请先将其中业务配置迁入 application-prod.yml，再将旧文件改名备份；新服务不再加载它"
+  fi
 
   JAVA_BIN="$(resolve_java_bin)"
   export JAVA_HOME="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$JAVA_BIN" 2>/dev/null || echo "$JAVA_BIN")")")}"
@@ -382,7 +446,7 @@ do_install_or_upgrade() {
       die "未找到 mvn 或 services/backend/mvnw，请安装 Maven 3.9+ 或使用 --skip-build"
     fi
     log "开始 Maven 构建..."
-    (cd "$BACKEND_DIR" && JAVA_HOME="$JAVA_HOME" PATH="$(dirname "$JAVA_BIN"):$PATH" "${MVN[@]}" -DskipTests package)
+    (cd "$BACKEND_DIR" && JAVA_HOME="$JAVA_HOME" PATH="$(dirname "$JAVA_BIN"):$PATH" "${MVN[@]}" -B package)
   else
     log "跳过构建 (--skip-build)"
   fi
@@ -403,16 +467,15 @@ do_install_or_upgrade() {
   log "安装 JAR → $INSTALL_DIR/$JAR_NAME"
   run_root install -m 0644 -o root -g root "$JAR_SRC" "$INSTALL_DIR/$JAR_NAME"
 
-  if [[ "$mode" != "upgrade" ]]; then
+  if [[ "$mode" != "upgrade" || "$UPDATE_CONFIG" -eq 1 ]]; then
+    if run_root test -f "$CONFIG_DIR/application-prod.yml"; then
+      run_root cp -p "$CONFIG_DIR/application-prod.yml" "$CONFIG_DIR/application-prod.yml.bak.$(date +%Y%m%d%H%M%S%N)"
+      log "已备份旧生产配置"
+    fi
     log "安装配置 → $CONFIG_DIR/application-prod.yml"
     run_root install -m 0640 -o root -g "$SERVICE_USER" "$PROD_YML_SRC" "$CONFIG_DIR/application-prod.yml"
   else
     log "upgrade 模式：保留 $CONFIG_DIR/application-prod.yml"
-  fi
-
-  if [[ -f "$BACKEND_ENV_SRC" ]]; then
-    log "安装环境文件 → $CONFIG_DIR/backend.env"
-    run_root install -m 0640 -o root -g "$SERVICE_USER" "$BACKEND_ENV_SRC" "$CONFIG_DIR/backend.env"
   fi
 
   run_root chown -R root:"$SERVICE_USER" "$INSTALL_DIR" "$CONFIG_DIR"
@@ -439,7 +502,6 @@ Type=simple
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${INSTALL_DIR}
-EnvironmentFile=-${CONFIG_DIR}/backend.env
 ExecStart=${JAVA_BIN} -jar ${INSTALL_DIR}/${JAR_NAME} \\
   --spring.profiles.active=prod \\
   --spring.config.additional-location=file:${CONFIG_DIR}/application-prod.yml
@@ -485,6 +547,7 @@ while [[ $# -gt 0 ]]; do
     --skip-build) SKIP_BUILD=1; shift ;;
     --no-systemd) NO_SYSTEMD=1; shift ;;
     --non-interactive) NON_INTERACTIVE=1; shift ;;
+    --update-config) UPDATE_CONFIG=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "未知参数: $1（使用 --help）" ;;
   esac

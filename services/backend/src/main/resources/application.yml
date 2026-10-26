@@ -24,14 +24,14 @@ server:
 xjicloud:
   sms:
     enabled: ${SMS_ENABLED:false}
-    provider: ${SMS_PROVIDER:aliyun-sms}
+    provider: ${SMS_PROVIDER:aliyun-pnvs}
+    scheme-name: ${SMS_SCHEME_NAME:xjicloud-register}
     code-variable: ${SMS_CODE_VARIABLE:code}
     minutes-variable: ${SMS_MINUTES_VARIABLE:min}
     access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}
     access-key-secret: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}
     sign-name: ${SMS_SIGN_NAME:}
     template-code: ${SMS_TEMPLATE_CODE:}
-    code-secret: ${SMS_CODE_SECRET:}
     daily-limit: ${SMS_DAILY_LIMIT:1000}
   jwt:
     secret: change-me-in-production-use-at-least-32-chars-long-secret-key

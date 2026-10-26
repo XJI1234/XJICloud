@@ -46,8 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "xjicloud.sms.access-key-id=test-only",
         "xjicloud.sms.access-key-secret=test-only",
         "xjicloud.sms.sign-name=test-only",
-        "xjicloud.sms.template-code=test-only",
-        "xjicloud.sms.code-secret=test-only-otp-hmac-secret-at-least-32-characters"
+        "xjicloud.sms.template-code=test-only"
 })
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "SMS_TEST_REDIS_PORT", matches = "[0-9]+")
@@ -80,8 +79,10 @@ class PhoneRegistrationIntegrationTest {
         properties.setEnabled(true);
         properties.setDailyLimit(1000);
         delivered.clear();
-        doAnswer(call -> { delivered.put(call.getArgument(0), call.getArgument(1)); return null; })
+        doAnswer(call -> { delivered.put(call.getArgument(0), "012345"); return null; })
                 .when(sender).sendRegistrationCode(anyString(), anyString());
+        when(sender.verifyRegistrationCode(anyString(), anyString(), anyString()))
+                .thenAnswer(call -> Objects.equals(delivered.get(call.getArgument(0)), call.getArgument(2)));
     }
 
     private String hash(String value) throws Exception {
@@ -162,7 +163,7 @@ class PhoneRegistrationIntegrationTest {
     void wrongPhoneFiveAttemptsExpiryAndReplayAreRejected() {
         var c = challenge("13800138002");
         assertThrows(BusinessException.class, () -> sms.consume("13800138003", c.challengeId(), delivered.get("13800138002")));
-        for (int i = 0; i < 4; i++) assertThrows(BusinessException.class, () -> sms.consume("13800138002", c.challengeId(), "bad"));
+        for (int i = 0; i < 5; i++) assertThrows(BusinessException.class, () -> sms.consume("13800138002", c.challengeId(), "000000"));
         assertThrows(BusinessException.class, () -> sms.consume("13800138002", c.challengeId(), delivered.get("13800138002")));
         var expires = challenge("13800138004");
         redis.expire("xjicloud:registration-sms:challenge:" + expires.challengeId(), Duration.ZERO);
@@ -219,6 +220,38 @@ class PhoneRegistrationIntegrationTest {
     }
 
     @Test
+    void providerFailureNeverRegistersAndReleasesTheAttempt() {
+        var c = challenge("13800138020");
+        when(sender.verifyRegistrationCode(anyString(), anyString(), anyString()))
+                .thenThrow(new BusinessException("Provider unavailable", HttpStatus.SERVICE_UNAVAILABLE));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(BusinessException.class,
+                () -> sms.consume("13800138020", c.challengeId(), "012345")).getStatus());
+        assertFalse(redis.opsForHash().hasKey("xjicloud:registration-sms:challenge:" + c.challengeId(), "verification"));
+        doReturn(true).when(sender).verifyRegistrationCode(anyString(), anyString(), anyString());
+        sms.consume("13800138020", c.challengeId(), "012345");
+        assertThrows(BusinessException.class, () -> sms.consume("13800138020", c.challengeId(), "012345"));
+        verify(sender, times(2)).verifyRegistrationCode(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void resendOrExpiryDuringProviderCheckRejectsAnOtherwisePassingResult() throws Exception {
+        String phone = "13800138021";
+        var old = challenge(phone);
+        doAnswer(call -> {
+            redis.delete("xjicloud:registration-sms:cooldown:" + hash(phone));
+            challenge(phone);
+            return true;
+        }).when(sender).verifyRegistrationCode(anyString(), anyString(), anyString());
+        assertThrows(BusinessException.class, () -> sms.consume(phone, old.challengeId(), "012345"));
+        var expiring = challenge("13800138022");
+        doAnswer(call -> {
+            redis.delete("xjicloud:registration-sms:challenge:" + expiring.challengeId());
+            return true;
+        }).when(sender).verifyRegistrationCode(anyString(), anyString(), anyString());
+        assertThrows(BusinessException.class, () -> sms.consume("13800138022", expiring.challengeId(), "012345"));
+    }
+
+    @Test
     void concurrentSendRequestsReserveOnlyOneMessage() throws Exception {
         String phone = "13800138010";
         ExecutorService pool = Executors.newFixedThreadPool(8);
@@ -240,8 +273,8 @@ class PhoneRegistrationIntegrationTest {
         String phone = "13800138011";
         var c = challenge(phone);
         var state = redis.opsForHash().entries("xjicloud:registration-sms:challenge:" + c.challengeId());
-        assertEquals(Set.of("digest", "attempts"), state.keySet());
-        assertEquals(64, state.get("digest").toString().length());
+        assertEquals(Set.of("phone", "attempts"), state.keySet());
+        assertEquals(hash(phone), state.get("phone"));
         assertFalse(state.values().contains(delivered.get(phone)));
         assertTrue(redis.getExpire("xjicloud:registration-sms:challenge:" + c.challengeId()) > 0);
         redis.delete("xjicloud:registration-sms:cooldown:" + hash(phone));
