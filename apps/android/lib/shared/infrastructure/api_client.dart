@@ -159,7 +159,15 @@ final class ApiClient {
       }
       // Only explicitly known business reasons become stable UI codes.
       final message = data['message'];
-      final code = message is String && message.contains('验证码')
+      final registeredPhone =
+          (path == '/api/v1/auth/registration-sms' ||
+              path == '/api/v1/auth/register') &&
+          (message == '该手机号无法注册，请尝试登录或联系管理员' ||
+              message == '该手机号已注册，请直接登录' ||
+              message == '手机号已注册');
+      final code = registeredPhone
+          ? 'phone_registered'
+          : message is String && message.contains('验证码')
           ? 'captcha'
           : message == '用户名已存在'
           ? 'username_taken'

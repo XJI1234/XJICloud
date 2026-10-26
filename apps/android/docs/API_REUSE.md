@@ -2,13 +2,13 @@
 
 2026-10-19。以下按当前 Controller、DTO 与 Service 核对，不把文档示意当成新 API。
 
-源码依据位于 `services/backend/src/main/java/com/xjicloud/{auth,project,job,model}`；Web 对照位于 `apps/web2/src/features/*/infrastructure`。不改现有后端。
+源码依据位于 `services/backend/src/main/java/com/xjicloud/{auth,project,job,model}`；Web 对照位于 `apps/web2/src/features/*/infrastructure`。2026-10-26 更新 Identity 注册契约并新增后端融合接口，配置见根目录 `docs/ANDROID_FUSION_AUTH.md`。
 
 ## 1. 通信与鉴权
 
 - Base URL 使用构建配置 `API_BASE_URL`，不硬编码线上/开发机地址；统一响应 `{success,message,data}`。下载/OSS PUT/SSE 不是 JSON wrapper。
 - 用户请求 `Authorization: Bearer <accessToken>`。用户 token 为 type=user；禁止调用 admin/worker API。当前无 refresh/logout/me API；登出是本地清会话，用户信息来自登录响应。
-- login/register 响应含 `accessToken, tokenType, expiresInMs, userId, username, displayName`。按 JWT exp 校验，HTTP 401 为最终依据；不以 expiresInMs 每次重启重新计时。
+- login/register 响应含 `accessToken, tokenType, expiresInMs, userId, username, displayName, profileRequired`。按 JWT exp 校验，HTTP 401 为最终依据；不以 expiresInMs 每次重启重新计时。profileRequired 安全持久化并守卫深链；GET/PUT account 更新本人资料，资料完成才启动业务控制器。
 - 本轮实际核对：无效 Bearer 访问 `/projects` 返回空体 HTTP 403。当前 SecurityConfig 未配置专门的认证失败入口，不能把所有 403 都视为会话失效，否则会误清有效会话。客户端保留 401/本地 exp 处理，403 显示权限错误；服务端撤销或不再认可、但本地尚未到期的凭据可能需要主动退出重登。该契约差异留给后端专项，本阶段不改后端。
 - API、OSS 各自独立 HTTP 客户端；OSS 直传只带签名和指定 Content-Type，不能带用户 Bearer。签名 URL、密码、token、文件 URI 不入日志。
 - Release 仅 HTTPS；debug 的 HTTP 白名单仅为 `127.0.0.1`、`localhost`、`::1` 及模拟器宿主别名 `10.0.2.2`。真机本机联调使用 `http://127.0.0.1:8080` 配合 `adb reverse tcp:8080 tcp:8080`；局域网服务需使用 HTTPS。不能开启 release 全局 cleartext。后端生成的 OSS URL 也必须对设备可达，API 可达并不等于 OSS 可达。
@@ -22,7 +22,11 @@
 | Identity | GET `/auth/captcha` | `captchaKey,captchaImage`；图片内容按真实响应 fixture 解码，不假设存在 expires 字段 |
 | Identity | GET `/auth/need-captcha?username=...` | `needCaptcha`；query 需编码 |
 | Identity | POST `/auth/login` | `{username,password,captchaKey?,captchaCode?}` |
-| Identity | POST `/auth/register` | `{username,password,displayName?,captchaKey,captchaCode}` |
+| Identity | POST `/auth/registration-sms` | `{phone,captchaKey,captchaCode}` → `challengeId,expiresInSeconds,retryAfterSeconds` |
+| Identity | POST `/auth/register` | `{phone,password,smsChallengeId,smsCode}` → 会话，自动登录并完善资料 |
+| Identity | POST `/auth/fusion/init` | → `challengeId,authToken,schemeCode,templateId,expiresInSeconds`；服务端固定方案/包签名 |
+| Identity | POST `/auth/fusion/login` | `{challengeId,verifyToken}` → 既有用户会话；服务端PASS号码复用users.phone |
+| Identity | GET/PUT `/account` | 用户Bearer；`userId,username,phone,displayName,email,organization,profileRequired`；PUT只接受昵称/邮箱/单位 |
 | Project | GET/POST `/projects` | 列表；创建 `{name,description}` |
 | Project | PATCH/DELETE `/projects/{projectId}` | 改名/描述；删除 |
 | Dataset | POST `/projects/{projectId}/datasets` | `{name,files:[{archivedName,originalName,contentType,sizeBytes}]}` → `jobId,manifestUploadUrl,uploads[]` |

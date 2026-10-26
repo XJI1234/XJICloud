@@ -3,9 +3,18 @@
     <application
         android:usesCleartextTraffic="false"
         android:allowBackup="false"
-        android:label="xjicloud_mobile"
+        android:label="玄境云"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".FusionProtocolActivity"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|screenSize|uiMode|fontScale">
+            <intent-filter>
+                <action android:name="com.fusion.auth" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".MainActivity"
             android:exported="true"

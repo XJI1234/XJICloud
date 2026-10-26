@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xjicloud_mobile/app/session_coordinator.dart';
 import 'package:xjicloud_mobile/features/identity/domain/session_store.dart';
 import 'package:xjicloud_mobile/features/identity/domain/user_session.dart';
+import 'package:xjicloud_mobile/features/identity/domain/account_profile.dart';
 import 'package:xjicloud_mobile/shared/domain/result.dart';
 import 'package:xjicloud_mobile/shared/domain/domain_error.dart';
 
@@ -42,6 +43,34 @@ class MemoryStore implements SessionStore {
 }
 
 void main() {
+  const profile = AccountProfile(userId: 'alice', username: 'alice', phone: null,
+    displayName: 'Updated', email: 'a@example.com', organization: 'Lab', profileRequired: false);
+  test('profile persistence updates same session without changing credential generation', () async {
+    final store = MemoryStore();
+    final c = SessionCoordinator(store, now: () => DateTime.utc(2029));
+    addTearDown(c.dispose);
+    await c.activate(session());
+    final generation = c.generation;
+    expect(await c.updateProfile(profile, expectedGeneration: generation), isA<Success<void>>());
+    expect(c.session?.displayName, 'Updated');
+    expect(store.value?.displayName, 'Updated');
+    expect(c.generation, generation);
+    expect(c.session?.token, 'secret');
+  });
+  test('profile save racing logout cannot revive identity', () async {
+    final store = MemoryStore();
+    final c = SessionCoordinator(store, now: () => DateTime.utc(2029));
+    addTearDown(c.dispose);
+    await c.activate(session());
+    store.writeGate = Completer();
+    final saving = c.updateProfile(profile, expectedGeneration: c.generation);
+    await Future<void>.delayed(Duration.zero);
+    final logout = c.invalidate();
+    store.writeGate!.complete();
+    await Future.wait([saving, logout]);
+    expect(c.session, isNull);
+    expect(store.value, isNull);
+  });
   test(
     'a previous logout cannot suppress logout during the next slow login',
     () async {

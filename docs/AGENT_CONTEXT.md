@@ -119,6 +119,8 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 ### 3.1 手机号注册（2026-10-21）
 
+2026-10-26 Android 已接入相同手机号注册与资料门槛，另新增公开 POST `/api/v1/auth/fusion/init`、`/fusion/login`：服务端 GetFusionAuthToken → Android SDK 1.2.16 → VerifyWithFusionAuthToken，只有 PASS + 有效号码才按同一 users.phone 登录/建号，复用用户 JWT 与 userId，不自动绑定未验证的历史用户名。RAM key 共用 `xjicloud.sms`，方案/包名/MD5 配置在 `xjicloud.fusion-auth`，默认关闭。Redis 单次 challenge/token 摘要防重放与来源/全局限流。Android 先征得同意再初始化；不可用转图形码+短信，取消留在入口；登录后未补资料不能进业务，安全持久化及深链同时守卫。具体配置、测试签名、方案和仍需真机运营商验证的范围见 [ANDROID_FUSION_AUTH.md](./ANDROID_FUSION_AUTH.md)。融合创建账号未提供密码设置/找回能力，不能假称已具备 web2 密码登录。
+
 web2 新注册改为「大陆手机号 → 图形验证码 → 阿里云短信验证码 → 设置密码 → 自动登录 → 完善昵称/邮箱/单位」。旧用户名/密码登录保留，不自动把旧用户名认定为已验证手机号。2026-10-26 auth/sms仅集成阿里云号码认证PNVS官方Java SDK：SendSmsVerifyCode以##code##请求阿里云生成6位码，CheckSmsVerifyCode必须返回Model.VerifyResult=PASS；发送/校验方案一致。Redis只保留手机号哈希、challenge、限流、5次尝试和核验互斥/单次消费状态，本地随机码/HMAC及普通SendSms接法已删除。默认短信关闭，生产统一配置在application-prod.yml的xjicloud.sms，向导支持填写；不再使用backend.env或SMS_CODE_SECRET。RAM需SendSmsVerifyCode和CheckSmsVerifyCode权限，详见PHONE_REGISTRATION_DEPLOYMENT.md。
 
 新增 POST /api/v1/auth/registration-sms；POST /api/v1/auth/register 改为 phone/password/smsChallengeId/smsCode，不能使用旧用户名表单绕过。会话新增 profileRequired；GET/PUT /api/v1/account 仅 ROLE_USER 访问本人资料。新增手机号账号未完成资料前，JwtAuthenticationFilter 拒绝业务 API，旧账号不受影响。

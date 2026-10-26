@@ -1,5 +1,7 @@
 # 产品范围与 Flutter DDD 架构
 
+2026-10-26 Identity 更新：手机号图形码/短信注册、自动登录、资料完善与安全会话/路由门槛；融合认证通过 Identity Domain 的 FusionAuthPort 隔离 MethodChannel/Kotlin SDK，RAM凭据只在后端，最终号码必须由后端核验。组合根以 CompletedProfileAccess 阻止未完成资料的账号提前恢复业务。具体见根目录 `docs/ANDROID_FUSION_AUTH.md`。Kotlin boundary 在 Android 宿主，Viewer 插件不承担认证。
+
 2026-10-19。P0 Flutter 工程与本地原生插件、P1 共享内核/主题/自适应组件、Identity 与账号页已落地，记录见 [P0](verification/p0.md) 与 [P1](verification/p1.md)。工程、训练、模型资产、正式 Viewer 的业务 BC 和完整产品导航仍为后续设计。普通 `main.dart` 启动产品登录/账号路由，`main_probe.dart` 保留独立原生验证。依据：根工程手册、web2 AGENTS/WEB2_FRONTEND、现有 Controller/DTO、发布 SDK 实物。
 
 ## 1. 复用什么

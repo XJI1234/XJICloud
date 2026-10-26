@@ -79,6 +79,12 @@ void main() {
     final restored = (await store.read() as Success<UserSession?>).value!;
     expect(restored.expiresAt, DateTime.utc(2033, 5, 18, 3, 33, 20));
   });
+  test('pending profile survives encrypted persistence and process restoration', () async {
+    final store = SecureSessionStore(ControlledStorage());
+    await store.write(AuthMapper.session({...response(), 'profileRequired': true}));
+    final restored = (await store.read() as Success<UserSession?>).value!;
+    expect(restored.profileRequired, isTrue);
+  });
   test('corrupt record clears; read and delete errors remain failures with redacted codes', () async {
     final storage = ControlledStorage()..value = 'not-json';
     final store = SecureSessionStore(storage);

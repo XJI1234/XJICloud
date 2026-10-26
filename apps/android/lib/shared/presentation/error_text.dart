@@ -2,6 +2,20 @@ import '../domain/domain_error.dart';
 import '../l10n/app_localizations.dart';
 
 String errorText(AppLocalizations l, DomainError error) => switch (error.code) {
+  'profile_validation' => l.profileValidation,
+  'profile_required' => l.profileRequiredError,
+  'privacy_required' => l.privacyRequired,
+  'phone_validation' => l.phoneValidation,
+  'phone_registered' => l.phoneRegistered,
+  'phone_unavailable' => l.phoneUnavailable,
+  'policy_unavailable' => l.policyUnavailable,
+  'sms_validation' => l.smsValidation,
+  'sms_required' => l.smsRequired,
+  'registration_password' => l.registrationPasswordValidation,
+  'registration_validation' => l.registrationValidation,
+  'fusion_unavailable' => l.fusionUnavailable,
+  'fusion_failed' => l.fusionFailed,
+  'fusion_backend' => l.fusionBackendFailed,
   'viewer_engine' => l.viewerError,
   'viewer_unsupported' => l.viewerUnsupported,
   'network' => l.errorNetwork,

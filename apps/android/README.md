@@ -1,4 +1,8 @@
-# XJICloud 移动客户端
+# 玄境云 Android 客户端
+
+2026-10-27 补充：已修正无 SIM 路径、验证码同排与重建闪烁、已注册手机号提示；应用名称/图标更新，隐私权政策在应用内离线阅读。验收记录见 [认证界面验证](docs/verification/auth-ui-2026-10-27.md)。
+
+2026-10-26 认证更新：手机号注册已与 web2 一致，注册成功自动登录并完善昵称/邮箱/单位；Android 增加阿里云融合认证一键登录/注册与不可用时的图形码+短信路径。后端共用手机号 userId 和现有短信 RAM 配置。配置、当前测试签名、API、验收限制见 [融合认证接入说明](../../docs/ANDROID_FUSION_AUTH.md)。本次未做真实 SIM 运营商 E2E，不把构建或供应商替身测试当作云端认证成功。
 
 状态：2026-10-20，登录会话、工程管理、模型分片/缓存、图片前台上传/任务管理及正式原生 Viewer 已落地，客户端 Phone/Pad 收口及最终代码审查完成。211 项 Flutter 测试通过，真实 SDK 生命周期及隔离本机双账号用户链各在真机通过 1 项。分阶段证据见 [真机矩阵](docs/verification/android-device-matrix.md)、[用户路径](docs/verification/mobile-journey.md) 与 [最终审查](docs/verification/android-final-review.md)。部署 Worker 尚未完成测试任务，完整训练/产物下载 E2E 未通过；其他设备与发行门槛仍按计划保留未验收。
 
@@ -38,7 +42,7 @@ flutter build apk --debug --target-platform android-arm64 -t lib/main_probe.dart
 5. [Native3DGS 接入规格](docs/NATIVE3DGS.md)
 6. [分阶段实施计划](plans/2026-10-19-flutter-mobile.md)
 
-工程规则继续遵循 [TEAM_ENGINEERING](../../docs/TEAM_ENGINEERING.md)。Web2 是功能与视觉参考，禁止改动已弃用的 `apps/web`；本次不改后端、管理端、Spark 或 Rust。
+工程规则继续遵循 [TEAM_ENGINEERING](../../docs/TEAM_ENGINEERING.md)。Web2 是功能与视觉参考，禁止改动已弃用的 `apps/web`；融合认证扩展后端仅限 Identity/auth，管理端、Spark 和 Rust 不变。
 
 ## 首版范围
 

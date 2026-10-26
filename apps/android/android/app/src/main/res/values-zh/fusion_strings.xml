@@ -1,0 +1,5 @@
+<resources>
+    <string name="fusion_data_policy">隐私权政策</string>
+    <string name="fusion_policy_back">返回</string>
+    <string name="fusion_policy_unavailable">暂时无法打开该协议，请返回选择其他验证方式。</string>
+</resources>

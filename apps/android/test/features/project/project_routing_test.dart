@@ -90,7 +90,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(workspace.projects, isEmpty);
       expect(workspace.userId, isNull);
-      expect(find.byKey(const Key('username')), findsOneWidget);
+      expect(find.byKey(const Key('fusion-submit')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },

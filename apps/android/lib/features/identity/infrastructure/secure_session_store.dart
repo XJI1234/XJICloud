@@ -48,6 +48,7 @@ final class SecureSessionStore implements SessionStore {
           'userId': session.userId,
           'username': session.username,
           'displayName': session.displayName,
+          'profileRequired': session.profileRequired,
         }),
       );
       return const Success(null);

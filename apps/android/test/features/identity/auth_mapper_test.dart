@@ -39,4 +39,23 @@ void main() {
     expect(captcha.key, 'challenge');
     expect(captcha.imageBytes, utf8.encode('hello'));
   });
+  test('profile gate and account data map to identity domain', () {
+    final pending = AuthMapper.session({...response(), 'profileRequired': true});
+    expect(pending.profileRequired, isTrue);
+    final profile = AuthMapper.profile({
+      'userId': 'abc', 'username': 'alice', 'phone': null,
+      'displayName': 'New name', 'email': 'a@example.com',
+      'organization': 'Lab', 'profileRequired': false,
+    });
+    final updated = pending.withProfile(profile);
+    expect(updated.profileRequired, isFalse);
+    expect(updated.displayName, 'New name');
+    expect(updated.token, pending.token);
+    expect(updated.expiresAt, pending.expiresAt);
+    expect(() => pending.withProfile(AuthMapper.profile({
+      'userId': 'different', 'username': 'alice', 'phone': null,
+      'displayName': 'Wrong account', 'email': 'a@example.com',
+      'organization': 'Lab', 'profileRequired': false,
+    })), throwsArgumentError);
+  });
 }

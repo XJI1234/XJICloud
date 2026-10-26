@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../features/identity/infrastructure/http_auth_repository.dart';
+import '../features/identity/infrastructure/platform_fusion_auth.dart';
 import '../features/identity/infrastructure/secure_session_store.dart';
 import '../features/identity/infrastructure/preferences_locale_store.dart';
 import '../shared/infrastructure/api_client.dart';
@@ -24,6 +25,7 @@ import '../features/model_asset/infrastructure/preferences_upload_checkpoints.da
 import '../features/model_asset/presentation/model_assets_controller.dart';
 import 'app_container.dart';
 import 'session_coordinator.dart';
+import 'completed_profile_access.dart';
 import '../shared/infrastructure/platform_file_snapshots.dart';
 import '../shared/infrastructure/reconcile_private_sources.dart';
 import '../shared/domain/result.dart';
@@ -48,6 +50,7 @@ AppContainer createContainer({
     sessions: sessions,
     allowDebugHttp: kDebugMode,
   );
+  final businessSessions = CompletedProfileAccess(sessions);
   registerSdkLicenses();
   final snapshots = PlatformFileSnapshots();
   final modelCheckpoints = PreferencesUploadCheckpoints();
@@ -74,7 +77,7 @@ AppContainer createContainer({
     files,
     modelCheckpoints,
     cache,
-    sessions,
+    businessSessions,
   );
   final training = UploadController(
     HttpTrainingJobRepository(api),
@@ -82,7 +85,7 @@ AppContainer createContainer({
     oss,
     datasetCheckpoints,
     SseJobEventAdapter(api),
-    sessions,
+    businessSessions,
     outputs: outputs,
   );
   final engine = Native3dgsEngineAdapter();
@@ -90,7 +93,7 @@ AppContainer createContainer({
     ModelSourceAdapter(
       acquire: (source, cancellation, progress) async {
         await snapshots.ready();
-        final account = sessions.session, generation = sessions.generation;
+        final account = businessSessions.session, generation = businessSessions.generation;
         if (account == null) return const Failure(DomainError('unauthorized'));
         bool current() =>
             sessions.generation == generation && !cancellation.isCancelled;
@@ -164,7 +167,7 @@ AppContainer createContainer({
       },
     ),
     engine,
-    sessions,
+    businessSessions,
   );
   sessions.registerCleanup(() async {
     await viewerController.close();
@@ -183,6 +186,7 @@ AppContainer createContainer({
     viewerSurface: engine.surface,
     sessions: sessions,
     auth: HttpAuthRepository(api),
+    fusion: PlatformFusionAuth(),
     locales: PreferencesLocaleStore(),
     closeTransport: () {
       api.close();
@@ -193,7 +197,7 @@ AppContainer createContainer({
     workspace: WorkspaceController(
       HttpProjectRepository(api),
       LocalWorkspacePersistence(),
-      sessions,
+      businessSessions,
       stopProjectTransfers: (id) async {
         final result = await modelAssets.stopProjectTransfers(id);
         if (result is Failure<void>) return result;

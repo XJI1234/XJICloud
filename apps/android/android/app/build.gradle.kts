@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -47,6 +49,7 @@ android {
 
     buildTypes {
         configureEach {
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             ndk {
                 abiFilters.clear()
                 abiFilters.addAll(if (name == "debug") targetAbis else listOf("arm64-v8a"))
@@ -82,5 +85,29 @@ flutter {
 
 dependencies {
     implementation(files("../../vendor/native3dgs/0.2.2/aar/native3dgs-sdk-release.aar"))
+    implementation(files("../../vendor/aliyun-fusion/1.2.16/fusionauth-1.2.16-online-release.aar"))
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    testImplementation("junit:junit:4.13.2")
 }
+
+val fusionAar = layout.projectDirectory.file("../../vendor/aliyun-fusion/1.2.16/fusionauth-1.2.16-online-release.aar")
+val verifyFusionSdk by tasks.registering {
+    inputs.file(fusionAar)
+    doLast {
+        val digest = MessageDigest.getInstance("SHA-256")
+        fusionAar.asFile.inputStream().use { input ->
+            val buffer = ByteArray(65536)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        check(actual == "286efa126634c92da7fa0b6c22808ed8e27b7a485418ebdc2c4d64534ad33fc4") {
+            "Aliyun fusion SDK checksum mismatch; restore the pinned original AAR."
+        }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(verifyFusionSdk) }

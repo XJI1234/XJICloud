@@ -671,4 +671,191 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get viewerProject => 'Project';
+
+  @override
+  String get fusionLogin => 'One-tap sign in / register';
+
+  @override
+  String get passwordLogin => 'Password sign in';
+
+  @override
+  String get phoneRegistration => 'Register with a phone number';
+
+  @override
+  String get privacyConsent =>
+      'I agree to phone authentication and have read the';
+
+  @override
+  String get fusionPrivacyPurpose =>
+      'Sign in or register with this device\'s number. With your consent, phone, network and device data verify the number. Review the operator agreement to continue.';
+
+  @override
+  String get fusionPrivacyPolicy => 'Privacy policy';
+
+  @override
+  String get privacyRequired =>
+      'Read the data use notice and agree before using one-tap authentication.';
+
+  @override
+  String get fusionUnavailable =>
+      'One-tap authentication is unavailable on this device or service. Continue with phone registration or password sign in.';
+
+  @override
+  String get fusionFailed =>
+      'Phone authentication did not finish. Continue with phone registration or try again.';
+
+  @override
+  String get fusionBackendFailed =>
+      'The authentication service could not complete sign-in. Use phone registration or try again later.';
+
+  @override
+  String get phoneNumber => 'Mainland China phone number';
+
+  @override
+  String get phoneValidation =>
+      'Enter an 11-digit mainland China phone number.';
+
+  @override
+  String get sendSms => 'Send SMS code';
+
+  @override
+  String get resendSms => 'Resend SMS code';
+
+  @override
+  String get smsCode => '6-digit SMS code';
+
+  @override
+  String get smsValidation => 'Enter the 6-digit SMS code.';
+
+  @override
+  String get smsRequired => 'Verify your phone with an SMS code first.';
+
+  @override
+  String get registrationPasswordValidation =>
+      'Use 8–64 characters, at most 72 UTF-8 bytes.';
+
+  @override
+  String get registrationValidation =>
+      'Check the phone number, SMS code and password confirmation.';
+
+  @override
+  String get completeProfileTitle => 'Complete your profile';
+
+  @override
+  String get profileIntro =>
+      'Add your display name, email and organization to use cloud services.';
+
+  @override
+  String get profileEmail => 'Email';
+
+  @override
+  String get profileOrganization => 'Organization';
+
+  @override
+  String get saveProfile => 'Save profile';
+
+  @override
+  String get editProfile => 'Account profile';
+
+  @override
+  String get profileValidation =>
+      'Enter a valid display name, email and organization.';
+
+  @override
+  String get profileRequiredError => 'Complete your profile to continue.';
+
+  @override
+  String get phoneRegistered =>
+      'This phone number is already registered. Sign in with your password.';
+
+  @override
+  String get phoneUnavailable => 'No phone number detected';
+
+  @override
+  String get policyUnavailable =>
+      'The privacy policy cannot be opened. Please try again later.';
+
+  @override
+  String get privacyEffectiveDate =>
+      'Updated: 27 October 2026\nEffective: 27 October 2026';
+
+  @override
+  String get privacyIntroduction =>
+      'XJICloud (玄境云) is operated by 东南大学玄境创新团队. This policy explains how account authentication and cloud modeling use personal information and how you can manage it. Please read the phone number, uploaded files and third-party authentication disclosures before using these features.\n\nOperator: 东南大学玄境创新团队\nPrivacy contact: baokx@seu.edu.cn';
+
+  @override
+  String get privacyCollectionTitle => '1. Information we collect and use';
+
+  @override
+  String get privacyCollection =>
+      'Registration and sign in: SMS registration processes the phone number, image challenge, SMS code and password you submit to verify the number and create an account. Passwords are stored as irreversible hashes on the server. One-tap authentication uses only a number verified by the authentication service to sign in or create the same account.\n\nProfile: Your nickname, email and organization form your account profile. Saving an email does not verify ownership of that address.\n\nCloud modeling and viewing: When you select, upload or open files, the app processes the selected photos, datasets, PLY/SPZ models, file names, sizes and task information to upload, train, view and download them. Upload only information you are authorized to use. System file selection does not grant access to all files.\n\nSession and security: The device securely stores the sign-in credential and necessary account data. The server processes request IP addresses, authentication state and necessary operation records for rate limiting, abuse prevention and fault diagnosis. Codes and authentication credentials are not used for advertising.';
+
+  @override
+  String get privacyChoiceTitle => '2. Authentication choices and permissions';
+
+  @override
+  String get privacyChoice =>
+      'One-tap authentication is optional. Only after you actively agree to this policy and choose one-tap sign in do we check SIM availability and start the authentication process. The fusion SDK is not initialized before consent. The operator screen separately displays its agreement for you to review and accept. Reading this policy does not grant consent.\n\nIf no number is detected, authentication is unavailable or you choose another method, use image and SMS verification to register, or sign in with your existing password. Declining one-tap authentication does not prevent other available methods.\n\nNumber authentication uses Android network access and network-state permissions, and may switch between Wi-Fi and cellular networks to verify the number. The package also includes the number SDK\'s READ_PHONE_STATE declaration for authentication-related SIM/operator state. If Android asks for permission, you may decline and choose another sign-in method. The app does not read SMS messages, contacts or call history for authentication, and does not request SMS-reading permission. Enter the code manually. File access is authorized through the system picker when you use the corresponding feature.';
+
+  @override
+  String get privacySdkTitle => '3. Authentication providers and data';
+
+  @override
+  String get privacySdk =>
+      'We use Alibaba Cloud fusion and number authentication, provided by Alibaba Cloud Computing (Beijing) Co., Ltd.\n\nAlibaba Cloud Fusion Authentication SDK (integrated version 1.2.16): fusion verification uses device name, model and operating-system version as disclosed by the provider. This app enables the operator number-authentication path.\n\nNumber Authentication SDK/service: one-tap sign in and verification process phone number, IP address, network type and state, manufacturer, device model, operating system, SIM state and operator type; Wi-Fi and cellular channels may be switched when needed. Only a number verified by our server is used for your account.\n\nThe number SDK integrates three operators:\n• China Mobile / 中移互联网有限公司: number identification, sign in and security controls use network type and address, operator type, device phone number, SIM state, device type, operating system and manufacturer.\n• China Unicom / 中国联合网络通信集团有限公司: number identification, sign in and security controls use network type and address, operator type, device phone number, device type, operating system and manufacturer.\n• Tianyi Account / 天翼数字生活科技有限公司: number identification, sign in and security controls use registered and device phone numbers, network connection type, state and address, operator type, SIM state, device type, operating system and manufacturer. The operator corresponding to your current number handles the authentication; review its authorization-screen agreement.\n\nManual SMS registration uses Alibaba Cloud server APIs to send and verify codes, processing your submitted number and verification information. This app does not enable the fusion SDK SMS, graphic-verification or Umeng risk nodes. XJICloud serves its own image challenge. Read the official policies below and the operator agreements for provider details.';
+
+  @override
+  String get privacyNumberPolicy =>
+      'Alibaba Cloud number authentication privacy policy';
+
+  @override
+  String get privacySmsPolicy =>
+      'Alibaba Cloud SMS authentication SDK policy (service reference)';
+
+  @override
+  String get privacyMobilePolicy =>
+      'China Mobile authentication terms and privacy notice';
+
+  @override
+  String get privacyUnicomPolicy =>
+      'China Unicom authentication privacy policy';
+
+  @override
+  String get privacyTelecomPolicy =>
+      'Tianyi Account service and privacy agreement';
+
+  @override
+  String get privacySharingTitle => '4. Sharing, transfers and disclosure';
+
+  @override
+  String get privacySharing =>
+      'Necessary information is supplied to the authentication provider and relevant operator to perform your chosen authentication. Uploaded files are processed by the object storage and computing resources used to provide cloud modeling and storage. Processing is limited to what your requested feature needs.\n\nWe do not sell personal information or share it for third-party marketing. Sharing, transfers or public disclosure otherwise require your authorization, a legal obligation or another basis permitted by law. If an operator change involves personal-information transfer, we will provide the required notice and require the recipient to continue the applicable protections.';
+
+  @override
+  String get privacyStorageTitle => '5. Retention and protection';
+
+  @override
+  String get privacyStorage =>
+      'Account and business data are held on XJICloud servers; uploaded images use the service\'s object storage and project models are held by the server. The app securely stores its session and necessary local caches. You can sign out or clear caches.\n\nInformation is retained only for providing the service, handling your requests and meeting legal obligations, then deleted or anonymized as required. Provider retention periods, locations and handling rules are set out in their policies. This app does not initiate overseas transfer of personal information for number authentication.\n\nHTTPS, password hashing, account access controls and time-limited, single-use authentication checks help protect data. No system can guarantee absolute security. We will respond to security incidents and provide notifications and reports as required by law.';
+
+  @override
+  String get privacyRightsTitle => '6. Managing your information';
+
+  @override
+  String get privacyRights =>
+      'View and edit your nickname, email and organization in your account profile. Manage your own projects and models in their respective features, clear local caches in cache management, or sign out. Leave one-tap consent unchecked or return to choose another method to stop using one-tap authentication. Withdrawal does not affect processing already lawfully performed.\n\nFor access, correction, copying, deletion, withdrawal or account closure, email baokx@seu.edu.cn. The app currently has no self-service account-deletion screen. The operator will verify identity and handle requests under applicable law. We may request necessary proof related to the request, but never your password or SMS code. Required retention or unfinished business may limit deletion; we will explain the reason.';
+
+  @override
+  String get privacyMinorsTitle => '7. Children and minors';
+
+  @override
+  String get privacyMinors =>
+      'Minors should read this policy and use the service with a guardian\'s guidance. Users under fourteen should obtain explicit guardian consent before using features involving personal information. Guardians who believe information was processed without appropriate authorization may contact our privacy email; we will verify and handle the matter under applicable law.';
+
+  @override
+  String get privacyUpdatesTitle => '8. Updates and contact';
+
+  @override
+  String get privacyUpdates =>
+      'This policy may change as features or processing change. The latest version is available in the app. Material changes to purposes, methods or information categories will be notified as required, with renewed consent where necessary.\n\nFor questions, complaints or personal-information requests, contact:\n东南大学玄境创新团队\nbaokx@seu.edu.cn.';
 }

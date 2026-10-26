@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import '../features/viewer/presentation/viewer_controller.dart';
 import '../features/identity/domain/auth_repository.dart';
 import '../features/identity/domain/locale_store.dart';
+import '../features/identity/domain/fusion_auth_port.dart';
+import '../features/identity/presentation/profile_controller.dart';
 import '../features/identity/presentation/auth_controller.dart';
 import 'session_coordinator.dart';
 import '../features/project/presentation/workspace_controller.dart';
@@ -23,6 +25,7 @@ final class AppContainer {
     this.modelAssets,
     this.training,
     this.initializeStorage,
+    this.fusion,
   }) {
     if (viewer != null) {
       sessions.addListener(viewer!.synchronize);
@@ -43,6 +46,7 @@ final class AppContainer {
   }
   final SessionCoordinator sessions;
   final AuthRepository auth;
+  final FusionAuthPort? fusion;
   final LocaleStore locales;
   final void Function() closeTransport;
   final WorkspaceController? workspace;
@@ -52,7 +56,12 @@ final class AppContainer {
   final UploadController? training;
   final Future<Result<void>> Function()? initializeStorage;
   AuthController createAuthController() =>
-      AuthController(auth, activate: sessions.activate);
+      AuthController(auth, activate: sessions.activate, fusion: fusion);
+  ProfileController createProfileController() {
+    final generation = sessions.generation;
+    return ProfileController(auth, applyProfile: (profile) =>
+        sessions.updateProfile(profile, expectedGeneration: generation));
+  }
   void dispose() {
     if (viewer != null) {
       sessions.removeListener(viewer!.synchronize);

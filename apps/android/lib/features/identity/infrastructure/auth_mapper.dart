@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../domain/user_session.dart';
+import '../domain/account_profile.dart';
 import '../domain/captcha_challenge.dart';
 import 'auth_dto.dart';
 
@@ -27,12 +28,23 @@ abstract final class AuthMapper {
       username: dto.username,
       displayName: dto.displayName,
       token: dto.token,
+      profileRequired: dto.profileRequired,
       expiresAt: DateTime.fromMillisecondsSinceEpoch(
         (claims['exp'] as int) * 1000,
         isUtc: true,
       ),
     );
   }
+
+  static AccountProfile profile(Map<String, dynamic> json) => AccountProfile(
+    userId: json['userId'] as String,
+    username: json['username'] as String,
+    phone: json['phone'] as String?,
+    displayName: json['displayName'] as String,
+    email: json['email'] as String? ?? '',
+    organization: json['organization'] as String? ?? '',
+    profileRequired: json['profileRequired'] as bool,
+  );
 
   static CaptchaChallenge captcha(Map<String, dynamic> json) {
     final key = json['captchaKey'] as String;

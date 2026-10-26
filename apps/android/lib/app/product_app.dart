@@ -10,6 +10,8 @@ import 'package:go_router/go_router.dart';
 
 import '../features/identity/presentation/auth_controller.dart';
 import '../features/identity/presentation/login_page.dart';
+import '../features/identity/presentation/profile_page.dart';
+import '../features/identity/presentation/profile_controller.dart';
 import '../features/project/presentation/home_page.dart';
 import '../features/project/presentation/project_list_page.dart';
 import '../features/project/presentation/project_detail_page.dart';
@@ -31,6 +33,7 @@ import 'viewer_model_library.dart';
 /// A destination must exist before it can be retained through a login redirect.
 String controlledTarget(String? target) {
   if (target == '/account' ||
+      target == '/profile' ||
       target == '/account/cache' ||
       target == '/home' ||
       target == '/viewer' ||
@@ -88,6 +91,7 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
             queryParameters: {'from': controlledTarget(state.uri.toString())},
           ).toString();
         }
+        if (authenticated && session.profileRequired && state.uri.path != '/profile') return '/profile';
         if (authenticated && state.uri.path == '/login') {
           final target = controlledTarget(state.uri.queryParameters['from']);
           return container.workspace == null && target != '/account'
@@ -97,6 +101,10 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
         return null;
       },
       routes: [
+        GoRoute(path: '/profile', builder: (context, state) => _ProfileRoute(
+          container: container,
+          onSaved: () => context.go(container.workspace == null ? '/account' : '/home'),
+        )),
         GoRoute(
           path: '/login',
           builder: (context, state) =>
@@ -317,6 +325,7 @@ class _ProductAppState extends State<ProductApp> with WidgetsBindingObserver {
             session: session,
             onToggleLocale: toggleLocale,
             onLogout: () => container.sessions.invalidate(),
+            onProfile: () => context.push('/profile'),
             onCache: container.modelAssets == null
                 ? null
                 : () => context.go('/account/cache'),
@@ -762,6 +771,24 @@ class _WorkspaceNavigation extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ProfileRoute extends StatefulWidget {
+  const _ProfileRoute({required this.container, required this.onSaved});
+  final AppContainer container;
+  final VoidCallback onSaved;
+  @override State<_ProfileRoute> createState() => _ProfileRouteState();
+}
+
+class _ProfileRouteState extends State<_ProfileRoute> {
+  late final ProfileController controller = widget.container.createProfileController();
+  @override void dispose() { controller.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => ProfilePage(
+    controller: controller,
+    requiredProfile: widget.container.sessions.session?.profileRequired ?? true,
+    onLogout: () => widget.container.sessions.invalidate(),
+    onSaved: widget.onSaved,
+  );
 }
 
 class _AuthRoute extends StatefulWidget {

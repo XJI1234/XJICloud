@@ -286,7 +286,7 @@ void main() {
       expect(find.byKey(const Key('viewer-tools')), findsOneWidget);
       await sessions.invalidate();
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('username')), findsOneWidget);
+      expect(find.byKey(const Key('fusion-submit')), findsOneWidget);
       expect(sources.pending.every((request) => request.isCompleted), isTrue);
       expect(viewer.session.active, isNull);
       expect(tester.takeException(), isNull);

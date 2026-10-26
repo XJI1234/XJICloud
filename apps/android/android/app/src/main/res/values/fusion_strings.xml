@@ -1,0 +1,5 @@
+<resources>
+    <string name="fusion_data_policy">Privacy policy</string>
+    <string name="fusion_policy_back">Back</string>
+    <string name="fusion_policy_unavailable">This policy cannot be opened. Return to choose another verification method.</string>
+</resources>

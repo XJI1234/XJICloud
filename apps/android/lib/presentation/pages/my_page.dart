@@ -14,11 +14,13 @@ class MyPage extends StatelessWidget {
     required this.onToggleLocale,
     required this.onLogout,
     this.onCache,
+    this.onProfile,
   });
   final UserSession session;
   final VoidCallback onToggleLocale;
   final VoidCallback onLogout;
   final VoidCallback? onCache;
+  final VoidCallback? onProfile;
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -101,6 +103,14 @@ class MyPage extends StatelessWidget {
                     clipBehavior: Clip.antiAlias,
                     child: Column(
                       children: [
+                        if (onProfile != null)
+                          ListTile(
+                            key: const Key('account-profile'),
+                            onTap: onProfile,
+                            leading: const Icon(CupertinoIcons.person),
+                            trailing: const Icon(CupertinoIcons.chevron_right, size: 16),
+                            title: Text(l.editProfile),
+                          ),
                         if (onCache != null)
                           ListTile(
                             key: const Key('account-cache'),

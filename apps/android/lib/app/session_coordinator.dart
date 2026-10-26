@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../features/identity/domain/session_access.dart';
 import '../features/identity/domain/session_store.dart';
 import '../features/identity/domain/user_session.dart';
+import '../features/identity/domain/account_profile.dart';
 import '../features/identity/application/restore_session.dart';
 import '../shared/domain/domain_error.dart';
 import '../shared/domain/result.dart';
@@ -131,6 +132,26 @@ final class SessionCoordinator extends ChangeNotifier implements SessionAccess {
     });
     return future;
   }
+
+  Future<Result<void>> updateProfile(AccountProfile profile, {required int expectedGeneration}) => _serial(() async {
+    final current = _session;
+    if (_disposed || current == null || expectedGeneration != _generation ||
+        current.userId != profile.userId || current.username != profile.username) {
+      return const Failure(DomainError('cancelled'));
+    }
+    if (current.isExpired(now())) return const Failure(DomainError('expired'));
+    final updated = current.withProfile(profile);
+    final saved = await store.write(updated);
+    if (_disposed || expectedGeneration != _generation) {
+      return const Failure(DomainError('cancelled'));
+    }
+    if (saved is Failure<void>) return saved;
+    if (updated.isExpired(now())) return const Failure(DomainError('expired'));
+    _session = updated;
+    error = null;
+    _notify();
+    return const Success(null);
+  });
 
   Future<void> checkExpiry() async {
     if (_session?.isExpired(now()) ?? false) {

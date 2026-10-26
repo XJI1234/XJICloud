@@ -45,6 +45,35 @@ class Transport implements HttpClientAdapter {
 }
 
 void main() {
+  test('registered phone conflict has a safe specific code', () async {
+    final transport = Transport()..status = 409;
+    final sessions = SessionCoordinator(MemoryStore());
+    addTearDown(sessions.dispose);
+    final api = ApiClient(
+      origin: 'https://api.example.test',
+      sessions: sessions,
+      dio: Dio()..httpClientAdapter = transport,
+    );
+    addTearDown(api.close);
+    for (final message in ['该手机号无法注册，请尝试登录或联系管理员', '该手机号已注册，请直接登录']) {
+      transport.body = jsonEncode({
+        'success': false,
+        'message': message,
+        'data': null,
+      });
+      final result = await api.request('POST', '/api/v1/auth/registration-sms');
+      expect((result as Failure).error.code, 'phone_registered');
+    }
+    transport.body = jsonEncode({
+      'success': false,
+      'message': 'private internal detail',
+      'data': null,
+    });
+    expect(
+      (await api.request('POST', '/api/v1/projects') as Failure).error.code,
+      'request',
+    );
+  });
   test('authenticated success arriving after logout cannot publish old account data', () async {
     final transport = Transport()..gate = Completer();
     final c = SessionCoordinator(MemoryStore(), now: () => DateTime.utc(2029));
