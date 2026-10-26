@@ -320,7 +320,7 @@ LoginView
 
 开发网关的网卡枚举在独立 Worker 中执行，每次完成后间隔 1 秒刷新；图传地址、连接提示与发现广播共享最新快照。命令和状态处理线程不调用同步 `networkInterfaces()`，避免 Windows 网卡枚举阻塞飞控命令。首次枚举成功后才启动网关，读取失败时清空旧快照并记录错误，退出时终止 Worker。
 
-嵌入操作台的 `public/sky-operator/cesium` 与 `city-tiles` 静态资源随代码保存，保证 `index.html` 的相对地址在构建产物中可用；现有 prebuild 不会生成这两套资源。地图契约见 `apps/web2/public/sky-operator/MAP.CONTRACT.md`：白模不因交互或相机高度隐藏，活动更新上限 60 FPS，静止按需绘制并降低更新频率，后台暂停循环。地图性能优化目前保存在 `public/sky-operator/console.js`，尚未同步到 Sky-Command 的地图 TS 源码。更新该嵌入包时应保留地图模块，并执行 operator-map 回归测试，避免整包重编译覆盖优化。
+嵌入操作台的 `public/sky-operator/cesium` 与 `city-tiles` 静态资源随代码保存，保证 `index.html` 的相对地址在构建产物中可用；现有 prebuild 不会生成这两套资源。地图契约见 `apps/web2/public/sky-operator/MAP.CONTRACT.md`：白模不因交互或相机高度隐藏，活动更新上限 60 FPS，静止按需绘制并降低更新频率，后台暂停循环。地图性能优化来源现保存在 `scripts/embedded-route-map.mjs`；`scripts/build-sky-operator.mjs` 将该模块与 Sky-Command 操作台源码合并构建，必须执行 operator-map 回归。2026-10-26 飞机只读图层使用 SDK 0.2.19 的 navigation，位置过期/断连保留及平面高度规则见根 DESIGN.md。
 
 监控页左栏显示各机的“不适合降落”提示。本地网关订阅应用快照，在 `state-snapshot` 的设备连接信息中附加只供展示的 `landingProtectionNoticeAtMs`，保留最近 20 秒内收到的 `NOT_SAFE_TO_LAND`，避免页面每秒轮询漏掉短暂状态；原始状态不变。状态退回时明确标为“刚才曾判定”，适合降落、等待确认、落地停桨、飞控失联、手机重连或移除时清除；该历史提示不参与任何指令或确认门禁。
 

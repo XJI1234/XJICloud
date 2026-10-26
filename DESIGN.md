@@ -25,3 +25,11 @@
 ## 后续改进
 
 平滑显示、历史轨迹、自动跟随等另行设计。真机取得前不扩大为飞行闭环验收。
+
+## 已落实的数据与产物
+
+最小完整方案：Relay 新增 headingDegrees、positionSampleId、positionAgeMillis、gpsIsValid、locationAltitudeMeters、takeoffAltitudeMeters，经过生产适配白名单进入 workflow.navigation；原 pose 保持兼容。定位源 UUID/序号与单调时钟年龄使重复电量遥测不能刷新旧位置，电脑使用接收时间锚定。
+
+MSDK 文档未明确两个原始高度的垂直基准，heightReference 固定 unknown，当前按平面定位显示，相对起飞点高度只展示在详情中。KeyCompassHeading 归一化到 [0,360)，罗盘错误时隐藏航向。
+
+网站使用 SDK 0.2.19 和 Sky-Command TS 源码重建嵌入包。旧包的地图性能代码提取到 scripts/embedded-route-map.mjs；旧包航点进度修复补回 Sky-Command 源码。build-sky-operator.mjs 保留地图模块并记录源码提交，不依赖维护者个人桌面路径。普通运行使用仓库内静态产物，不要求相邻 Sky-Command。

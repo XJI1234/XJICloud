@@ -47,4 +47,5 @@ if (Array.isArray(listed) && listed.every((item) => typeof item === 'string' && 
 const desktopWindow = window as Window & { Cesium?: unknown; skyCommand?: { invoke: typeof invoke; selectRouteFile: typeof selectRouteFile; relayHint: string } }
 if (desktopWindow.Cesium === undefined) throw new Error('Cesium 未加载')
 desktopWindow.skyCommand = { invoke, selectRouteFile, relayHint }
-await import('D:/Desktop/Sky Command/src/production/operator-console/renderer/main.ts')
+const operatorEntry = '/sky-operator/console.js'
+await import(/* @vite-ignore */ operatorEntry)

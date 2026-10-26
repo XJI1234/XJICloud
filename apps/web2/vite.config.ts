@@ -116,7 +116,7 @@ export default defineConfig({
     vue(),
     skyCommandGateway(),
     serveDirectory('/cesium', path.resolve(appDir, 'node_modules/cesium/Build/Cesium')),
-    serveDirectory('/city-tiles', path.resolve('D:/Desktop/Sky Command/public/city-tiles')),
+    serveDirectory('/city-tiles', path.resolve(appDir, 'public/sky-operator/city-tiles')),
     glsl({ include: ['**/*.glsl'] }),
     fixWasmDataUrl(),
   ],
@@ -138,7 +138,7 @@ export default defineConfig({
   },
   server: {
     fs: {
-      allow: [rootDir, 'D:/Desktop/Sky Command'],
+      allow: [rootDir],
     },
     watch: {
       ignored: ['**/node_modules/**', '**/dist/**', '**/public/supersplat/**', '**/public/gs-assets/**', '**/public/sky-operator/cesium/**', '**/public/sky-operator/city-tiles/**'],

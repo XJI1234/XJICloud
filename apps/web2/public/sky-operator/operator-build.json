@@ -1,0 +1,7 @@
+{
+  "sourceRepository": "XJI1234/Sky-Command",
+  "sourceCommit": "3493f79712d1df909a6bd03eca7c164d2b013b4c",
+  "sourceDirty": false,
+  "sdkVersion": "0.2.19",
+  "mapSource": "apps/web2/scripts/embedded-route-map.mjs"
+}

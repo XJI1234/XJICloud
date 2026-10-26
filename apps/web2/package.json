@@ -14,13 +14,14 @@
     "preview": "vite preview",
     "test": "node ../../scripts/test-records/run.mjs --label web2-test -- node node_modules/vitest/vitest.mjs run --config vitest.config.ts",
     "test:watch": "node ../../scripts/test-records/run.mjs --label web2-test-watch -- node node_modules/vitest/vitest.mjs --watch --config vitest.config.ts",
+    "build:sky-operator": "node ../../scripts/test-records/run.mjs --label sky-operator-build -- node scripts/build-sky-operator.mjs",
     "sky-gateway": "node scripts/sky-command-gateway.mjs"
   },
   "dependencies": {
     "@native3dgs/web": "file:vendor/native3dgs-web-0.2.2-preview.3.tgz",
     "@phosphor-icons/vue": "^2.2.1",
     "@xjicloud/shared": "workspace:*",
-    "@xjicloud/sky-command-sdk": "file:vendor/xjicloud-sky-command-sdk-0.2.17.tgz",
+    "@xjicloud/sky-command-sdk": "file:vendor/xjicloud-sky-command-sdk-0.2.19.tgz",
     "@xjicloud/spark": "workspace:*",
     "cesium": "1.145.0",
     "flv.js": "^1.6.2",

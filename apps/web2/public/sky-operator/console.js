@@ -5428,14 +5428,14 @@
     const count = read(row, "waypointCount");
     const waypointCount = typeof count === "number" && Number.isSafeInteger(count) && count > 0 && count <= 1e5 ? count : null;
     return freeze4({
+      ...waypointCount === null ? {} : { waypointCount },
       routeId,
       displayName: text(read(row, "displayName")) ?? routeId,
       format,
       classification,
       executable,
       previewable: true,
-      blockedReason,
-      ...waypointCount === null ? {} : { waypointCount }
+      blockedReason
     });
   };
   var routesOf = (snapshot2) => {
@@ -5604,32 +5604,37 @@
     return read(connection, "sdk") === "ready" ? null : "\u624B\u673A\u5C1A\u672A\u5C31\u7EEA";
   };
   var REMOTE_ONCE_REASON = "\u8BF7\u5148\u8FDE\u63A5\u4E00\u6B21\u9065\u63A7\u5668\u3002\u8FDE\u8FC7\u4E00\u6B21\u540E\u62D4\u4E0B\u4ECD\u53EF\u64CD\u4F5C";
-  var remoteControllerSeen = /* @__PURE__ */ new Set();
+  var FLIGHT_CONTROLLER_REASON = "\u8BF7\u5148\u8FDE\u63A5\u98DE\u63A7";
   var REMOTE_ONCE_STORAGE = "sky-operator-remote-once";
-  try {
-    const stored = JSON.parse(sessionStorage.getItem(REMOTE_ONCE_STORAGE) ?? "[]");
-    if (Array.isArray(stored)) {
-      for (const deviceId of stored) {
-        if (typeof deviceId === "string" && deviceId.length > 0) remoteControllerSeen.add(deviceId);
-      }
+  var sessionStore = () => {
+    const candidate = globalThis.sessionStorage;
+    return candidate ?? void 0;
+  };
+  var readStoredRemoteControllers = () => {
+    try {
+      const stored = JSON.parse(sessionStore()?.getItem(REMOTE_ONCE_STORAGE) ?? "[]");
+      if (!Array.isArray(stored)) return [];
+      return stored.filter((deviceId) => typeof deviceId === "string" && deviceId.length > 0);
+    } catch {
+      return [];
     }
-  } catch {
-    // 浏览器禁止会话存储时，仍保留本次页面里的连接记录。
-  }
+  };
+  var remoteControllerSeen = new Set(readStoredRemoteControllers());
   var rememberRemoteController = (deviceId) => {
     if (remoteControllerSeen.has(deviceId)) return;
     remoteControllerSeen.add(deviceId);
     try {
-      sessionStorage.setItem(REMOTE_ONCE_STORAGE, JSON.stringify([...remoteControllerSeen]));
+      sessionStore()?.setItem(REMOTE_ONCE_STORAGE, JSON.stringify([...remoteControllerSeen]));
     } catch {
-      // 写不进会话存储时，本次页面仍按已连接处理。
     }
   };
   var noteRemoteControllers = (devices) => {
     for (const device of devices) {
       const deviceId = text(read(device, "deviceId"));
       const connection = invocationConnection(device);
-      if (deviceId !== null && (read(connection, "remoteController") === "connected" || read(connection, "remoteControllerHasConnectedOnce") === true)) rememberRemoteController(deviceId);
+      if (deviceId !== null && (read(connection, "remoteController") === "connected" || read(connection, "remoteControllerHasConnectedOnce") === true)) {
+        rememberRemoteController(deviceId);
+      }
     }
   };
   var remoteControllerEverConnected = (device) => {
@@ -5638,7 +5643,6 @@
     if (read(connection, "remoteControllerHasConnectedOnce") === true || read(connection, "remoteController") === "connected") return true;
     return deviceId !== null && remoteControllerSeen.has(deviceId);
   };
-  var FLIGHT_CONTROLLER_REASON = "\u8BF7\u5148\u8FDE\u63A5\u98DE\u63A7";
   var flightControllerConnected = (device) => read(invocationConnection(device), "flightController") === "connected";
   var deviceById = (view, deviceId) => view.devices.flatMap((item) => {
     const row = record(item);
@@ -5901,7 +5905,10 @@
     const name = text(action);
     const current = record(view);
     if (name === null || current === null) return reject("\u64CD\u4F5C\u65E0\u6548");
-    if (Array.isArray(current.devices)) noteRemoteControllers(current.devices);
+    if (Array.isArray(current.devices)) noteRemoteControllers(current.devices.flatMap((item) => {
+      const row = record(item);
+      return row === null ? [] : [row];
+    }));
     if (name === "pairing-start" || name === "pairing-stop") {
       if (current.workspace !== "devices") return reject("\u8BF7\u5230\u8BBE\u5907\u9875\u64CD\u4F5C\u5BF9\u9891");
       const device2 = deviceById(current, current.missionDeviceId);
@@ -5982,7 +5989,7 @@
     const msdkIssue = msdkInvocationIssue(device);
     return msdkIssue === null ? accept() : reject(msdkIssue);
   }
-  var OperatorConsole = freeze4({ project, evaluate: evaluate4 });
+  var OperatorConsole = freeze4({ project, evaluate: evaluate4, remoteControllerEverConnected, flightControllerConnected, REMOTE_ONCE_REASON, FLIGHT_CONTROLLER_REASON });
 
   // src/production/operator-console/action-arm/index.ts
   var freeze5 = (value) => Object.freeze(value);
@@ -6292,21 +6299,31 @@
     if (heldByPhone || session) return { label: "\u505C\u6B62\u56FE\u4F20", enabled: true, mode: "stop", title: "\u505C\u6B62\u56FE\u4F20" };
     if (!input.sdkReady) return { label: "\u542F\u52A8\u56FE\u4F20", enabled: false, mode: "idle", title: "\u624B\u673A\u5C1A\u672A\u5C31\u7EEA\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" };
     if (input.airLink !== "connected") {
-      return { label: "\u542F\u52A8\u56FE\u4F20", enabled: false, mode: "idle", title: input.airLink === "disconnected" ? "AirLink \u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "AirLink \u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" };
+      return {
+        label: "\u542F\u52A8\u56FE\u4F20",
+        enabled: false,
+        mode: "idle",
+        title: input.airLink === "disconnected" ? "AirLink \u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "AirLink \u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20"
+      };
     }
     if (input.camera !== "connected") {
-      return { label: "\u542F\u52A8\u56FE\u4F20", enabled: false, mode: "idle", title: input.camera === "disconnected" ? "\u4E3B\u76F8\u673A\u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "\u4E3B\u76F8\u673A\u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" };
+      return {
+        label: "\u542F\u52A8\u56FE\u4F20",
+        enabled: false,
+        mode: "idle",
+        title: input.camera === "disconnected" ? "\u4E3B\u76F8\u673A\u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20" : "\u4E3B\u76F8\u673A\u72B6\u6001\u672A\u77E5\uFF0C\u65E0\u6CD5\u542F\u52A8\u56FE\u4F20"
+      };
     }
     return { label: "\u542F\u52A8\u56FE\u4F20", enabled: true, mode: "start", title: "\u542F\u52A8\u8FD9\u67B6\u98DE\u673A\u7684\u56FE\u4F20" };
   }
   var FlightNowStatus = freeze6({
+    waypointProgress,
+    missionRunPhase,
     EMPTY_STATUS,
     commandReachStatus,
     streamPushStatus,
     streamPaintStatus,
     streamErrorStatus,
-    waypointProgress,
-    missionRunPhase,
     missionExecutionNowStatus,
     missionUploadOrActionStatus,
     interruptStatus,
@@ -6364,7 +6381,7 @@
     return "\u822A\u7EBF\u64CD\u4F5C";
   };
   var streamLabel = (action) => action === "stream-stop" ? "\u505C\u6B62\u56FE\u4F20" : "\u542F\u52A8\u56FE\u4F20";
-  var photoLabel = (action) => action === "photo-fetch" ? "\u56DE\u4F20\u7167\u7247" : "\u62CD\u7167";
+  var photoLabel = (action) => action === "photo-fetch-stop" ? "\u505C\u6B62\u56DE\u4F20" : action === "photo-fetch" ? "\u56DE\u4F20\u7167\u7247" : "\u62CD\u7167";
   var pairingLabel = (action) => action === "pairing-stop" ? "\u505C\u6B62\u5BF9\u9891" : "\u5F00\u59CB\u5BF9\u9891";
   var localReason = (code) => {
     if (code === "DEVICE_OFFLINE" || code === "RELAY_OFFLINE") return "\u624B\u673A\u4E2D\u7EE7\u79BB\u7EBF";
@@ -6457,14 +6474,14 @@ ${failure3.message}` };
     }
     if (code === "CAPTURED") return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess", ["\u8BF4\u660E\uFF1A\u5DF2\u62CD\u4E0B\u539F\u56FE\uFF0C\u7535\u8111\u5C1A\u672A\u6536\u9F50\u6587\u4EF6"]);
     if (code === "NOTHING_TO_FETCH") return { source: "relay", outcome: "completed", message: "\u98DE\u673A\u4E0A\u6CA1\u6709\u7535\u8111\u7F3A\u5C11\u7684\u7167\u7247" };
-    if ((code === "STOPPED" || code === "NOT_RUNNING") && (action === "photo-fetch" || action === "photo-fetch-stop")) {
-      return { source: "relay", outcome: "completed", message: code === "NOT_RUNNING" ? "\u5F53\u524D\u6CA1\u6709\u6B63\u5728\u56DE\u4F20\u7684\u7167\u7247" : "\u56DE\u4F20\u5DF2\u505C\u6B62\uFF0C\u5DF2\u8BF7\u6C42\u5927\u7586\u505C\u6B62\u4E0B\u8F7D\u5E76\u9000\u51FA\u56DE\u653E" };
-    }
     const reason = text3(read2(inner, "reason")) ?? text3(read2(value, "reason"));
     if (code === "PREFLIGHT_BLOCKED") {
       const blockers = read2(inner, "blockers");
       const reasons = Array.isArray(blockers) ? blockers.map((item) => localReason(text3(read2(item, "code")))) : [];
       return { source: "desktop", outcome: "not-called", message: `\u672A\u8C03\u7528 DJI MSDK\uFF1A${reasons.length > 0 ? reasons.join("\uFF1B") : localReason(code)}` };
+    }
+    if ((code === "STOPPED" || code === "NOT_RUNNING") && (action === "photo-fetch" || action === "photo-fetch-stop")) {
+      return { source: "relay", outcome: "completed", message: code === "NOT_RUNNING" ? "\u5F53\u524D\u6CA1\u6709\u6B63\u5728\u56DE\u4F20\u7684\u7167\u7247" : "\u56DE\u4F20\u5DF2\u505C\u6B62\uFF0C\u5DF2\u8BF7\u6C42\u5927\u7586\u505C\u6B62\u4E0B\u8F7D\u5E76\u9000\u51FA\u56DE\u653E" };
     }
     if (code !== null && code !== "SUCCEEDED") return { source: "desktop", outcome: "not-called", message: `\u672A\u8C03\u7528 DJI MSDK\uFF1A${localReason(reason ?? code)}` };
     if (record2(inner)?.confirmation !== void 0) return { source: "desktop", outcome: "pending", message: `\u7B49\u5F85\u4EBA\u5DE5\u786E\u8BA4\uFF1A${flightLabel(confirmedAction)} \u5C1A\u672A\u8C03\u7528 DJI MSDK` };
@@ -6474,7 +6491,7 @@ ${failure3.message}` };
       const landing = confirmedAction === "land" || confirmedAction === "confirm-landing" || action === "flight-land" || action === "flight-confirm-landing";
       return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess", landing ? ["\u8BF4\u660E\uFF1A\u964D\u843D\u63A5\u53E3\u8C03\u7528\u5DF2\u53D7\u7406\uFF1B\u662F\u5426\u6B63\u5728\u4E0B\u964D\u3001\u662F\u5426\u843D\u5730\u8BF7\u4EE5\u98DE\u63A7\u72B6\u6001\u4E3A\u51C6"] : []);
     }
-    if (action.startsWith("mission-") && (code === "SUCCEEDED" || code === null && read(inner, "ok") === true)) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
+    if (action.startsWith("mission-") && (code === "SUCCEEDED" || code === null && read2(inner, "ok") === true)) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
     if (code === "SUCCEEDED" && action.startsWith("stream-")) return msdkCallback("dji", "accepted", "\u6210\u529F", "onSuccess");
     if (code === "SUCCEEDED" && action === "photo-fetch") {
       const count = read2(inner, "count");
@@ -6754,14 +6771,14 @@ ${failure3.message}` };
           const cachedStage = stageOf(read3(cachedProgress, "stage"));
           if (online.has(deviceId) && cached !== void 0 && cachedStage !== null && !terminal(cachedStage) && phase !== null && phase !== "fetching" && phase !== "capturing") {
             const atMs = Math.max(nonnegative(read3(cachedProgress, "updatedAtMs")) ?? nowMs, nowMs);
-            const history = Array.isArray(read3(cachedProgress, "history")) ? read3(cachedProgress, "history") : [];
+            const history2 = Array.isArray(read3(cachedProgress, "history")) ? read3(cachedProgress, "history") : [];
             const stage = code === "STOPPED" ? "stopped" : phase === "stored" ? "completed" : "failed";
             const event = { stage, photoIndex: read3(cachedProgress, "photoIndex"), completedCount: read3(cachedProgress, "completedCount"), fileName: read3(cachedProgress, "fileName"), atMs };
             photos.set(deviceId, {
               ...cached,
               phase,
               code,
-              progress: { ...cachedProgress, stage, updatedAtMs: atMs, finishedAtMs: atMs, history: [...history, event].slice(-8) }
+              progress: { ...cachedProgress, stage, updatedAtMs: atMs, finishedAtMs: atMs, history: [...history2, event].slice(-8) }
             });
           }
           continue;
@@ -6910,7 +6927,7 @@ ${failure3.message}` };
     setText(nodes.errorText, view?.error ?? "");
   }
 
-  // src/production/operator-console/renderer/cesium-config.ts
+  // src/production/operator-console/renderer/route-map.ts
   function createOrbitViewerOptions() {
     return {
       animation: false,
@@ -6954,8 +6971,6 @@ ${failure3.message}` };
     viewer2.scene.backgroundColor = Cesium.Color.fromCssColorString("#1d2e36");
     return "esri";
   }
-
-  // src/production/operator-console/renderer/hangzhou-city-model.ts
   var hangzhouCityCameraView = {
     longitude: 120.16654968261719,
     latitude: 30.321480751037598,
@@ -7015,8 +7030,6 @@ ${failure3.message}` };
     viewer2.scene.primitives.add(tileset);
     return tileset;
   }
-
-  // src/production/operator-console/renderer/route-map.ts
   var cesium = () => {
     const value = globalThis.Cesium;
     if (value === void 0) throw new Error("Cesium \u672A\u52A0\u8F7D");
@@ -7031,12 +7044,11 @@ ${failure3.message}` };
     if (viewer === void 0 || viewer.isDestroyed() || !viewer.useDefaultRenderLoop) return;
     viewer.targetFrameRate = 60;
     clearTimeout(mapIdleTimer);
-    // Explicit rendering still runs scene updates; lower those while idle too.
     mapIdleTimer = setTimeout(() => {
       if (viewer === void 0 || viewer.isDestroyed()) return;
       cameraMoving = false;
       viewer.targetFrameRate = 5;
-    }, 1000);
+    }, 1e3);
   }
   function beginRouteMapInteraction() {
     cameraMoving = true;
@@ -7054,7 +7066,6 @@ ${failure3.message}` };
     const Cesium = cesium();
     Cesium.Ion.defaultAccessToken = "";
     viewer = new Cesium.Viewer(host, createOrbitViewerOptions());
-    // The first visibility transition must resize the host and request a frame.
     viewer.useDefaultRenderLoop = false;
     const provider = attachWaylineImagery(Cesium, viewer);
     viewer.scene.globe.depthTestAgainstTerrain = true;
@@ -7062,7 +7073,6 @@ ${failure3.message}` };
     viewer.scene.screenSpaceCameraController.enableTilt = true;
     setNanjingCamera(Cesium, viewer);
     cameraMoving = false;
-    // Collision correction also emits camera events; only input/flight wakes the map.
     viewer.camera.moveEnd.addEventListener(() => {
       const wasMoving = cameraMoving;
       cameraMoving = false;
@@ -7070,7 +7080,6 @@ ${failure3.message}` };
     });
     const previousCameraView = Cesium.Matrix4.clone(viewer.camera.viewMatrix);
     viewer.scene.postRender.addEventListener(() => {
-      // Tile arrival also redraws the scene; only actual camera motion extends activity.
       const currentCameraView = viewer.camera.viewMatrix;
       if (cameraMoving && !Cesium.Matrix4.equalsEpsilon(currentCameraView, previousCameraView, 1e-7)) wakeRouteMap();
       Cesium.Matrix4.clone(currentCameraView, previousCameraView);
@@ -7080,7 +7089,6 @@ ${failure3.message}` };
     }
     document.addEventListener("visibilitychange", () => setRouteMapVisible(mapVisible));
     const imagery = provider === "tianditu" ? "\u5929\u5730\u56FE\u5F71\u50CF" : "Esri \u536B\u661F\u56FE";
-    // Optional building metadata must not delay route drawing or map interaction.
     void loadRouteCityModels(Cesium, viewer, imagery);
   }
   async function loadRouteCityModels(Cesium, routeViewer, imagery) {
@@ -7202,6 +7210,220 @@ ${failure3.message}` };
   function drawnPreviewId() {
     return drawnRouteId;
   }
+  var getRouteMapViewer = () => viewer;
+
+  // src/production/operator-console/renderer/aircraft-position.ts
+  var readAircraftField = (value, key) => value !== null && typeof value === "object" ? value[key] : void 0;
+  var finite3 = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
+  var aircraftText = (value) => typeof value === "string" && value.trim().length > 0 && Array.from(value).length <= 128 && !/[\p{Cc}]/u.test(value) ? value : null;
+  var timestamp = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  function createAircraftPositionTracker() {
+    const lastKnown = /* @__PURE__ */ new Map();
+    return {
+      update(snapshot2, selectedDeviceId, nowMs, label = (id) => id) {
+        const listed = readAircraftField(snapshot2, "devices");
+        const devices = Array.isArray(listed) ? listed : [];
+        const connected2 = /* @__PURE__ */ new Set();
+        const onlineDevices = /* @__PURE__ */ new Set();
+        for (const device of devices) {
+          const deviceId = aircraftText(readAircraftField(device, "deviceId"));
+          if (deviceId === null) continue;
+          const connection = readAircraftField(device, "connection");
+          const online = readAircraftField(connection, "relay") === "online" && readAircraftField(connection, "flightController") === "connected";
+          if (!online) continue;
+          onlineDevices.add(deviceId);
+          const epoch = timestamp(readAircraftField(device, "connectionEpoch")) ?? 0;
+          const pose = readAircraftField(connection, "pose");
+          const navigation = readAircraftField(connection, "navigation");
+          const latitude = finite3(readAircraftField(pose, "latitude"));
+          const longitude = finite3(readAircraftField(pose, "longitude"));
+          const gps = readAircraftField(navigation, "gpsIsValid");
+          if (latitude === null || longitude === null || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 || gps === false || latitude === 0 && longitude === 0 && gps !== true) continue;
+          connected2.add(deviceId);
+          const sampleId = aircraftText(readAircraftField(navigation, "positionSampleId"));
+          const sourceAge = timestamp(readAircraftField(navigation, "positionAgeMillis"));
+          const receivedAt = timestamp(readAircraftField(connection, "telemetryReceivedAtMs"));
+          const previous = lastKnown.get(deviceId);
+          const sameSample = previous?.sampleId === sampleId && previous.connectionEpoch === epoch && sampleId !== null;
+          const updatedAtMs = sameSample ? previous.updatedAtMs : sampleId !== null && sourceAge !== null && receivedAt !== null && receivedAt <= nowMs && sourceAge <= receivedAt ? receivedAt - sourceAge : null;
+          const heading = finite3(readAircraftField(navigation, "headingDegrees"));
+          lastKnown.set(deviceId, Object.freeze({
+            deviceId,
+            connectionEpoch: epoch,
+            label: aircraftText(label(deviceId)) ?? deviceId,
+            latitude: sameSample ? previous.latitude : latitude,
+            longitude: sameSample ? previous.longitude : longitude,
+            altitudeMeters: finite3(readAircraftField(pose, "altitudeMeters")),
+            headingDegrees: heading !== null && heading >= 0 && heading < 360 ? heading : null,
+            sampleId,
+            updatedAtMs,
+            status: updatedAtMs === null ? "unknown" : nowMs < updatedAtMs || nowMs - updatedAtMs > 5e3 ? "stale" : "live",
+            selected: selectedDeviceId === deviceId
+          }));
+        }
+        for (const [id, previous] of lastKnown) {
+          if (!connected2.has(id)) lastKnown.set(id, Object.freeze({ ...previous, headingDegrees: null, status: onlineDevices.has(id) ? "stale" : "disconnected", selected: id === selectedDeviceId }));
+        }
+        while (lastKnown.size > 128) lastKnown.delete(lastKnown.keys().next().value);
+        return Object.freeze([...lastKnown.values()]);
+      }
+    };
+  }
+  var screenHeadingRotation = (dx, dy) => Math.atan2(-dx, -dy);
+
+  // src/production/operator-console/renderer/aircraft-map.ts
+  var aircraftImage = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><path fill="white" stroke="#13212b" stroke-width="1.5" d="M20 2 24 16 36 24 35 28 23 24 23 32 28 36 28 39 20 36 12 39 12 36 17 32 17 24 5 28 4 24 16 16Z"/></svg>')}`;
+  var unknownImage = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="12" fill="white" stroke="#13212b" stroke-width="3"/><circle cx="20" cy="20" r="3" fill="#13212b"/></svg>')}`;
+  var statusText = (status) => ({ live: "\u5B9E\u65F6\u4F4D\u7F6E", stale: "\u4F4D\u7F6E\u5DF2\u8FC7\u671F", disconnected: "\u5DF2\u65AD\u8FDE \xB7 \u6700\u540E\u4F4D\u7F6E", unknown: "\u4F4D\u7F6E\u65F6\u6548\u672A\u77E5 \xB7 \u8BF7\u66F4\u65B0 Relay" })[status];
+  function createAircraftMapOverlay() {
+    let currentViewer;
+    let source;
+    let handler;
+    let panel;
+    let details;
+    let inspectedId = null;
+    let latest = [];
+    const drawn = /* @__PURE__ */ new Map();
+    let removePreRender;
+    const rotations = /* @__PURE__ */ new Map();
+    const showDetails = () => {
+      const item = latest.find((entry) => entry.deviceId === inspectedId);
+      if (panel === void 0 || details === void 0) return;
+      panel.hidden = item === void 0;
+      if (item === void 0) return;
+      const updated = item.updatedAtMs === null ? "\u672A\u77E5" : new Date(item.updatedAtMs).toLocaleString();
+      details.textContent = [
+        item.label,
+        statusText(item.status),
+        `\u7ECF\u5EA6\uFF1A${item.longitude.toFixed(7)}\xB0`,
+        `\u7EAC\u5EA6\uFF1A${item.latitude.toFixed(7)}\xB0`,
+        `\u76F8\u5BF9\u8D77\u98DE\u70B9\u9AD8\u5EA6\uFF1A${item.altitudeMeters === null ? "\u4E0D\u53EF\u7528" : `${item.altitudeMeters.toFixed(1)} \u7C73`}`,
+        `\u673A\u5934\u822A\u5411\uFF1A${item.headingDegrees === null ? "\u4E0D\u53EF\u7528" : `${item.headingDegrees.toFixed(1)}\xB0`}`,
+        `\u4F4D\u7F6E\u66F4\u65B0\u65F6\u95F4\uFF1A${updated}`,
+        "\u5730\u56FE\u9AD8\u5EA6\uFF1A\u5E73\u9762\u5B9A\u4F4D\uFF0C\u9AD8\u5EA6\u57FA\u51C6\u5F85\u6838\u5B9E",
+        "\u6B64\u5904\u4EC5\u67E5\u770B\uFF0C\u4E0D\u6539\u53D8\u4EFB\u52A1\u6267\u884C\u5BF9\u8C61\u3002"
+      ].join("\n");
+    };
+    const dispose = () => {
+      removePreRender?.();
+      removePreRender = void 0;
+      rotations.clear();
+      handler?.destroy();
+      handler = void 0;
+      panel?.remove();
+      panel = void 0;
+      details = void 0;
+      if (source !== void 0 && currentViewer !== void 0 && !currentViewer.isDestroyed()) currentViewer.dataSources.remove(source, true);
+      source = void 0;
+      currentViewer = void 0;
+      drawn.clear();
+    };
+    const attach = (Cesium, viewer2) => {
+      if (currentViewer === viewer2) return;
+      dispose();
+      currentViewer = viewer2;
+      source = new Cesium.CustomDataSource("aircraft-positions");
+      void viewer2.dataSources.add(source);
+      removePreRender = viewer2.scene.preRender.addEventListener(() => {
+        for (const { position, heading, property } of rotations.values()) {
+          const angle = Cesium.Math.toRadians(heading);
+          const local = new Cesium.Cartesian3(Math.sin(angle) * 100, Math.cos(angle) * 100, 0);
+          const ahead = Cesium.Matrix4.multiplyByPoint(Cesium.Transforms.eastNorthUpToFixedFrame(position), local, new Cesium.Cartesian3());
+          const a = Cesium.SceneTransforms.worldToWindowCoordinates(viewer2.scene, position);
+          const b = Cesium.SceneTransforms.worldToWindowCoordinates(viewer2.scene, ahead);
+          if (a !== void 0 && b !== void 0) property.setValue(screenHeadingRotation(b.x - a.x, b.y - a.y));
+        }
+      });
+      panel = document.createElement("section");
+      panel.className = "aircraft-map-info";
+      panel.setAttribute("aria-label", "\u98DE\u673A\u4F4D\u7F6E\u4FE1\u606F");
+      panel.style.cssText = "position:absolute;top:12px;right:12px;z-index:10;max-width:min(340px,90%);padding:14px;background:#14202def;color:#fff;border:1px solid #64859b;border-radius:8px;font:13px/1.8 system-ui;box-shadow:0 3px 18px #0006";
+      panel.hidden = true;
+      const close = document.createElement("button");
+      close.type = "button";
+      close.textContent = "\u5173\u95ED";
+      close.setAttribute("aria-label", "\u5173\u95ED\u98DE\u673A\u4F4D\u7F6E\u4FE1\u606F");
+      close.style.cssText = "float:right;margin-left:12px;cursor:pointer";
+      close.addEventListener("click", () => {
+        inspectedId = null;
+        showDetails();
+      });
+      details = document.createElement("div");
+      details.style.whiteSpace = "pre-line";
+      panel.append(close, details);
+      viewer2.container.append(panel);
+      handler = new Cesium.ScreenSpaceEventHandler(viewer2.scene.canvas);
+      handler.setInputAction((event) => {
+        const picked = viewer2.scene.pick(event.position);
+        const id = picked?.id?.id;
+        if (typeof id !== "string" || !id.startsWith("aircraft:")) return;
+        inspectedId = latest.find((item) => `aircraft:${item.deviceId}` === id)?.deviceId ?? null;
+        showDetails();
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    };
+    return {
+      update(viewer2, items) {
+        latest = items;
+        if (viewer2 === void 0 || viewer2.isDestroyed()) return;
+        const Cesium = globalThis.Cesium;
+        attach(Cesium, viewer2);
+        let changed = false;
+        const present = new Set(items.map((item) => item.deviceId));
+        for (const id of drawn.keys()) {
+          if (!present.has(id)) {
+            source.entities.removeById(`aircraft:${id}`);
+            drawn.delete(id);
+            rotations.delete(id);
+            changed = true;
+          }
+        }
+        for (const item of items) {
+          const signature = JSON.stringify(item);
+          if (drawn.get(item.deviceId) === signature) continue;
+          const id = `aircraft:${item.deviceId}`;
+          source.entities.removeById(id);
+          const position = Cesium.Cartesian3.fromDegrees(item.longitude, item.latitude, 0);
+          const heading = item.headingDegrees;
+          const color = Cesium.Color.fromCssColorString(item.status !== "live" ? "#a9b2bc" : item.selected ? "#ffda6a" : "#53d8ef");
+          const rotation = new Cesium.ConstantProperty(0);
+          rotations.delete(item.deviceId);
+          if (heading !== null) rotations.set(item.deviceId, { position, heading, property: rotation });
+          source.entities.add({
+            id,
+            name: item.label,
+            position,
+            billboard: {
+              image: heading === null ? unknownImage : aircraftImage,
+              width: item.selected ? 40 : 32,
+              height: item.selected ? 40 : 32,
+              color,
+              rotation,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY
+            },
+            label: {
+              text: `${item.label}${item.selected ? " \xB7 \u5F53\u524D\u9009\u4E2D" : ""}
+${statusText(item.status)} \xB7 \u5E73\u9762\u5B9A\u4F4D`,
+              font: "12px sans-serif",
+              fillColor: color,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 3,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              pixelOffset: new Cesium.Cartesian2(0, -30),
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+          });
+          drawn.set(item.deviceId, signature);
+          changed = true;
+        }
+        showDetails();
+        if (changed) viewer2.scene.requestRender();
+      },
+      dispose
+    };
+  }
 
   // src/production/operator-console/renderer/main.ts
   var requestedWorkspace = new URLSearchParams(globalThis.location?.search ?? "").get("workspace");
@@ -7212,6 +7434,11 @@ ${failure3.message}` };
     streamDeviceId: null
   };
   var lastSnapshot = {};
+  var aircraftPositions = createAircraftPositionTracker();
+  var aircraftMap = createAircraftMapOverlay();
+  var updateAircraftMap = () => {
+    aircraftMap.update(getRouteMapViewer(), aircraftPositions.update(read4(lastSnapshot, "workflow"), state.missionDeviceId, Date.now(), callSign));
+  };
   var lastRelayHint = "";
   var lastRoutePreview = null;
   var lastDeviceDetailHtml = null;
@@ -9258,18 +9485,18 @@ ${failure3.message}` };
       return;
     }
     const chosen = picking && plan.routeId !== null;
-    const remoteReady = remoteControllerEverConnected(device);
+    const remoteReady = OperatorConsole.remoteControllerEverConnected(device);
     if (!remoteReady && !picking) {
       button.textContent = "\u822A\u7EBF\u9009\u62E9";
       button.disabled = true;
-      button.title = REMOTE_ONCE_REASON;
+      button.title = OperatorConsole.REMOTE_ONCE_REASON;
       button.dataset.monitorRouteMode = "choose";
       return;
     }
     button.textContent = chosen ? "\u4E00\u952E\u6267\u884C" : picking ? "\u9000\u51FA\u9009\u62E9" : "\u822A\u7EBF\u9009\u62E9";
     button.dataset.monitorRouteMode = chosen ? "execute" : picking ? "exit" : "choose";
     button.disabled = !remoteReady && chosen;
-    button.title = button.disabled ? REMOTE_ONCE_REASON : button.textContent ?? "";
+    button.title = button.disabled ? OperatorConsole.REMOTE_ONCE_REASON : button.textContent ?? "";
   };
   var paintMonitorPhotoButton = (slot, view, deviceId) => {
     const button = slot.querySelector("[data-monitor-photo]");
@@ -9503,7 +9730,7 @@ ${failure3.message}` };
         value.textContent = name === "\u6267\u884C\u822A\u7EBF" && railFraction !== null && (state2 === "running" || state2 === "done") ? `${monitorRouteStepText[state2]} \xB7 ${railFraction}` : monitorRouteStepText[state2];
         row.append(label, value);
         body.append(row);
-        if (name === "\u6267\u884C\u822A\u7EBF" && railProgress !== null && railProgress.max !== null && (state2 === "running" || state2 === "done")) {
+        if (name === "\u6267\u884C\u822A\u7EBF" && railProgress !== null && railProgress.max !== null && railProgress.value !== null && (state2 === "running" || state2 === "done")) {
           const meter = document.createElement("progress");
           meter.className = "monitor-rail-meter";
           meter.max = railProgress.max;
@@ -9665,6 +9892,7 @@ ${failure3.message}` };
         return;
       }
       setRouteMapVisible(true);
+      updateAircraftMap();
       el("map-notice").textContent = routeMapNotice();
       const routeId = view.selectedRoute?.routeId ?? null;
       if (routeId === null) {
@@ -9745,6 +9973,13 @@ ${failure3.message}` };
   }, 1e3);
   window.addEventListener("beforeunload", () => {
     window.clearInterval(photoClockTimer);
+  });
+  var aircraftClockTimer = window.setInterval(() => {
+    if (state.workspace === "routes") updateAircraftMap();
+  }, 1e3);
+  window.addEventListener("beforeunload", () => {
+    window.clearInterval(aircraftClockTimer);
+    aircraftMap.dispose();
   });
   var render = async () => {
     try {
@@ -9987,12 +10222,12 @@ ${failure3.message}` };
       try {
         uploadView = projectCached();
       } catch {
-        await fail("aircraft", FLIGHT_CONTROLLER_REASON);
+        await fail("aircraft", OperatorConsole.FLIGHT_CONTROLLER_REASON);
         return;
       }
       const uploadDevice = monitorDevices(uploadView).find((item) => text4(read4(item, "deviceId")) === deviceId);
-      if (uploadDevice === void 0 || !flightControllerConnected(uploadDevice)) {
-        await fail("aircraft", FLIGHT_CONTROLLER_REASON);
+      if (uploadDevice === void 0 || !OperatorConsole.flightControllerConnected(uploadDevice)) {
+        await fail("aircraft", OperatorConsole.FLIGHT_CONTROLLER_REASON);
         return;
       }
       const uploaded = await bridge().invoke("mission-upload", { deviceId });
@@ -10047,8 +10282,8 @@ ${failure3.message}` };
       const deviceId = device === void 0 ? null : text4(read4(device, "deviceId"));
       if (deviceId === null) return;
       const mode = button.dataset.monitorRouteMode;
-      if (mode !== "pause" && mode !== "resume" && mode !== "exit" && device !== void 0 && !remoteControllerEverConnected(device)) {
-        show(REMOTE_ONCE_REASON);
+      if (mode !== "pause" && mode !== "resume" && mode !== "exit" && device !== void 0 && !OperatorConsole.remoteControllerEverConnected(device)) {
+        show(OperatorConsole.REMOTE_ONCE_REASON);
         return;
       }
       if (mode === "pause" || mode === "resume") {
@@ -10202,7 +10437,6 @@ ${failure3.message}` };
       }
       renderActionRequests(view);
       monitorPhotoBusy.add(deviceId);
-      button.disabled = false;
       button.textContent = "\u505C\u6B62\u56DE\u4F20";
       button.dataset.monitorPhotoMode = "stop";
       monitorPhotoProgress.set(deviceId, { state: "running", detail: "\u6B63\u5728\u8BF7\u6C42\u7167\u7247\u56DE\u4F20\uFF0C\u7B49\u5F85\u8FDB\u5EA6" });

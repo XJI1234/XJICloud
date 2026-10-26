@@ -118,8 +118,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       '@xjicloud/sky-command-sdk':
-        specifier: file:vendor/xjicloud-sky-command-sdk-0.2.17.tgz
-        version: file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.17.tgz(vue@3.5.40(typescript@6.0.3))
+        specifier: file:vendor/xjicloud-sky-command-sdk-0.2.19.tgz
+        version: file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.19.tgz(vue@3.5.40(typescript@6.0.3))
       '@xjicloud/spark':
         specifier: workspace:*
         version: link:../../packages/spark
@@ -857,9 +857,9 @@ packages:
   '@webgpu/types@0.1.74':
     resolution: {integrity: sha512-lgiI4hbuLcI9unnm2cL/tvCaQU45dp0xcLWJh5uB/9MBGvIA4F8XIk7nSiBeg+K4xWGYwgZKn80LmERI5CxoTA==}
 
-  '@xjicloud/sky-command-sdk@file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.17.tgz':
-    resolution: {integrity: sha512-33jnSN3zKpjjQGKZkRN3Hz8yTc6ViGki8srqSDFoy+0K5mOz6bu/OYNyZxyhhsHh71SuIh037JxFkPt2B75X/Q==, tarball: file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.17.tgz}
-    version: 0.2.17
+  '@xjicloud/sky-command-sdk@file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.19.tgz':
+    resolution: {integrity: sha512-f9bJQ6Npahy72WqiedYUI+32HU0ys8maEMVap+zWLB9lZE5wb+gC6qA0EJ/r78a1LJf2Ivix1/eMiRsIS9/XOQ==, tarball: file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.19.tgz}
+    version: 0.2.19
     engines: {node: '>=20'}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
@@ -2457,7 +2457,7 @@ snapshots:
 
   '@webgpu/types@0.1.74': {}
 
-  '@xjicloud/sky-command-sdk@file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.17.tgz(vue@3.5.40(typescript@6.0.3))':
+  '@xjicloud/sky-command-sdk@file:apps/web2/vendor/xjicloud-sky-command-sdk-0.2.19.tgz(vue@3.5.40(typescript@6.0.3))':
     dependencies:
       '@noble/hashes': 1.8.0
       '@zip.js/zip.js': 2.18.2

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // Exercise the map code actually shipped by the embedded operator console.
 const bundle = readFileSync(path.resolve(import.meta.dirname, '../../../../public/sky-operator/console.js'), 'utf8')
 const mapCode = bundle.slice(
-  bundle.indexOf('  // src/production/operator-console/renderer/cesium-config.ts'),
+  bundle.indexOf('  // src/production/operator-console/renderer/route-map.ts'),
   bundle.indexOf('  function showRoutePreview('),
 )
 
