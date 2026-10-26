@@ -1,0 +1,4 @@
+# Deployment scripts are run by Linux even when checked out with Git for Windows.
+deploy/*.sh text eol=lf
+deploy/*.py text eol=lf
+deploy/tests/*.py text eol=lf

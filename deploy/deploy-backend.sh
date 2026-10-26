@@ -11,6 +11,7 @@ SKIP_BUILD=0
 NO_SYSTEMD=0
 NON_INTERACTIVE=0
 UPDATE_CONFIG=0
+CHECK_CONNECTIONS=0
 COMMAND=""
 
 usage() {
@@ -20,14 +21,16 @@ usage() {
 子命令:
   configure   交互生成 deploy/config/application-prod.yml
   install     构建并安装到本机（需已有 application-prod.yml）
-  upgrade     保留 /etc/xjicloud 配置，仅替换 JAR 并重启
-  (无子命令)  交互 configure 后 install
+  upgrade     逐项审阅已安装配置，回车沿用；校验/备份后换JAR并重启
+  validate    仅校验本地生产YAML（不存在时检查已安装配置）
+  (无子命令)  已安装则upgrade，否则configure后install
 
 选项:
   --skip-build         跳过 Maven 构建
   --no-systemd         不注册 systemd，仅复制 JAR 与配置
   --non-interactive    不提问；configure 需已有 yml，install 直接部署
-  --update-config      upgrade 时备份并应用本地完整 application-prod.yml
+  --update-config      非交互upgrade时备份并应用本地完整YAML
+  --check-connections  附加数据库/Redis/OSS/PNVS网络检查（不发短信）
   -h, --help           显示帮助
 
 推荐首次部署:
@@ -124,276 +127,45 @@ resolve_java_bin() {
   die "未找到 Java 17+。请先安装 openjdk-17 并确认 java -version"
 }
 
-prompt_with_default() {
-  local label="$1"
-  local default="$2"
-  local value=""
-  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
-    printf '%s' "$default"
-    return
+require_config_editor() {
+  PYTHON_BIN="$(command -v "${PYTHON_BIN:-python3}")" || die "需要Python3.8+与PyYAML，请安装或设置PYTHON_BIN"
+  "$PYTHON_BIN" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' || die "Python版本过低，需要3.8+，可在deploy.conf设置PYTHON_BIN"
+  "$PYTHON_BIN" -c 'import yaml' 2>/dev/null || die "缺少PyYAML，请安装python3-yaml（RHEL使用python3-pyyaml），确保安装到所选解释器"
+  [[ -f "$SCRIPT_DIR/backend_config.py" ]] || die "缺少deploy/backend_config.py，请完整更新deploy目录"
+}
+
+load_deploy_settings() {
+  if [[ -f "$CONFIG_SRC/deploy.conf" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONFIG_SRC/deploy.conf"
   fi
-  read -rp "$label [推荐: $default]: " value || die "输入结束，配置未写入"
-  if [[ -z "$value" ]]; then
-    value="$default"
-  fi
-  printf '%s' "$value"
+  INSTALL_DIR="${INSTALL_DIR:-/opt/xjicloud/backend}"
+  CONFIG_DIR="${CONFIG_DIR:-/etc/xjicloud}"
+  DATA_DIR="${DATA_DIR:-/data/xjicloud}"
+  SERVICE_USER="${SERVICE_USER:-xjicloud}"
+  SERVICE_NAME="${SERVICE_NAME:-xjicloud-backend}"
+  JAR_NAME="${JAR_NAME:-xjicloud-backend-1.0.0.jar}"
+  JAVA_BIN="${JAVA_BIN:-/usr/bin/java}"
 }
 
-prompt_required() {
-  local label="$1"
-  local value=""
-  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
-    die "非交互模式无法设置: $label"
-  fi
-  while [[ ! "$value" =~ [^[:space:]] ]]; do
-    read -rsp "$label: " value || die "输入结束，配置未写入"
-    printf '\n' >&2
-  done
-  printf '%s' "$value"
-}
-
-rand_hex() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex "${1:-16}"
-  else
-    head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'
-  fi
-}
-
-rand_base64() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -base64 32 | tr -d '\n'
-  else
-    rand_hex 32
-  fi
-}
-
-yaml_quote() {
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  s="${s//$'\r'/\\r}"
-  s="${s//$'\n'/\\n}"
-  s="${s//$'\t'/\\t}"
-  printf '"%s"' "$s"
-}
-
-write_application_prod_yml() {
-  local out="$CONFIG_SRC/application-prod.yml"
-  mkdir -p "$CONFIG_SRC"
-  # Apply permissions before truncating/writing secrets, including existing files.
-  umask 077
-  [[ ! -e "$out" ]] || chmod 600 "$out"
-  cat >"$out" <<EOF
-# 由 deploy-backend.sh configure 生成 — 勿提交到 Git
-# 场景: ${DEPLOY_SCENARIO_LABEL}
-
-spring:
-  datasource:
-    url: $(yaml_quote "$DB_URL")
-    username: $(yaml_quote "$DB_USER")
-    password: $(yaml_quote "$DB_PASSWORD")
-  data:
-    redis:
-      host: $(yaml_quote "$REDIS_HOST")
-      port: ${REDIS_PORT}
-      password: $(yaml_quote "$REDIS_PASSWORD")
-  servlet:
-    multipart:
-      max-file-size: 2GB
-      max-request-size: 2GB
-  jpa:
-    hibernate:
-      ddl-auto: update
-
-server:
-  port: ${SERVER_PORT}
-
-xjicloud:
-  sms:
-    enabled: ${SMS_ENABLED}
-    scheme-name: $(yaml_quote "$SMS_SCHEME_NAME")
-    access-key-id: $(yaml_quote "$SMS_ACCESS_KEY_ID")
-    access-key-secret: $(yaml_quote "$SMS_ACCESS_KEY_SECRET")
-    sign-name: $(yaml_quote "$SMS_SIGN_NAME")
-    template-code: $(yaml_quote "$SMS_TEMPLATE_CODE")
-    code-variable: $(yaml_quote "$SMS_CODE_VARIABLE")
-    minutes-variable: $(yaml_quote "$SMS_MINUTES_VARIABLE")
-    daily-limit: ${SMS_DAILY_LIMIT}
-  jwt:
-    secret: $(yaml_quote "$JWT_SECRET")
-    expiration-ms: 86400000
-  storage:
-    root: $(yaml_quote "$STORAGE_ROOT")
-  cors:
-    allowed-origins: $(yaml_quote "$CORS_ORIGINS")
-  oss:
-    endpoint: $(yaml_quote "$OSS_ENDPOINT")
-    region: $(yaml_quote "$OSS_REGION")
-    bucket: $(yaml_quote "$OSS_BUCKET")
-    access-key: $(yaml_quote "$OSS_ACCESS_KEY")
-    secret-key: $(yaml_quote "$OSS_SECRET_KEY")
-    path-style-access: ${OSS_PATH_STYLE}
-    presign-expiration-minutes: 120
-  redis:
-    queue-key: xjicloud:jobs
-  worker:
-    shared-secret: $(yaml_quote "$WORKER_SECRET")
-    heartbeat-timeout-sec: 60
-    poll-timeout-sec: 25
-  admin:
-    default-username: $(yaml_quote "$ADMIN_USERNAME")
-    default-password: $(yaml_quote "$ADMIN_PASSWORD")
-    sync-password-on-startup: false
-EOF
-  chmod 600 "$out" 2>/dev/null || true
-  log "已写入 $out"
-}
-
-write_install_summary() {
-  local out="$CONFIG_SRC/install-summary.txt"
-  cat >"$out" <<EOF
-XJICloud 后端安装摘要
-生成时间: $(date -Iseconds 2>/dev/null || date)
-部署场景: ${DEPLOY_SCENARIO_LABEL}
-配置文件: $CONFIG_SRC/application-prod.yml
-安装目录: ${INSTALL_DIR:-/opt/xjicloud/backend}
-数据目录: ${STORAGE_ROOT}
-服务端口: ${SERVER_PORT}
-CORS: ${CORS_ORIGINS}
-OSS endpoint: ${OSS_ENDPOINT}
-OSS bucket: ${OSS_BUCKET}
-数据库: ${DB_URL}
-Redis: ${REDIS_HOST}:${REDIS_PORT}
-短信认证: Alibaba PNVS，启用=${SMS_ENABLED}，全局24小时限额=${SMS_DAILY_LIMIT}
-
-注意: 密钥未写入本摘要，请妥善保管 application-prod.yml
-EOF
-  chmod 600 "$out" 2>/dev/null || true
-}
-
-configure_sms() {
-  SMS_ENABLED=false
-  SMS_ACCESS_KEY_ID=""; SMS_ACCESS_KEY_SECRET=""
-  SMS_SIGN_NAME=""; SMS_TEMPLATE_CODE=""
-  SMS_SCHEME_NAME=xjicloud-register
-  SMS_CODE_VARIABLE=code; SMS_MINUTES_VARIABLE=min; SMS_DAILY_LIMIT=1000
-  local answer
-  while true; do
-    answer="$(prompt_with_default "启用阿里云号码认证短信注册？[y/n]" "n")"
-    case "${answer,,}" in
-      y|yes) SMS_ENABLED=true; break ;;
-      n|no) return 0 ;;
-      *) log "请输入 y 或 n" ;;
-    esac
-  done
-  log "请先开通号码认证短信认证，使用匹配的赠送签名/模板。RAM需有 SendSmsVerifyCode 和 CheckSmsVerifyCode 权限。"
-  SMS_ACCESS_KEY_ID="$(prompt_required "短信 RAM AccessKey ID（隐藏输入）")"
-  SMS_ACCESS_KEY_SECRET="$(prompt_required "短信 RAM AccessKey Secret（隐藏输入）")"
-  SMS_SIGN_NAME="$(prompt_required "短信赠送签名（隐藏输入）")"
-  SMS_TEMPLATE_CODE="$(prompt_required "短信赠送模板 CODE（隐藏输入）")"
-  while true; do
-    SMS_SCHEME_NAME="$(prompt_with_default "短信方案名称（发送/校验须一致，1至20字符）" "xjicloud-register")"
-    [[ ${#SMS_SCHEME_NAME} -le 20 && "$SMS_SCHEME_NAME" =~ [^[:space:]] ]] && break
-    log "方案名称必须为1至20个字符"
-  done
-  while true; do
-    SMS_CODE_VARIABLE="$(prompt_with_default "模板验证码变量名" "code")"
-    SMS_MINUTES_VARIABLE="$(prompt_with_default "模板有效分钟数变量名" "min")"
-    [[ "$SMS_CODE_VARIABLE" =~ ^[A-Za-z][A-Za-z0-9_]{0,31}$ &&
-       "$SMS_MINUTES_VARIABLE" =~ ^[A-Za-z][A-Za-z0-9_]{0,31}$ &&
-       "$SMS_CODE_VARIABLE" != "$SMS_MINUTES_VARIABLE" ]] && break
-    log "变量名须为字母开头的字母/数字/下划线，最长32字符，且两者不同"
-  done
-  while true; do
-    SMS_DAILY_LIMIT="$(prompt_with_default "全局24小时短信发送限额（正整数）" "1000")"
-    [[ "$SMS_DAILY_LIMIT" =~ ^[1-9][0-9]{0,9}$ ]] &&
-      (( SMS_DAILY_LIMIT <= 2147483647 )) && break
-    log "限额必须是1至2147483647的整数"
-  done
-}
-
-print_postgres_hint() {
-  cat <<'EOF'
-
-PostgreSQL 首次部署请确保数据库与用户已创建，并授予 public schema 权限:
-
-  sudo -u postgres psql <<'SQL'
-  CREATE USER xjicloud WITH PASSWORD '你的密码';
-  CREATE DATABASE xjicloud OWNER xjicloud;
-  \c xjicloud
-  GRANT ALL ON SCHEMA public TO xjicloud;
-  GRANT CREATE ON SCHEMA public TO xjicloud;
-  SQL
-
-EOF
+validate_config_file() {
+  local arguments=(validate --source "$1")
+  [[ "$CHECK_CONNECTIONS" -eq 0 ]] || arguments+=(--check-connections)
+  "$PYTHON_BIN" "$SCRIPT_DIR/backend_config.py" "${arguments[@]}"
 }
 
 do_configure() {
-  if [[ "$NON_INTERACTIVE" -eq 1 && -f "$CONFIG_SRC/application-prod.yml" ]]; then
-    log "非交互模式且已有 application-prod.yml，跳过 configure"
-    return 0
-  fi
+  require_config_editor
+  local file="$CONFIG_SRC/application-prod.yml"
   if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
-    die "非交互 configure 需要已存在的 deploy/config/application-prod.yml"
+    [[ -f "$file" ]] || die "非交互configure需要已有application-prod.yml"
+    validate_config_file "$file"
+    return
   fi
-
-  echo ""
-  echo "=== XJICloud 后端配置向导 ==="
-  echo "1) 同机一体 / 预生产（PostgreSQL + Redis + MinIO 本机或内网）【推荐】"
-  echo "2) 分机生产（RDS + 云 Redis + 阿里云 OSS）"
-  local scenario
-  scenario="$(prompt_with_default "请选择部署场景 [1/2]" "1")"
-
-  if [[ "$scenario" == "2" ]]; then
-    DEPLOY_SCENARIO_LABEL="分机生产（RDS + 阿里云 OSS）"
-    DB_URL="$(prompt_with_default "PostgreSQL JDBC URL" "jdbc:postgresql://rm-xxxxx.pg.rds.aliyuncs.com:5432/xjicloud")"
-    REDIS_HOST="$(prompt_with_default "Redis 主机" "r-xxxxx.redis.rds.aliyuncs.com")"
-    OSS_ENDPOINT="$(prompt_with_default "OSS Endpoint" "https://oss-cn-hangzhou.aliyuncs.com")"
-    OSS_REGION="$(prompt_with_default "OSS Region" "cn-hangzhou")"
-    OSS_PATH_STYLE="false"
-  else
-    DEPLOY_SCENARIO_LABEL="同机一体 / 预生产"
-    DB_URL="$(prompt_with_default "PostgreSQL JDBC URL" "jdbc:postgresql://127.0.0.1:5432/xjicloud")"
-    REDIS_HOST="$(prompt_with_default "Redis 主机" "127.0.0.1")"
-    OSS_ENDPOINT="$(prompt_with_default "OSS Endpoint（MinIO）" "http://127.0.0.1:9000")"
-    OSS_REGION="$(prompt_with_default "OSS Region" "us-east-1")"
-    OSS_PATH_STYLE="true"
-  fi
-
-  DB_USER="$(prompt_with_default "数据库用户名" "xjicloud")"
-  DB_PASSWORD="$(prompt_with_default "数据库密码" "$(rand_hex 12)")"
-  REDIS_PORT="$(prompt_with_default "Redis 端口" "6379")"
-  REDIS_PASSWORD="$(prompt_with_default "Redis 密码（无则留空）" "")"
-  OSS_BUCKET="$(prompt_with_default "OSS Bucket" "xjicloud")"
-  OSS_ACCESS_KEY="$(prompt_with_default "OSS Access Key" "minioadmin")"
-  OSS_SECRET_KEY="$(prompt_with_default "OSS Secret Key" "minioadmin")"
-  CORS_ORIGINS="$(prompt_with_default "前端 CORS 域名（逗号分隔）" "https://your-domain.example")"
-  STORAGE_ROOT="$(prompt_with_default "本地模型存储目录" "/data/xjicloud")"
-  SERVER_PORT="$(prompt_with_default "后端监听端口" "8080")"
-  ADMIN_USERNAME="$(prompt_with_default "Admin 用户名" "admin")"
-
-  echo ""
-  echo "Admin 初始密码（必填，用于管理后台登录）:"
-  ADMIN_PASSWORD="$(prompt_required "Admin 密码")"
-  configure_sms
-
-  JWT_SECRET="$(rand_base64)"
-  WORKER_SECRET="$(rand_hex 24)"
-  log "已自动生成 JWT secret 与 Worker shared-secret"
-
-  if [[ -f "$CONFIG_SRC/application-prod.yml" ]]; then
-    read -rp "已存在 application-prod.yml，是否覆盖? [y/N]: " overwrite
-    if [[ "${overwrite,,}" != "y" ]]; then
-      log "已取消覆盖"
-      return 0
-    fi
-  fi
-
-  write_application_prod_yml
-  write_install_summary
-  print_postgres_hint
-  log "配置完成。下一步: sudo $0 install"
+  local arguments=(configure --source "$file" --output "$file")
+  [[ "$CHECK_CONNECTIONS" -eq 0 ]] || arguments+=(--check-connections)
+  "$PYTHON_BIN" "$SCRIPT_DIR/backend_config.py" "${arguments[@]}" || die "配置未保存；取消、输入中断或校验未通过"
+  log "下一步: sudo bash $0 install；数据库首次建库和配置说明见docs/PHONE_REGISTRATION_DEPLOYMENT.md"
 }
 
 run_root() {
@@ -409,29 +181,34 @@ run_root() {
 do_install_or_upgrade() {
   local mode="${1:-install}"
 
-  if [[ -f "$CONFIG_SRC/deploy.conf" ]]; then
-    # shellcheck source=/dev/null
-    source "$CONFIG_SRC/deploy.conf"
-  fi
-
-  INSTALL_DIR="${INSTALL_DIR:-/opt/xjicloud/backend}"
-  CONFIG_DIR="${CONFIG_DIR:-/etc/xjicloud}"
-  DATA_DIR="${DATA_DIR:-/data/xjicloud}"
-  SERVICE_USER="${SERVICE_USER:-xjicloud}"
-  SERVICE_NAME="${SERVICE_NAME:-xjicloud-backend}"
-  JAR_NAME="${JAR_NAME:-xjicloud-backend-1.0.0.jar}"
-  JAVA_BIN="${JAVA_BIN:-/usr/bin/java}"
-  SERVER_PORT="${SERVER_PORT:-8080}"
-
-  PROD_YML_SRC="$CONFIG_SRC/application-prod.yml"
-  if [[ "$mode" != "upgrade" || "$UPDATE_CONFIG" -eq 1 ]]; then
-    [[ -f "$PROD_YML_SRC" ]] || die "缺少 $PROD_YML_SRC，请先运行: sudo $0 configure"
-  else
-    run_root test -f "$CONFIG_DIR/application-prod.yml" || die "升级需已有生产配置，首次部署请用 install"
-  fi
+  load_deploy_settings
+  require_config_editor
   if run_root test -s "$CONFIG_DIR/backend.env"; then
     die "检测到旧 backend.env：请先将其中业务配置迁入 application-prod.yml，再将旧文件改名备份；新服务不再加载它"
   fi
+  PROD_YML_SRC="$CONFIG_SRC/application-prod.yml"
+  if [[ "$mode" == "upgrade" && "$NON_INTERACTIVE" -eq 0 ]]; then
+    run_root test -f "$CONFIG_DIR/application-prod.yml" || die "升级需已有生产配置，首次部署请用install"
+    # Drafts stay private and never replace the installed YAML until all checks pass.
+    CONFIG_DRAFT_DIR="$(mktemp -d)"
+    trap 'rm -f -- "$CONFIG_DRAFT_DIR/application-prod.yml"; rmdir -- "$CONFIG_DRAFT_DIR"' EXIT
+    run_root "$PYTHON_BIN" "$SCRIPT_DIR/backend_config.py" configure --source "$CONFIG_DIR/application-prod.yml" --output "$CONFIG_DRAFT_DIR/application-prod.yml" || die "升级已取消，生产配置和JAR未更改"
+    PROD_YML_SRC="$CONFIG_DRAFT_DIR/application-prod.yml"
+    if run_root cmp -s "$PROD_YML_SRC" "$CONFIG_DIR/application-prod.yml"; then
+      UPDATE_CONFIG=0
+    else
+      UPDATE_CONFIG=1
+    fi
+  elif [[ "$mode" == "upgrade" && "$UPDATE_CONFIG" -eq 0 ]]; then
+    PROD_YML_SRC="$CONFIG_DIR/application-prod.yml"
+  fi
+  run_root test -f "$PROD_YML_SRC" || die "缺少生产配置，请先运行configure"
+  # Reject malformed/invalid configuration before building or replacing any artifact.
+  local validation=(validate --source "$PROD_YML_SRC")
+  [[ "$CHECK_CONNECTIONS" -eq 0 ]] || validation+=(--check-connections)
+  run_root "$PYTHON_BIN" "$SCRIPT_DIR/backend_config.py" "${validation[@]}"
+  SERVER_PORT="$(run_root "$PYTHON_BIN" "$SCRIPT_DIR/backend_config.py" port --source "$PROD_YML_SRC")"
+  DATA_DIR="$(run_root "$PYTHON_BIN" "$SCRIPT_DIR/backend_config.py" storage-root --source "$PROD_YML_SRC")"
 
   JAVA_BIN="$(resolve_java_bin)"
   export JAVA_HOME="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$JAVA_BIN" 2>/dev/null || echo "$JAVA_BIN")")")}"
@@ -544,16 +321,26 @@ while [[ $# -gt 0 ]]; do
     configure) COMMAND="configure"; shift ;;
     install) COMMAND="install"; shift ;;
     upgrade) COMMAND="upgrade"; shift ;;
+    validate) COMMAND="validate"; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --no-systemd) NO_SYSTEMD=1; shift ;;
     --non-interactive) NON_INTERACTIVE=1; shift ;;
     --update-config) UPDATE_CONFIG=1; shift ;;
+    --check-connections) CHECK_CONNECTIONS=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "未知参数: $1（使用 --help）" ;;
   esac
 done
 
+load_deploy_settings
+
 case "$COMMAND" in
+  validate)
+    require_config_editor
+    file="$CONFIG_SRC/application-prod.yml"
+    [[ -f "$file" ]] || file="$CONFIG_DIR/application-prod.yml"
+    validate_config_file "$file"
+    ;;
   configure)
     do_configure
     ;;
@@ -564,7 +351,11 @@ case "$COMMAND" in
     do_install_or_upgrade upgrade
     ;;
   "")
-    do_configure
-    do_install_or_upgrade install
+    if run_root test -f "$CONFIG_DIR/application-prod.yml"; then
+      do_install_or_upgrade upgrade
+    else
+      do_configure
+      do_install_or_upgrade install
+    fi
     ;;
 esac

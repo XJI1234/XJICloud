@@ -61,7 +61,7 @@ xjicloud:
 
 合并进现有 `xjicloud` 节点，勿重复创建根键。凭据、签名和模板填齐后设置 `enabled: true`，重启后端。启用但配置缺失会启动失败；关闭时新注册/发短信返回503，旧账号登录继续。短信方案1至20字符，专用于注册，勿与其他业务/测试共用；所有后端副本须一致。模板变量以控制台模板正文为准（如 `${code}`、`${min}`）；分钟数固定为5。密钥留在服务器配置中，勿提交到Git或发到聊天。向导生成文件权限600，安装后的配置root持有、服务组只读（640）。示例默认关闭短信，不能直接启用空配置。
 
-一键向导新增短信开关、隐藏输入RAM凭据和签名/模板、方案/变量校验、全局限额输入；向导输出和摘要不包含短信凭据。首次安装：
+一键向导逐项显示原配置、遮蔽凭据并提示新增项，校验后原子保存；支持短信开关、RAM凭据、签名/模板、方案/变量、全局限额。回车沿用不会轮换原密钥。详见[配置升级与校验指南](./BACKEND_DEPLOYMENT_CONFIG.md)。首次安装：
 
 ```bash
 sudo bash deploy/deploy-backend.sh configure
@@ -70,13 +70,13 @@ sudo bash deploy/deploy-backend.sh install --non-interactive
 
 已有服务器建议直接编辑 `/etc/xjicloud/application-prod.yml`，保留原JWT/数据库/Worker等设置。若原服务使用 `backend.env`，必须先把其中配置迁入YAML，并将旧文件改名备份；脚本检测到旧文件会在替换JAR前停止。旧文件中的 `JAVA_TOOL_OPTIONS` 等JVM参数应迁入单独的systemd drop-in，不属于业务YAML。检查自定义systemd drop-in和进程环境，移除遗留短信/数据库覆盖项。开发和Compose仍支持环境变量覆盖；`SMS_PROVIDER=aliyun-sms` 会明确启动失败，须移除。
 
-升级命令默认保留服务器YAML，不再要求仓库本地YAML：
+交互升级默认逐项审阅服务器YAML；已准备好的无人值守升级可保留原文件，不要求仓库本地YAML：
 
 ```bash
 sudo bash deploy/deploy-backend.sh upgrade --skip-build --non-interactive
 ```
 
-需要应用仓库本地完整配置时才使用 `upgrade --update-config --skip-build --non-interactive`；该选项备份旧YAML后整体替换。先将服务器现有配置安全复制到本地配置位置再编辑，勿用向导默认值重建并覆盖生产密钥。安装/升级会重写systemd单元，统一只加载生产YAML。不要在profile文件内写 `spring.profiles.active`，启动命令已指定prod。
+需要无人值守应用仓库本地完整配置时才使用 `upgrade --update-config --skip-build --non-interactive`；该选项备份旧YAML后整体替换。先将服务器现有配置安全复制到本地配置位置再编辑，勿用向导默认值重建并覆盖生产密钥。安装/升级会重写systemd单元，统一只加载生产YAML。不要在profile文件内写 `spring.profiles.active`，启动命令已指定prod。
 
 ## 上线步骤
 
