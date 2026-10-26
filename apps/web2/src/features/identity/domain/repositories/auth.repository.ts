@@ -1,6 +1,7 @@
 import type { Result } from '@/shared/result'
 import type { CaptchaChallenge } from '../entities/captcha.entity'
 import type { UserSession } from '../entities/user-session.entity'
+import type { AccountProfile, ProfileCommand, SmsChallenge } from '../entities/account-profile.entity'
 
 export type LoginCommand = {
   username: string
@@ -10,9 +11,14 @@ export type LoginCommand = {
 }
 
 export type RegisterCommand = {
-  username: string
+  phone: string
   password: string
-  displayName?: string
+  smsChallengeId: string
+  smsCode: string
+}
+
+export type SendSmsCommand = {
+  phone: string
   captchaKey: string
   captchaCode: string
 }
@@ -22,4 +28,7 @@ export interface AuthRepository {
   register(command: RegisterCommand): Promise<Result<UserSession>>
   getCaptcha(): Promise<Result<CaptchaChallenge>>
   needCaptcha(username: string): Promise<Result<boolean>>
+  sendRegistrationSms(command: SendSmsCommand): Promise<Result<SmsChallenge>>
+  getProfile(): Promise<Result<AccountProfile>>
+  updateProfile(command: ProfileCommand): Promise<Result<AccountProfile>>
 }

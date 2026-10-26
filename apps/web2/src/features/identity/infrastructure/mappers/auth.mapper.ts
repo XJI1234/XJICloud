@@ -1,5 +1,6 @@
 import type { CaptchaChallenge } from '../../domain/entities/captcha.entity'
 import type { UserSession } from '../../domain/entities/user-session.entity'
+import type { AccountProfile, SmsChallenge } from '../../domain/entities/account-profile.entity'
 
 export type AuthResponseDto = {
   accessToken?: string
@@ -8,6 +9,7 @@ export type AuthResponseDto = {
   userId?: string
   username?: string
   displayName?: string
+  profileRequired?: boolean
 }
 
 export type CaptchaResponseDto = {
@@ -23,6 +25,29 @@ export function mapSessionFromDto(dto: AuthResponseDto): UserSession {
     userId: dto.userId ?? '',
     username: dto.username ?? '',
     displayName: dto.displayName ?? '',
+    profileRequired: dto.profileRequired === true,
+  }
+}
+
+export type ProfileDto = Partial<Omit<AccountProfile, 'phone'>> & { phone?: string | null }
+
+export function mapProfileFromDto(dto: ProfileDto): AccountProfile {
+  return {
+    userId: dto.userId ?? '',
+    username: dto.username ?? '',
+    phone: dto.phone ?? null,
+    displayName: dto.displayName ?? '',
+    email: dto.email ?? '',
+    organization: dto.organization ?? '',
+    profileRequired: dto.profileRequired === true,
+  }
+}
+
+export function mapSmsChallengeFromDto(dto: Partial<SmsChallenge>): SmsChallenge {
+  return {
+    challengeId: dto.challengeId ?? '',
+    expiresInSeconds: dto.expiresInSeconds ?? 300,
+    retryAfterSeconds: dto.retryAfterSeconds ?? 60,
   }
 }
 

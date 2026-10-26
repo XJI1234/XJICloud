@@ -9,6 +9,11 @@ const LOCALE_STORAGE_KEY = 'xjicloud_locale'
 const errorMessages = {
   'zh-CN': {
     errors: {
+      AUTH_SMS_UNAVAILABLE: '短信注册尚未开通或暂不可用，请稍后重试或联系管理员',
+      AUTH_PHONE_INVALID: "请输入中国大陆11位手机号",
+      AUTH_PASSWORD_INVALID: "密码须为8至64个字符，UTF-8不超过72字节",
+      AUTH_SMS_REQUIRED: "请先获取并填写6位短信验证码",
+      AUTH_PROFILE_INVALID: "请填写昵称、有效邮箱和单位，并检查字段长度",
       AUTH_CREDENTIALS_REQUIRED: '请填写用户名和密码',
       AUTH_CAPTCHA_REQUIRED: '请输入验证码',
       AUTH_CAPTCHA_LOAD_FAILED: '验证码加载失败',
@@ -47,6 +52,11 @@ const errorMessages = {
   },
   'en-US': {
     errors: {
+      AUTH_SMS_UNAVAILABLE: 'SMS registration is not enabled or is temporarily unavailable. Retry later or contact the administrator.',
+      AUTH_PHONE_INVALID: "Enter an 11-digit mainland China phone number",
+      AUTH_PASSWORD_INVALID: "Use 8–64 characters and at most 72 UTF-8 bytes",
+      AUTH_SMS_REQUIRED: "Request an SMS code and enter its 6 digits",
+      AUTH_PROFILE_INVALID: "Enter a nickname, valid email and organization within the length limits",
       AUTH_CREDENTIALS_REQUIRED: 'Enter username and password',
       AUTH_CAPTCHA_REQUIRED: 'Enter the captcha',
       AUTH_CAPTCHA_LOAD_FAILED: 'Captcha failed to load',

@@ -5,6 +5,9 @@ import {
   logoutUseCase,
   probeNeedCaptchaUseCase,
   registerUseCase,
+  sendRegistrationSmsUseCase,
+  loadProfileUseCase,
+  updateProfileUseCase,
 } from '../../application/use-cases/auth.usecase'
 import { isAuthenticated } from '../../domain/entities/user-session.entity'
 
@@ -20,5 +23,8 @@ export function useAuthSession() {
     logout: () => logoutUseCase({ session, onWorkspaceReset: resetWorkspace }),
     probeNeedCaptcha: (username: string) => probeNeedCaptchaUseCase({ auth }, username),
     getCaptcha: () => auth.getCaptcha(),
+    sendRegistrationSms: (input: Parameters<typeof sendRegistrationSmsUseCase>[1]) => sendRegistrationSmsUseCase({ auth }, input),
+    loadProfile: () => loadProfileUseCase({ auth, session }),
+    updateProfile: (input: Parameters<typeof updateProfileUseCase>[1]) => updateProfileUseCase({ auth, session }, input),
   }
 }

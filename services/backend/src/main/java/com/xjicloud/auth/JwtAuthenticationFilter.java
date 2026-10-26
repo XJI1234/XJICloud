@@ -54,6 +54,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.clearContext();
             }
         }
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        String path = request.getServletPath();
+        if (authentication != null && authentication.getPrincipal() instanceof UserAccount user
+                && user.isProfileRequired() && path.startsWith("/api/v1/")
+                && !path.startsWith("/api/v1/auth/") && !path.equals("/api/v1/account")) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"success\":false,\"message\":\"请先完善账户资料\",\"data\":null}");
+            return;
+        }
         filterChain.doFilter(request, response);
     }
 }

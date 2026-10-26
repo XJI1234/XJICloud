@@ -45,7 +45,8 @@ class AuthServiceFailCountTest {
                 passwordEncoder,
                 jwtService,
                 captchaService,
-                redisTemplate
+                redisTemplate,
+                mock(com.xjicloud.auth.sms.RegistrationSmsService.class)
         );
     }
 
@@ -100,7 +101,8 @@ class AuthServiceFailCountTest {
                 passwordEncoder,
                 jwtService,
                 mock(CaptchaService.class),
-                redisTemplate
+                redisTemplate,
+                mock(com.xjicloud.auth.sms.RegistrationSmsService.class)
         );
 
         service.login(new LoginRequest("alice", "secret", null, null));

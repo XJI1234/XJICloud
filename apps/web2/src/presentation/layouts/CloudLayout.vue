@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppSheet from '@/presentation/components/AppSheet.vue'
@@ -23,6 +23,13 @@ const langModalVisible = ref(false)
 const userTriggerRef = ref<HTMLButtonElement | null>(null)
 const langTriggerRef = ref<HTMLButtonElement | null>(null)
 const session = ref(auth.session())
+watch(() => route.fullPath, () => { session.value = auth.session() })
+watch(userModalVisible, (visible) => { if (visible) session.value = auth.session() })
+
+function openAccount() {
+  userModalVisible.value = false
+  void router.push('/app/account')
+}
 
 const navItems = computed(() => [
   { labelKey: 'nav.home', route: '/app/home' },
@@ -186,6 +193,9 @@ const isImmersive = computed(() => route.name === 'home' || !activeProjectId.val
           <span>@{{ session?.username || 'unknown' }}</span>
         </div>
         <div class="cloud-user-menu-actions" role="group" :aria-label="t('header.mine')">
+          <button class="header-modal-option" type="button" @click="openAccount">
+            {{ t('account.title') }}
+          </button>
           <button class="header-modal-option" type="button" @click="openSettings">
             {{ t('header.settings') }}
           </button>

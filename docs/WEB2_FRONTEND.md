@@ -134,15 +134,17 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 
 | | |
 |--|--|
-| UL | UserSession、Captcha、登录/注册 |
-| 实体 | `user-session.entity`、`captcha.entity` |
-| 领域服务 | `captcha-policy.service`（登录是否强制验证码） |
+| UL | UserSession、Captcha、SmsChallenge、AccountProfile、登录/手机号注册/补全资料 |
+| 实体 | `user-session.entity`、`captcha.entity`、`account-profile.entity` |
+| 领域服务 | `captcha-policy.service`（登录是否强制验证码）、`registration-policy.service`（大陆手机号/密码） |
 | Ports | `AuthRepository`、`SessionStore` |
 | 基础设施 | `http-auth.repository`、`local-storage-session.store` |
-| 用例 | `loginUseCase`、`registerUseCase`、`resolveAuthNavigation` |
-| UI | `LoginView`、`useAuthSession` |
+| 用例 | `loginUseCase`、`sendRegistrationSmsUseCase`、`registerUseCase`、`loadProfileUseCase`、`updateProfileUseCase`、`resolveAuthNavigation` |
+| UI | `LoginView`、`RegisterForm`、`AccountView`、`useAuthSession` |
 
 会话在 localStorage。`isAuthenticated` 以 JWT `exp` 为准（用户 token 7 天）。过期或 API 401 清会话并回登录页；登出不清最近工程。路由用 `isAuthenticated(session)` + `resolveAuthNavigation`，不要在每个页面手写 if。
+
+手机号注册先消费图形验证码发送短信，再提交短信 challenge 与密码；成功保留会话，进入 /app/account。profileRequired 在本地会话持久化，守卫将未补资料的新用户导向账户页；后端独立强制资料门槛。资料保存同步会话昵称与完成标志，菜单打开时重新读取；旧账号继续用用户名/密码登录。「我的 → 账户信息」可编辑昵称/邮箱/单位，手机号只读。短信默认关闭，错误提示明确区分未开通；完整配置与验收见 [PHONE_REGISTRATION.md](./PHONE_REGISTRATION.md)。
 
 ### 6.2 Project（工程）
 
