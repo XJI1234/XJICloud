@@ -3,9 +3,9 @@
 
 INSTALL_DIR=/opt/xjicloud/backend
 CONFIG_DIR=/etc/xjicloud
-DATA_DIR=/data/xjicloud
+# 数据目录和服务端口以application-prod.yml为准，不在这里重复配置。
 SERVICE_USER=xjicloud
 SERVICE_NAME=xjicloud-backend
 JAR_NAME=xjicloud-backend-1.0.0.jar
 JAVA_BIN=/usr/bin/java
-SERVER_PORT=8080
+# PYTHON_BIN=/usr/bin/python3.9  # 需Python 3.8+及该解释器可导入PyYAML

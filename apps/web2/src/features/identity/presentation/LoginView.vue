@@ -6,6 +6,7 @@ import { PhEye, PhEyeSlash } from '@phosphor-icons/vue'
 import AppButton from '@/presentation/components/AppButton.vue'
 import { formatDomainError } from '@/presentation/errors'
 import { useAuthSession } from '@/features/identity/presentation/composables/useAuthSession'
+import RegisterForm from '@/features/identity/presentation/components/RegisterForm.vue'
 import LoginCreatures from '@/features/identity/presentation/components/LoginCreatures.vue'
 import LocaleToggle from '@/presentation/components/LocaleToggle.vue'
 import type { CaptchaChallenge } from '@/features/identity/domain/entities/captcha.entity'
@@ -19,7 +20,6 @@ const { t } = useI18n()
 const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
-const displayName = ref('')
 const errorMessage = ref('')
 const pending = ref(false)
 const showCaptcha = ref(false)
@@ -74,7 +74,8 @@ watch(mode, async (next) => {
   errorMessage.value = ''
   captchaInput.value = ''
   if (next === 'register') {
-    await ensureCaptchaShown()
+    showCaptcha.value = false
+    captcha.value = null
   } else {
     showCaptcha.value = false
     captcha.value = null
@@ -107,34 +108,6 @@ async function submit() {
 
   pending.value = true
   try {
-    if (mode.value === 'register') {
-      const challenge = captcha.value
-      if (!challenge) {
-        errorMessage.value = t('login.captchaLoadFailed')
-        await loadCaptcha()
-        return
-      }
-      const [error] = await auth.register({
-        username: username.value.trim(),
-        password: password.value,
-        displayName: displayName.value.trim() || undefined,
-        captchaKey: challenge.captchaKey,
-        captchaCode: captchaInput.value.trim(),
-      })
-      if (error) {
-        errorMessage.value = formatDomainError(t, error)
-        password.value = ''
-        await ensureCaptchaShown()
-        await loadCaptcha()
-        return
-      }
-      username.value = ''
-      password.value = ''
-      displayName.value = ''
-      mode.value = 'login'
-      return
-    }
-
     const [error] = await auth.login({
       username: username.value.trim(),
       password: password.value,
@@ -149,7 +122,8 @@ async function submit() {
       await loadCaptcha()
       return
     }
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/app/home'
+    const target = typeof route.query.redirect === 'string' ? route.query.redirect : '/app/home'
+    const redirect = target.startsWith('/app/') ? target : '/app/home'
     await router.push(redirect)
   } finally {
     pending.value = false
@@ -174,33 +148,24 @@ async function submit() {
           <p class="login-subtitle">{{ mode === 'register' ? t('login.leadRegister') : t('login.leadLogin') }}</p>
         </div>
 
+        <RegisterForm v-if="mode === 'register'" @busy="pending = $event" @registered="router.replace({ name: 'account' })" />
         <form
+          v-else
           class="login-fields"
           @submit.prevent="submit"
           @focusin="onFormFocus"
           @focusout="onFormBlur"
         >
           <label class="cloud-field">
-            <span>{{ t('login.username') }}</span>
+            <span>{{ t('registration.loginAccount') }}</span>
             <input
               v-model="username"
               class="cloud-input"
               name="username"
               type="text"
               autocomplete="username"
-              :placeholder="t('login.usernamePlaceholder')"
+              :placeholder="t('registration.loginAccountHint')"
               @blur="checkNeedCaptcha"
-            />
-          </label>
-          <label v-if="mode === 'register'" class="cloud-field">
-            <span>{{ t('login.displayName') }}</span>
-            <input
-              v-model="displayName"
-              class="cloud-input"
-              name="displayName"
-              type="text"
-              autocomplete="nickname"
-              :placeholder="t('login.displayNamePlaceholder')"
             />
           </label>
           <label class="cloud-field">
@@ -211,7 +176,7 @@ async function submit() {
                 class="cloud-input"
                 name="password"
                 :type="showPassword ? 'text' : 'password'"
-                :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+                autocomplete="current-password"
                 :placeholder="t('login.passwordPlaceholder')"
               />
               <button
@@ -247,13 +212,13 @@ async function submit() {
           </label>
           <p v-if="errorMessage" class="login-error">{{ errorMessage }}</p>
           <AppButton class="login-submit" variant="ghost" type="submit" :disabled="pending">
-            {{ pending ? t('common.processing') : (mode === 'login' ? t('login.login') : t('login.registerAndLogin')) }}
+            {{ pending ? t('common.processing') : t('login.login') }}
           </AppButton>
         </form>
 
         <p class="login-switch">
           {{ mode === 'register' ? t('login.hasAccount') : t('login.noAccount') }}
-          <button type="button" @click="mode = mode === 'login' ? 'register' : 'login'">
+          <button type="button" :disabled="pending" @click="mode = mode === 'login' ? 'register' : 'login'">
             {{ mode === 'register' ? t('login.login') : t('login.register') }}
           </button>
         </p>

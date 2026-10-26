@@ -4,6 +4,9 @@ import type { AuthRepository } from '../../domain/repositories/auth.repository'
 import type { SessionStore } from '../../domain/repositories/session-store.port'
 import { assertCaptchaForMode } from '../../domain/services/captcha-policy.service'
 import type { UserSession } from '../../domain/entities/user-session.entity'
+import type { RegisterCommand, SendSmsCommand } from '../../domain/repositories/auth.repository'
+import type { AccountProfile, ProfileCommand, SmsChallenge } from '../../domain/entities/account-profile.entity'
+import { isRegistrationPassword, isRegistrationPhone } from '../../domain/services/registration-policy.service'
 
 export async function loginUseCase(
   deps: { auth: AuthRepository; session: SessionStore },
@@ -32,28 +35,61 @@ export async function loginUseCase(
 
 export async function registerUseCase(
   deps: { auth: AuthRepository; session: SessionStore },
-  input: { username: string; password: string; displayName?: string; captchaKey?: string; captchaCode?: string },
-): Promise<Result<{ registered: true }>> {
-  const username = input.username.trim()
-  if (!username || !input.password) {
-    return err(new DomainError('AUTH_CREDENTIALS_REQUIRED'))
+  input: RegisterCommand,
+): Promise<Result<UserSession>> {
+  if (!isRegistrationPhone(input.phone)) {
+    return err(new DomainError('AUTH_PHONE_INVALID'))
   }
+  if (!isRegistrationPassword(input.password)) {
+    return err(new DomainError('AUTH_PASSWORD_INVALID'))
+  }
+  if (!input.smsChallengeId || !/^\d{6}$/.test(input.smsCode)) {
+    return err(new DomainError('AUTH_SMS_REQUIRED'))
+  }
+  const [error, session] = await deps.auth.register(input)
+  if (error || !session) return err(error ?? new DomainError('UNKNOWN'))
+  deps.session.persist(session)
+  return ok(session)
+}
+
+export async function sendRegistrationSmsUseCase(
+  deps: { auth: AuthRepository }, input: SendSmsCommand,
+): Promise<Result<SmsChallenge>> {
+  if (!isRegistrationPhone(input.phone)) return err(new DomainError('AUTH_PHONE_INVALID'))
   const captchaError = assertCaptchaForMode('register', true, input.captchaKey, input.captchaCode)
-  if (captchaError) {
-    return err(captchaError)
+  if (captchaError) return err(captchaError)
+  return deps.auth.sendRegistrationSms({ ...input, captchaCode: input.captchaCode.trim() })
+}
+
+export async function loadProfileUseCase(
+  deps: { auth: AuthRepository; session: SessionStore },
+): Promise<Result<AccountProfile>> {
+  const result = await deps.auth.getProfile()
+  if (result[1]) syncProfileSession(deps.session, result[1])
+  return result
+}
+
+export async function updateProfileUseCase(
+  deps: { auth: AuthRepository; session: SessionStore }, input: ProfileCommand,
+): Promise<Result<AccountProfile>> {
+  const command = {
+    displayName: input.displayName.trim(), email: input.email.trim(), organization: input.organization.trim(),
   }
-  const [error] = await deps.auth.register({
-    username,
-    password: input.password,
-    displayName: input.displayName?.trim() || undefined,
-    captchaKey: input.captchaKey!,
-    captchaCode: input.captchaCode!.trim(),
-  })
-  if (error) {
-    return err(error)
+  if (!command.displayName || command.displayName.length > 128
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(command.email) || command.email.length > 254
+    || !command.organization || command.organization.length > 200) {
+    return err(new DomainError('AUTH_PROFILE_INVALID'))
   }
-  deps.session.clear()
-  return ok({ registered: true })
+  const result = await deps.auth.updateProfile(command)
+  if (result[1]) syncProfileSession(deps.session, result[1])
+  return result
+}
+
+function syncProfileSession(store: SessionStore, profile: AccountProfile) {
+  const session = store.read()
+  if (session && session.userId === profile.userId) {
+    store.persist({ ...session, displayName: profile.displayName, profileRequired: profile.profileRequired })
+  }
 }
 
 export function logoutUseCase(deps: { session: SessionStore; onWorkspaceReset?: () => void }) {
@@ -77,7 +113,13 @@ export function resolveAuthNavigation(input: {
   isPublicLogin: boolean
   requiresAuth: boolean
   fullPath: string
-}): { name: 'home' } | { name: 'login'; query?: { redirect: string } } | null {
+  profileRequired?: boolean
+  isAccountPage?: boolean
+}): { name: 'home' | 'account' } | { name: 'login'; query?: { redirect: string } } | null {
+  if (input.isAuthenticated && input.profileRequired && !input.isAccountPage
+    && (input.requiresAuth || input.isPublicLogin)) {
+    return { name: 'account' }
+  }
   if (input.isPublicLogin && input.isAuthenticated) {
     return { name: 'home' }
   }

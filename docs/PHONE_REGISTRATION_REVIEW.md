@@ -1,0 +1,100 @@
+# 手机号验证码注册：交付与验收入口
+
+## 当前：PNVS生成校验及统一部署配置（2026-10-26）
+
+- 仅保留号码认证PNVS SDK，删除普通短信SDK/适配器。本地SecureRandom验证码、HMAC计算、摘要密钥配置和consume.lua已删除；阿里云生成并核验验证码，API请求/响应契约保持不变。
+- SendSmsVerifyCode传入##code##、纯数字6位、300秒、60秒、覆盖旧码、不返回验证码/不自动重试；CheckSmsVerifyCode发送同一SchemeName/CountryCode，必须Code=OK、Success=true、Model.VerifyResult=PASS。OutId用于关联，安全绑定由Redis执行。
+- Redis Lua先绑定手机号/challenge并获取核验锁，限制5次在线尝试，再调用阿里云，最后单次消费；并发只允许一个核验，重发或过期时丢弃旧PASS。网络异常不放行，无本地校验回退。
+- 生产业务配置集中于application-prod.yml.example及生成的实际YAML，不再加载backend.env。向导隐藏短信凭据、校验方案/模板变量/预算、限制文件权限。upgrade保留服务器配置，--update-config备份后整体替换；检测到旧backend.env时要求先迁移。默认Maven构建运行测试。
+- 验证：Windows JDK21、独立Redis7.0.15端口16379，SMS_TEST_REDIS_PORT=16379执行mvn -B package，41项通过，0失败、0跳过。包含真实PNVS SDK的本机HTTP序列化/响应与HTTP400错误解析、Spring实际prod模板加载、12项API/Redis注册集成测试。WSL Bash语法检查及6项部署向导/临时安装测试通过。
+- JAR检查：仅含PNVS SDK，4个SMS Lua脚本，不含旧consume.lua、普通短信SDK或浏览器测试Fixture。本轮未改UI、未重跑浏览器E2E，未操作生产systemd/数据库。
+- 真实接口测试：经用户授权从本机CSV读取RAM凭据，未写入仓库或输出。初次被Forbidden.NoPermission拒绝；为对应RAM用户绑定最小SendSmsVerifyCode/CheckSmsVerifyCode自定义策略后，生产适配器真实SendSmsVerifyCode受理成功，用户收到短信并提供验证码，真实CheckSmsVerifyCode返回PASS。另测错误/失效码返回isv.ValidateFail，修复后适配器返回REJECTED。使用用户提供的赠送签名/模板与code/min变量，不记录手机号或验证码。此处为真实SDK发送/校验验证，不代表生产部署或完整网页真实短信E2E。
+
+### Code Review
+
+使用OCR delegate解析文件范围与规则，由当前Agent自审全部diff；手工补查OCR默认排除的测试、文档、模板和systemd文件。已修复：默认方案须不超过20字符；旧模板profile内active导致启动失败；隐藏输入stdout换行导致密码变化；凭据文件写入前权限限制；核验异常和重发/过期竞态；升级配置丢失/覆盖风险；真实接口isv.ValidateFail误报503（已改为验证码失败）及官方频控别名处理。未发现未修复High/Critical。
+
+剩余限制：单节点Redis，不支持Cluster跨槽；代理后仍共享socket IP额度；进程核验中崩溃会保留challenge核验锁直至过期，用户可等冷却后重发；阿里云核验已消费但数据库失败时需重发。生产迁移和systemd发布仍需环境验收；本机测试手机号已确认真实送达。当前部署步骤见[最新后端部署指南](./PHONE_REGISTRATION_DEPLOYMENT.md)。以下均为旧实现历史记录，不能作为当前配置依据。
+
+---
+
+## 历史：首次移植审查（2026-10-26）
+
+- 来源：`origin/li-chengtao` 最新提交 `3684e015d53751863e858c66b639793ff611b180`，应用到 `ceshi`。只取该注册提交，保留注册后必须的资料页和后端门槛；未合并整个分支，也未引入源分支的任务执行、查看器或锁文件改动。
+- 提交前同步远端 `ceshi` 到 `a69dadd`，保留该分支已有8个提交，再重放本次注册改动；没有合并 `li-chengtao` 的其他功能。
+- 本次最终验证：同步后执行 `pnpm test:web2`，46个文件、212项通过；`pnpm build:web2`通过。后端与同步前相同：Windows JDK21 + 独立Redis7.0.15的16379端口，设置 `SMS_TEST_REDIS_PORT=16379` 执行 `mvn -B package`，38项通过，无失败、无跳过。
+- 真实Edge浏览器路径（同步远端后重跑，1440px桌面与390px手机）：未登录业务页跳登录、错误图形码与刷新、短信发送后收起图形码/聚焦短信输入/倒计时、错误短信拒绝、正确注册自动登录、刷新/直接导航仍强制资料页、未完善资料时退出并重新登录、保存后进入首页与昵称菜单同步、退出并用手机号密码登录、资料持久化。手机注册页无横向溢出，无未捕获页面异常。额外拦截短信接口503验证中文不可用提示。
+- 浏览器主流程使用实际Spring Boot Controller、JWT、H2和独立Redis，只把 `SmsSender` 换成测试传输；未发送收费短信。503场景为接口拦截，不代表真实供应商故障演练。浏览器临时脚本与截图保留在忽略目录 `tmp/registration-e2e.cjs`、`tmp/registration-e2e/`。
+- 正式JAR检查：包含3个Lua脚本和两种阿里云SDK；不含 `RegistrationBrowserFixture`、注册集成测试类或测试短信文件。
+
+### 本次修复的审查发现
+
+1. **Medium，测试配置依赖源分支环境**：独立Redis启用后，注册集成测试因当前分支缺省OSS endpoint而启动失败，管理员初始化也依赖外部密码配置。已在注册集成测试和浏览器Fixture中补充明确的测试专用OSS及管理员配置，未恢复或改动生产默认配置。
+2. **Medium，Windows测试入口不兼容**：浏览器Fixture无条件创建POSIX权限文件，在Windows无法捕获测试短信。已按文件系统能力选择创建方式；POSIX仍使用600，Windows继承测试目录ACL，且仅用于本机假短信。真实浏览器注册路径验证了修复。
+3. **Medium，同步后的退出流程冲突**：远端退出流程先导航 `/login?logout=1` 再清会话，新资料守卫曾将未完善资料的用户送回账户页，阻止退出。已让资料门槛只作用于受保护页面和普通登录导航，保留退出过渡路径；新增用例测试先复现失败再修复通过，并以真实浏览器验证未完善资料时退出、重登仍回资料页。
+
+### 审查结论与剩余风险
+
+使用仓库OCR delegate的文件预览和规则解析，由当前实施Agent逐项审查本次diff、相关调用链、测试和文档，属于自审。检查注册旧契约绕过、密码边界、验证码与手机号绑定、重发/过期/错误次数/原子消费、并发限流、用户/管理员/Worker角色隔离、本人资料修改及旧账号兼容。未发现未修复的High/Critical。
+
+- **Medium，代理部署限制**：短信按socket IP每小时30次，图形码按来源IP每分钟20次。代理后用户可能共享额度；边缘按客户端限流并不能解除后端共享上限，扩容需单独设计可信代理IP解析。不得直接信任用户传入的转发头。
+- **兼容性**：旧账号登录保留，但新后端不再接受旧客户端的用户名注册请求；其他客户端需协调适配。邮箱所有权验证、找回密码和换绑不在本次范围。
+- **未验证**：生产PostgreSQL迁移、systemd真实发布、正式Nginx路径、真实阿里云发送与运营商送达；无生产访问或真实短信配置，本次没有发布服务。
+- 部署步骤及脚本注意事项见 [最新后端部署指南](./PHONE_REGISTRATION_DEPLOYMENT.md)。下文保留源分支历史记录，其中158项前端测试等数字不代表当前分支结果。
+
+---
+
+提交分支：li-chengtao。范围：web2、Spring Boot 用户注册、部署配置与数据库迁移。
+
+## 解决的问题与最终行为
+
+原先仅填写用户名和密码即可注册，现在注册必须验证大陆手机号。用户填写手机号及图形验证码，获取6位短信码并设置密码；注册成功自动登录，要求完善昵称、邮箱、单位或学校，再进入平台。后续继续使用手机号和密码登录，旧账号保留用户名和密码登录。
+
+短信发送成功后收起图形验证并聚焦短信码，不再自动换图误导用户二次填写。倒计时结束后主动点“重新发送”才重新显示图形验证；修改手机号清除旧短信状态。
+
+## 阿里云产品与安全边界
+
+支持通过 SMS_PROVIDER 选择：
+
+- aliyun-pnvs：号码认证服务下的短信认证，个人开发者使用预置签名和模板，无需提交企业短信资质。官方 SendSmsVerifyCode 支持传入平台生成的验证码，校验继续由本平台完成。
+- aliyun-sms：原短信服务 SendSms，适用于已完成自有签名/模板审核报备的账号。
+
+两种产品的套餐包不互通。验证码有效5分钟、最多5次错误、原子单次消费；同手机号60秒间隔、24小时10次，来源IP每小时30次，全局默认24小时1000次（可配置）。Redis保存HMAC摘要，不保存明文验证码；SDK和短信认证服务端重试均关闭。
+
+默认关闭短信注册。密钥只通过后端环境注入；启用但配置缺失会拒绝启动。用户资料只能由本人修改，新用户未完善资料时前后端均阻止访问业务功能。邮箱仅作为资料保存，没有做邮箱所有权验证。
+
+## 学长如何检查
+
+1. 查看本提交完整diff，重点入口：
+   - 前端注册页面：apps/web2/src/features/identity/presentation/components/RegisterForm.vue
+   - 前端身份用例：apps/web2/src/features/identity/application/use-cases/auth.usecase.ts
+   - 后端注册：services/backend/src/main/java/com/xjicloud/auth/AuthService.java
+   - 短信与Redis状态：services/backend/src/main/java/com/xjicloud/auth/sms/
+   - 配置示例：deploy/config/backend.env.example
+2. 根据 docs/PHONE_REGISTRATION.md 配置后端。个人开发者选择 SMS_PROVIDER=aliyun-pnvs；不同环境自行注入RAM凭证、预置签名/模板和独立摘要密钥，不能直接复用本机秘密文件。
+3. 生产 PostgreSQL 的 ddl-auto=validate 模式先备份并执行 deploy/migrations/20261021_phone_registration.sql；本机H2开发模式自动更新。
+4. 启动Redis、后端和web2，用测试手机号走：图形码 → 短信 → 注册 → 完善资料 → 退出 → 手机号密码登录。
+5. 补验错误/过期验证码、重发旧码失效、重复手机号、未完善资料访问限制，以及旧账号登录。
+
+本机操作参考 docs/SMS_PERSONAL_SETUP.md，其中 /home/li 路径和 start-*.sh 属于李成涛机器的便利配置。脚本不随提交分发；其他机器按项目启动及部署文档操作。
+
+## 已完成验证
+
+- 2026-10-25：用户反馈本机真实短信注册成功。
+- 前端最新验证：pnpm test:web2，41个文件、158项通过；pnpm build:web2通过，保留已有Cesium大chunk提示。
+- 后端短信认证适配版本：独立Redis 16379与H2，mvn -B package，38项全部通过、无跳过。测试不发送收费短信。
+- 使用真实阿里云SDK连接本机HTTP测试服务，验证新旧发送接口序列化与响应解析。
+- Edge桌面1440px、手机390px操作检查：短信发送后不必二次图形验证即可提交注册、主动重发、更换手机号重置，无页面异常和横向溢出。该轮浏览器测试拦截API，不代表真实运营商验收。
+- 注册首版浏览器联调覆盖资料门槛、保存、退出与密码登录，使用测试短信transport。
+- 图形验证优化提交已用仓库 code-review / OCR 执行 preview、rule，并由宿主Agent审查生产代码、测试及说明，未发现需修复问题；整任务此前各阶段均做过自审。
+
+## 正式上线仍需确认
+
+- 生产数据库迁移、真实部署配置与正式域名下完整注册。
+- 单节点Redis部署；Lua脚本不支持Redis Cluster跨槽。
+- 反向代理后的socket IP会共享限流额度，需要可信边缘逐客户端限流和预算告警。
+- 邮箱验证、短信免密登录、找回密码、手机号换绑不在本次任务范围。
+
+## 提交内容
+
+包含前后端实现、测试、SQL迁移、配置示例和说明；不包含实际AccessKey、密码、验证码、本机环境文件、start-*.sh、exe安装包或本机测试数据。未修改main、apps/web、packages/spark或rust，模型存储策略不变。

@@ -22,6 +22,7 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '', redirect: { name: 'home' } },
+        { path: 'account', name: 'account', component: () => import('@/features/identity/presentation/AccountView.vue') },
         { path: 'home', name: 'home', component: () => import('@/features/project/presentation/HomeView.vue') },
         { path: 'projects', name: 'projects', component: () => import('@/features/project/presentation/ProjectListView.vue') },
         { path: 'upload', name: 'upload', component: () => import('@/features/dataset-training/presentation/UploadView.vue') },
@@ -51,6 +52,8 @@ router.beforeEach((to) => {
     isPublicLogin: Boolean(to.meta.public && to.name === 'login' && to.query.logout !== '1'),
     requiresAuth: Boolean(to.meta.requiresAuth),
     fullPath: to.fullPath,
+    profileRequired: session?.profileRequired,
+    isAccountPage: to.name === 'account',
   })
   return redirect ?? true
 })

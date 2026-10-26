@@ -4,6 +4,8 @@ import com.xjicloud.auth.CaptchaService.CaptchaResponse;
 import com.xjicloud.auth.dto.AuthResponse;
 import com.xjicloud.auth.dto.LoginRequest;
 import com.xjicloud.auth.dto.RegisterRequest;
+import com.xjicloud.auth.dto.SendRegistrationSmsRequest;
+import com.xjicloud.auth.sms.RegistrationSmsService;
 import com.xjicloud.common.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -21,10 +23,12 @@ public class AuthController {
 
     private final AuthService authService;
     private final CaptchaService captchaService;
+    private final RegistrationSmsService registrationSms;
 
-    public AuthController(AuthService authService, CaptchaService captchaService) {
+    public AuthController(AuthService authService, CaptchaService captchaService, RegistrationSmsService registrationSms) {
         this.authService = authService;
         this.captchaService = captchaService;
+        this.registrationSms = registrationSms;
     }
 
     @GetMapping("/captcha")
@@ -39,8 +43,14 @@ public class AuthController {
 
     @PostMapping("/register")
     public ApiResponse<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        authService.validateCaptcha(request.captchaKey(), request.captchaCode());
         return ApiResponse.ok(authService.register(request));
+    }
+
+    @PostMapping("/registration-sms")
+    public ApiResponse<RegistrationSmsService.Challenge> sendRegistrationSms(
+            @Valid @RequestBody SendRegistrationSmsRequest request, HttpServletRequest http) {
+        // Only the socket peer is trusted by default, never a caller-supplied X-Forwarded-For.
+        return ApiResponse.ok(registrationSms.send(request, http.getRemoteAddr()));
     }
 
     @PostMapping("/login")

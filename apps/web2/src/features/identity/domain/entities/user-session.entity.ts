@@ -7,6 +7,7 @@ export type UserSession = {
   userId: string
   username: string
   displayName: string
+  profileRequired?: boolean
 }
 
 export function isAuthenticated(session: UserSession | null, nowMs = Date.now()): boolean {
