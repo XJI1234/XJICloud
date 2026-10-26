@@ -26,6 +26,28 @@ public class UserAccount {
     @Column(nullable = false, length = 128)
     private String displayName;
 
+    @Column(unique = true, length = 11)
+    private String phone;
+
+    @Column(length = 254)
+    private String email;
+
+    @Column(length = 200)
+    private String organization;
+
+    private Instant profileCompletedAt;
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getOrganization() { return organization; }
+    public void setOrganization(String organization) { this.organization = organization; }
+    public Instant getProfileCompletedAt() { return profileCompletedAt; }
+    public void setProfileCompletedAt(Instant value) { profileCompletedAt = value; }
+
+    public boolean isProfileRequired() { return phone != null && profileCompletedAt == null; }
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

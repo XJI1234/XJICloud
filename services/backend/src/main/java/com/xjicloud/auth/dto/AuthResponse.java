@@ -8,5 +8,6 @@ public record AuthResponse(
         long expiresInMs,
         UUID userId,
         String username,
-        String displayName
+        String displayName,
+        boolean profileRequired
 ) {}

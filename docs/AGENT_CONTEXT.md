@@ -116,6 +116,14 @@ Worker 注册额外需要请求头：`X-Worker-Secret`，与 `xjicloud.worker.sh
 
 用户 JWT 有效期 **7 天**。过期后前端清会话并回到登录页。最近项目按账号存在浏览器本地，登出不清空。
 
+### 3.1 手机号注册（2026-10-21）
+
+web2 新注册改为「大陆手机号 → 图形验证码 → 阿里云短信验证码 → 设置密码 → 自动登录 → 完善昵称/邮箱/单位」。旧用户名/密码登录保留，不自动把旧用户名认定为已验证手机号。auth/sms 使用官方 Java SDK、独立配置与 Redis HMAC 验证码状态；默认 SMS_ENABLED=false，缺真实配置时拒绝发送和注册。2026-10-25 新增 SMS_PROVIDER=aliyun-pnvs：个人开发者免企业资质的短信认证 SendSmsVerifyCode，使用预置签名/模板和平台生成的验证码，Redis本地校验；aliyun-sms 保留原 SendSms 接法。资源包不互通，详见 SMS_PERSONAL_SETUP.md。
+
+新增 POST /api/v1/auth/registration-sms；POST /api/v1/auth/register 改为 phone/password/smsChallengeId/smsCode，不能使用旧用户名表单绕过。会话新增 profileRequired；GET/PUT /api/v1/account 仅 ROLE_USER 访问本人资料。新增手机号账号未完成资料前，JwtAuthenticationFilter 拒绝业务 API，旧账号不受影响。
+
+users 增加可空唯一 phone、email、organization、profile_completed_at。生产 validate 模式须先执行 deploy/migrations/20261021_phone_registration.sql。验证码5分钟、5次错误、单次消费；手机号/IP/全局原子限流。密钥、签名、模板与真实短信验收见 [PHONE_REGISTRATION.md](./PHONE_REGISTRATION.md)，不可向前端注入或入库。
+
 ---
 
 ## 4. 训练流水线（图片 → 模型）
