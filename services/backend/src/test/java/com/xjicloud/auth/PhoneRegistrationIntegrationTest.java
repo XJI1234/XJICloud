@@ -6,6 +6,8 @@ import com.xjicloud.auth.dto.SendRegistrationSmsRequest;
 import com.xjicloud.auth.sms.RegistrationSmsService;
 import com.xjicloud.auth.sms.SmsProperties;
 import com.xjicloud.auth.sms.SmsSender;
+import com.xjicloud.auth.fusion.FusionAuthProvider;
+import com.xjicloud.auth.fusion.FusionAuthProperties;
 import com.xjicloud.common.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -47,6 +49,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "xjicloud.sms.access-key-secret=test-only",
         "xjicloud.sms.sign-name=test-only",
         "xjicloud.sms.template-code=test-only"
+        ,"xjicloud.fusion-auth.enabled=true"
+        ,"xjicloud.fusion-auth.scheme-code=test-only"
+        ,"xjicloud.fusion-auth.package-sign=0123456789abcdef0123456789abcdef"
 })
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "SMS_TEST_REDIS_PORT", matches = "[0-9]+")
@@ -69,12 +74,20 @@ class PhoneRegistrationIntegrationTest {
     @Autowired JwtService jwt;
     @Autowired SmsProperties properties;
     @MockBean SmsSender sender;
+    @MockBean FusionAuthProvider fusionProvider;
+    @Autowired FusionAuthProperties fusionProperties;
     private final Map<String, String> delivered = new ConcurrentHashMap<>();
 
     @BeforeEach
     void prepare() {
         Set<String> keys = redis.keys("xjicloud:registration-sms:*");
         if (keys != null && !keys.isEmpty()) redis.delete(keys);
+        keys = redis.keys("xjicloud:fusion-auth:*");
+        if (keys != null && !keys.isEmpty()) redis.delete(keys);
+        fusionProperties.setEnabled(true);
+        fusionProperties.setDailyLimit(1000);
+        when(fusionProvider.issueAuthToken()).thenReturn("sdk-auth-token");
+        when(fusionProvider.verifyPhone(anyString())).thenReturn("13800138990");
         users.deleteAll();
         properties.setEnabled(true);
         properties.setDailyLimit(1000);
@@ -314,5 +327,140 @@ class PhoneRegistrationIntegrationTest {
         mvc.perform(post("/api/v1/auth/login").contentType("application/json")
                 .content("{\"username\":\"legacy\",\"password\":\"oldpass\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.profileRequired").value(false));
+    }
+
+    private String fusionInit() throws Exception {
+        String body = mvc.perform(post("/api/v1/auth/fusion/init"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.authToken").value("sdk-auth-token"))
+                .andExpect(jsonPath("$.data.expiresInSeconds").value(900))
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(body).path("data").path("challengeId").asText();
+    }
+
+    private JsonNode fusionLogin(String challenge, String token) throws Exception {
+        String body = mvc.perform(post("/api/v1/auth/fusion/login").contentType("application/json")
+                .content(json.writeValueAsString(Map.of("challengeId", challenge, "verifyToken", token))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return json.readTree(body).path("data");
+    }
+
+    @Test
+    void fusionCreatesAccountWithoutSmsAndRequiresProfileThenReusesItsId() throws Exception {
+        var account = fusionLogin(fusionInit(), "verified-new-account-token");
+        assertTrue(account.path("profileRequired").asBoolean());
+        String id = account.path("userId").asText();
+        String token = account.path("accessToken").asText();
+        mvc.perform(get("/api/v1/projects").servletPath("/api/v1/projects").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/v1/account").header("Authorization", "Bearer " + token).contentType("application/json")
+                .content("{\"displayName\":\"Fusion\",\"email\":\"fusion@example.com\",\"organization\":\"Lab\"}"))
+                .andExpect(status().isOk());
+        var again = fusionLogin(fusionInit(), "verified-existing-account-token");
+        assertEquals(id, again.path("userId").asText());
+        assertFalse(again.path("profileRequired").asBoolean());
+        assertEquals(1, users.count());
+        verifyNoInteractions(sender);
+        assertFalse(passwords.matches("13800138990", users.findById(UUID.fromString(id)).orElseThrow().getPasswordHash()));
+    }
+
+    @Test
+    void fusionReusesSmsUserAndPreservesPasswordAndProfile() throws Exception {
+        var original = register("13800138990");
+        var authenticated = fusionLogin(fusionInit(), "same-phone-token");
+        assertEquals(original.path("userId").asText(), authenticated.path("userId").asText());
+        assertEquals(1, users.count());
+        assertTrue(passwords.matches("Password123!", users.findById(UUID.fromString(original.path("userId").asText()))
+                .orElseThrow().getPasswordHash()));
+    }
+
+    @Test
+    void fusionRejectsMissingExpiredOrReplayedChallengesAndTokens() throws Exception {
+        String challenge = fusionInit();
+        fusionLogin(challenge, "single-use-token");
+        mvc.perform(post("/api/v1/auth/fusion/login").contentType("application/json")
+                .content(json.writeValueAsString(Map.of("challengeId", challenge, "verifyToken", "other-token"))))
+                .andExpect(status().isUnauthorized());
+        String fresh = fusionInit();
+        mvc.perform(post("/api/v1/auth/fusion/login").contentType("application/json")
+                .content(json.writeValueAsString(Map.of("challengeId", fresh, "verifyToken", "single-use-token"))))
+                .andExpect(status().isUnauthorized());
+        String expired = fusionInit();
+        redis.delete("xjicloud:fusion-auth:challenge:" + expired);
+        mvc.perform(post("/api/v1/auth/fusion/login").contentType("application/json")
+                .content(json.writeValueAsString(Map.of("challengeId", expired, "verifyToken", "expired-token"))))
+                .andExpect(status().isUnauthorized());
+        verify(fusionProvider, times(1)).verifyPhone(anyString());
+    }
+
+    @Test
+    void fusionDoesNotBindUnverifiedLegacyUsernameOrTrustCallerPhone() throws Exception {
+        UserAccount legacy = new UserAccount();
+        legacy.setUsername("13800138990");
+        legacy.setDisplayName("Legacy");
+        legacy.setPasswordHash(passwords.encode("oldpass"));
+        users.saveAndFlush(legacy);
+        String challenge = fusionInit();
+        mvc.perform(post("/api/v1/auth/fusion/login").contentType("application/json")
+                .content(json.writeValueAsString(Map.of("challengeId", challenge, "verifyToken", "legacy-collision",
+                        "phone", "13800138000"))))
+                .andExpect(status().isConflict());
+        assertNull(users.findByUsername("13800138990").orElseThrow().getPhone());
+        assertEquals(1, users.count());
+    }
+
+    @Test
+    void fusionDisabledProviderFailureAndQuotaFailClosed() throws Exception {
+        fusionProperties.setEnabled(false);
+        mvc.perform(post("/api/v1/auth/fusion/init")).andExpect(status().isServiceUnavailable());
+        verifyNoInteractions(fusionProvider);
+        fusionProperties.setEnabled(true);
+        when(fusionProvider.verifyPhone(anyString())).thenThrow(new BusinessException("认证暂不可用", HttpStatus.SERVICE_UNAVAILABLE));
+        String challenge = fusionInit();
+        mvc.perform(post("/api/v1/auth/fusion/login").contentType("application/json")
+                .content(json.writeValueAsString(Map.of("challengeId", challenge, "verifyToken", "provider-down"))))
+                .andExpect(status().isServiceUnavailable());
+        assertEquals(0, users.count());
+        fusionProperties.setDailyLimit(1);
+        mvc.perform(post("/api/v1/auth/fusion/init")).andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void concurrentFusionTokenExchangeCreatesAtMostOneUserAndConsumesOnce() throws Exception {
+        String challenge = fusionInit();
+        ExecutorService pool = Executors.newFixedThreadPool(6);
+        try {
+            List<Callable<Integer>> work = new ArrayList<>();
+            for (int i = 0; i < 6; i++) work.add(() -> mvc.perform(post("/api/v1/auth/fusion/login")
+                    .contentType("application/json").content(json.writeValueAsString(Map.of(
+                            "challengeId", challenge, "verifyToken", "concurrent-same-token"))))
+                    .andReturn().getResponse().getStatus());
+            int successes = 0;
+            for (Future<Integer> result : pool.invokeAll(work)) {
+                int status = result.get();
+                if (status == 200) successes++;
+                else assertEquals(401, status);
+            }
+            assertEquals(1, successes);
+            assertEquals(1, users.count());
+            verify(fusionProvider, times(1)).verifyPhone("concurrent-same-token");
+        } finally { pool.shutdownNow(); }
+    }
+
+    @Test
+    void fusionRejectsInvalidPayloadAndDoesNotExposeTokenInRedis() throws Exception {
+        mvc.perform(post("/api/v1/auth/fusion/login").contentType("application/json").content("{}"))
+                .andExpect(status().isBadRequest());
+        String challenge = fusionInit();
+        fusionLogin(challenge, "private-verification-token");
+        Set<String> keys = redis.keys("xjicloud:fusion-auth:*");
+        assertNotNull(keys);
+        for (String key : keys) {
+            assertFalse(key.contains("private-verification-token"));
+            assertTrue(redis.getExpire(key) > 0);
+            String value = redis.opsForValue().get(key);
+            assertNotEquals("private-verification-token", value);
+            assertNotEquals("sdk-auth-token", value);
+            assertNotEquals("13800138990", value);
+        }
     }
 }

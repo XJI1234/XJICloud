@@ -117,6 +117,32 @@ public class AuthService {
                 user.getEmail(), user.getOrganization(), user.isProfileRequired());
     }
 
+    /** Only the server-side fusion verifier may supply this verified identity. */
+    @Transactional
+    public AuthResponse loginWithVerifiedPhone(String phone) {
+        if (phone == null || !phone.matches("1[3-9][0-9]{9}")) {
+            throw new BusinessException("本机号码认证失败，请使用短信验证", HttpStatus.UNAUTHORIZED);
+        }
+        var existing = userAccountRepository.findByPhone(phone);
+        if (existing.isPresent()) return buildAuthResponse(existing.get());
+        // A legacy numeric username is not evidence that its owner verified this phone.
+        if (userAccountRepository.existsByUsername(phone)) {
+            throw new BusinessException("该号码与历史账号冲突，请使用密码登录或联系管理员", HttpStatus.CONFLICT);
+        }
+        UserAccount user = new UserAccount();
+        user.setUsername(phone);
+        user.setPhone(phone);
+        user.setDisplayName("用户" + phone.substring(7));
+        user.setPasswordHash(passwordEncoder.encode(java.util.UUID.randomUUID().toString() + java.util.UUID.randomUUID()));
+        try {
+            userAccountRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException ex) {
+            // A concurrent SMS/fusion registration may have won the unique phone index.
+            throw new BusinessException("该号码正在登录，请重新认证", HttpStatus.CONFLICT);
+        }
+        return buildAuthResponse(user);
+    }
+
     @Transactional
     public AccountProfile updateProfile(UserAccount principal, UpdateProfileRequest request) {
         UserAccount user = userAccountRepository.findById(requireCurrentUser(principal).getId())

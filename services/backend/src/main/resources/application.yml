@@ -22,6 +22,13 @@ server:
     max-swallow-size: -1
 
 xjicloud:
+  fusion-auth:
+    enabled: ${FUSION_AUTH_ENABLED:false}
+    scheme-code: ${FUSION_AUTH_SCHEME_CODE:}
+    template-id: '100001'
+    package-name: ${FUSION_AUTH_PACKAGE_NAME:com.xjicloud.mobile}
+    package-sign: ${FUSION_AUTH_PACKAGE_SIGN:}
+    daily-limit: ${FUSION_AUTH_DAILY_LIMIT:1000}
   sms:
     enabled: ${SMS_ENABLED:false}
     provider: ${SMS_PROVIDER:aliyun-pnvs}
