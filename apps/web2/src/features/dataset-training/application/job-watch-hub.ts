@@ -1,9 +1,10 @@
 import type { JobEventPort } from '../domain/repositories/job-event.port'
 import type { TrainingJobRepository } from '../domain/repositories/training-job.repository'
-import type { JobProgressEvent, TrainingJob } from '../domain/entities/training-job.entity'
+import type { TrainingJob } from '../domain/entities/training-job.entity'
 import { applyJobProgress, isTerminalJob, upsertJob } from '../domain/services/job-policy.service'
 
 export type JobWatchHub = {
+  connectionFailed: (jobId: string) => boolean
   jobs: () => TrainingJob[]
   replaceAll: (jobs: TrainingJob[]) => void
   upsert: (job: TrainingJob) => void
@@ -19,7 +20,10 @@ export function createJobWatchHub(deps: {
   onJobsChanged?: (jobs: TrainingJob[]) => void
 }): JobWatchHub {
   let items: TrainingJob[] = []
-  const subscriptions = new Map<string, () => void>()
+  type Watch = { unsubscribe?: () => void; timer?: ReturnType<typeof setTimeout>; attempts: number }
+  const subscriptions = new Map<string, Watch>()
+  const failures = new Set<string>()
+  let epoch = 0
   const listeners = new Set<() => void>()
 
   function emit() {
@@ -33,30 +37,63 @@ export function createJobWatchHub(deps: {
   }
 
   function stop(jobId: string) {
-    subscriptions.get(jobId)?.()
+    const owner = subscriptions.get(jobId)
     subscriptions.delete(jobId)
+    owner?.unsubscribe?.()
+    clearTimeout(owner?.timer)
+    failures.delete(jobId)
   }
 
-  function applyEvent(event: JobProgressEvent) {
-    const current = items.find((item) => item.id === event.jobId)
-    if (!current) {
-      return
-    }
-    items = upsertJob(items, applyJobProgress(current, event))
-    emit()
-    if (isTerminalJob(event.status)) {
-      void deps.jobs.getById(event.jobId).then(([error, job]) => {
-        if (!error && job) {
+  function connect(jobId: string, owner: Watch) {
+    const current = () => subscriptions.get(jobId) === owner
+    const generation = epoch
+    owner.unsubscribe = deps.events.subscribe(jobId, event => {
+      if (!current() || generation !== epoch) return
+      const job = items.find(item => item.id === event.jobId)
+      if (!job) return
+      failures.delete(jobId)
+      items = upsertJob(items, applyJobProgress(job, event))
+      emit()
+      if (isTerminalJob(event.status)) {
+        owner.unsubscribe?.()
+        clearTimeout(owner.timer)
+        void deps.jobs.getById(jobId).then(([error, snapshot]) => {
+          if (current() && generation === epoch) {
+            if (!error && snapshot) upsert(snapshot)
+            stop(jobId)
+          }
+        })
+      }
+    }, error => {
+      if (!current() || generation !== epoch) return
+      owner.unsubscribe?.()
+      failures.add(jobId)
+      emit()
+      if (error?.code === 'AUTH_UNAUTHORIZED' || owner.attempts >= 3) {
+        subscriptions.delete(jobId)
+        return
+      }
+      owner.timer = setTimeout(async () => {
+        if (!current()) return
+        const [snapshotError, job] = await deps.jobs.getById(jobId)
+        if (!current() || generation !== epoch) return
+        if (!snapshotError && job) {
+          failures.delete(jobId)
           upsert(job)
+          if (isTerminalJob(job.status)) { stop(jobId); emit(); return }
         }
-      })
-      stop(event.jobId)
-    }
+        connect(jobId, owner)
+      }, 1000 * 2 ** owner.attempts++)
+    })
   }
 
   return {
+    connectionFailed: jobId => failures.has(jobId),
     jobs: () => items,
     replaceAll(next) {
+      for (const id of subscriptions.keys()) {
+        if (!next.some(job => job.id === id && !isTerminalJob(job.status))) stop(id)
+      }
       items = next
       emit()
     },
@@ -65,8 +102,10 @@ export function createJobWatchHub(deps: {
       if (subscriptions.has(jobId)) {
         return
       }
-      const unsubscribe = deps.events.subscribe(jobId, applyEvent)
-      subscriptions.set(jobId, unsubscribe)
+      const owner: Watch = { attempts: 0 }
+      failures.delete(jobId)
+      subscriptions.set(jobId, owner)
+      connect(jobId, owner)
     },
     stop,
     subscribe(listener) {
@@ -76,10 +115,9 @@ export function createJobWatchHub(deps: {
       }
     },
     clear() {
-      for (const unsubscribe of subscriptions.values()) {
-        unsubscribe()
-      }
-      subscriptions.clear()
+      epoch++
+      for (const id of subscriptions.keys()) stop(id)
+      failures.clear()
       items = []
       emit()
     },

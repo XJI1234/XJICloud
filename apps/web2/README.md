@@ -119,12 +119,22 @@ apps/web2/src/
 
 ## 测试与 CI
 
-- `src/shared/architecture.spec.ts`：domain 不得 import vue / fetch / infrastructure；composable 不得 import mapper / Dto
-- `src/shared/parity.spec.ts`：六个用户能力各有一个用例模块
+- `src/shared/architecture.spec.ts`：用 TS AST / Vue SFC script 检查 domain、application、presentation 的依赖与组合根边界，覆盖动态 import / re-export / import type；合法和违规 fixtures 验证门禁有效
+- `src/shared/parity.spec.ts`：六个用户能力用例模块的文件存在烟测，不代替行为测试
 - 领域与用例单测与实现同目录 `*.spec.ts`
 - GitHub Actions 跑 `pnpm --filter @xjicloud/web2 test` 与 `build`
 
 Vitest 使用独立的 `vitest.config.ts`（不要并进 `vite.config.ts`，插件类型会冲突）。
+
+## 异步操作与本机缓存
+
+- Editor 覆盖身份只来自成功导入的场景；下载候选失败不切换覆盖目标，iframe 替换失败则禁止保存。替换/离开先取得 dirty 许可；语言切换保留场景，下次主动打开时应用新语言。
+- 上传属于当前页面、项目及工作区。切 Tab、离页或工作区重置会取消传输并忽略迟到回调；显式取消按钮可中断等待。取消不能撤销服务器已经完成的 complete，重新进入以服务器列表为准。
+- SSE 关闭/错误经 port 上报，任务 hub 有限退避重连并先回补快照，耗尽后可手动重试；clear/stop 后旧结果不能恢复订阅。
+- OPFS 使用 `xjicloud-model-cache-v2/<encoded user>`，匿名关闭，下载捕获账号 owner。每个 namespace 通过 Web Locks 跨 Tab 串行；无锁能力时绕过缓存。旧 shared cache 隐藏保留，不猜测归属迁移或删除。
+- 缓存读取失败走网络，缓存失效失败不歪曲已成功的云端操作；mutation 后阻止回读旧修订。显式缓存管理错误仍返回 Result。
+
+本轮 17 项修复、验证层次与未完成外部验收见 [交付报告](tasks/2026-10-25-web2-fixes.md)。
 
 ---
 

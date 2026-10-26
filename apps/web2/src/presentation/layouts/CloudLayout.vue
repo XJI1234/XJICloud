@@ -67,14 +67,10 @@ function openSettings() {
 
 async function logout() {
   userModalVisible.value = false
-  auth.logout()
-  await router.replace({ name: 'login' })
-}
-
-function onDocumentKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    userModalVisible.value = false
-    langModalVisible.value = false
+  const failure = await router.replace({ name: 'login', query: { logout: '1' } })
+  if (!failure) {
+    auth.logout()
+    await router.replace({ name: 'login' })
   }
 }
 
@@ -86,12 +82,10 @@ onMounted(() => {
   unsubscribeWorkspace = container.workspace.subscribe(() => {
     activeProjectId.value = container.workspace.getActiveProjectId()
   })
-  document.addEventListener('keydown', onDocumentKeydown)
 })
 
 onBeforeUnmount(() => {
   unsubscribeWorkspace?.()
-  document.removeEventListener('keydown', onDocumentKeydown)
 })
 
 const fillMain = computed(() => route.name === 'layer' || route.name === 'supersplat')

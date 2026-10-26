@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, ref, watch, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useModalFocus } from '@/presentation/composables/useModalFocus'
 import AppButton from '@/presentation/components/AppButton.vue'
 import UploadProgressBar from '@/presentation/components/UploadProgressBar.vue'
 import WaitActivityMark from '@/presentation/components/WaitActivityMark.vue'
@@ -16,17 +17,20 @@ const props = withDefaults(
     speed?: string
     complete?: boolean
     awaitConfirm?: boolean
+    cancellable?: boolean
   }>(),
   {
     percent: 0,
     speed: '',
     complete: false,
     awaitConfirm: false,
+    cancellable: false,
   },
 )
 
 const emit = defineEmits<{
   dismiss: []
+  cancel: []
 }>()
 
 const { t } = useI18n()
@@ -39,30 +43,21 @@ function tryDismiss() {
   }
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && props.visible && props.complete) {
-    emit('dismiss')
-  }
+function tryCancel() {
+  if (props.complete) emit('dismiss')
+  else if (props.cancellable) emit('cancel')
 }
 
-watch(
-  () => props.visible,
-  async (visible) => {
-    if (visible) {
-      document.addEventListener('keydown', onKeydown)
-      await nextTick()
-      if (panelRef.value) {
-        materializeIn(panelRef.value)
-      }
-    } else {
-      document.removeEventListener('keydown', onKeydown)
-    }
-  },
-)
+const titleId = useId()
+useModalFocus(() => props.visible, panelRef, tryCancel)
+watch(() => props.visible, async (visible, _old, onCleanup) => {
+  let cancelled = false
+  onCleanup(() => { cancelled = true })
+  if (!visible) return
+  await nextTick()
+  if (!cancelled && panelRef.value) materializeIn(panelRef.value)
+}, { immediate: true })
 
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKeydown)
-})
 </script>
 
 <template>
@@ -79,18 +74,19 @@ onBeforeUnmount(() => {
           class="wait-panel"
           :class="{ 'wait-panel--busy': phase === 'busy' }"
           role="dialog"
+          tabindex="-1"
           aria-modal="true"
           :aria-busy="!complete"
-          :aria-labelledby="'wait-overlay-title'"
+          :aria-labelledby="titleId"
           @click.stop
         >
           <div class="wait-panel__body">
             <WaitActivityMark v-if="phase === 'busy'" />
-            <h2 id="wait-overlay-title" class="wait-panel__title">{{ title }}</h2>
+            <h2 :id="titleId" class="wait-panel__title">{{ title }}</h2>
             <UploadProgressBar v-if="showMeter()" :percent="percent" :speed="speed" />
           </div>
-          <footer v-if="awaitConfirm" class="wait-panel__footer">
-            <AppButton :disabled="!complete" @click="tryDismiss">{{ t('common.cancel') }}</AppButton>
+          <footer v-if="awaitConfirm || cancellable" class="wait-panel__footer">
+            <AppButton :disabled="!complete && !cancellable" @click="tryCancel">{{ t('common.cancel') }}</AppButton>
             <AppButton variant="primary" :disabled="!complete" @click="tryDismiss">
               {{ t('common.confirm') }}
             </AppButton>

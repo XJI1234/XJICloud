@@ -14,7 +14,8 @@ const requiredUseCases = [
   'features/editor/application/use-cases/editor.usecase.ts',
 ]
 
-describe('use case parity with apps/web capabilities', () => {
+// File-presence smoke test only; behavior is verified by each use-case/component suite.
+describe('use case capability module smoke test', () => {
   it('keeps a use case module for every original user capability', () => {
     for (const relative of requiredUseCases) {
       expect(existsSync(path.join(root, relative)), relative).toBe(true)

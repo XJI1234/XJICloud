@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppButton from '@/presentation/components/AppButton.vue'
@@ -25,6 +25,9 @@ const newProjectName = ref('')
 const newProjectDescription = ref('')
 const uploadInputRef = ref<HTMLInputElement | null>(null)
 const pending = ref(false)
+let uploadOwner: AbortController | null = null
+function cancelUpload() { uploadOwner?.abort(); pending.value = false; wait.hide() }
+onBeforeUnmount(cancelUpload)
 const uploadProgress = ref(0)
 const { speedLabel, noteLoaded, resetSpeed } = useTransferSpeed()
 const wait = useWaitSession()
@@ -33,6 +36,13 @@ const editingProjectId = ref<string | null>(null)
 const editName = ref('')
 const editDescription = ref('')
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
+watch(activeProjectId, cancelUpload, { flush: 'sync' })
+const stopWorkspace = workspace.subscribe(() => {
+  const next = workspace.activeProjectId()
+  if (next !== activeProjectId.value) cancelUpload()
+  activeProjectId.value = next
+})
+onBeforeUnmount(stopWorkspace)
 
 const activeProject = computed(() => projects.value.find((project) => project.id === activeProjectId.value) ?? null)
 
@@ -91,6 +101,9 @@ async function handleUpload(event: Event) {
   if (!file || !activeProjectId.value) {
     return
   }
+  cancelUpload()
+  const owner = new AbortController()
+  uploadOwner = owner
   pending.value = true
   uploadProgress.value = 0
   resetSpeed()
@@ -98,12 +111,16 @@ async function handleUpload(event: Event) {
   const [error] = await models.upload({
     projectId: activeProjectId.value,
     file,
+    signal: owner.signal,
     onProgress: ({ loaded, total }) => {
+      if (owner.signal.aborted) return
       uploadProgress.value = total > 0 ? Math.round((loaded / total) * 100) : 0
       noteLoaded(loaded)
       wait.showProgress(t('wait.uploading'), uploadProgress.value, speedLabel.value, true)
     },
   })
+  if (owner.signal.aborted) return
+  uploadOwner = null
   pending.value = false
   if (!error) {
     uploadProgress.value = 100
@@ -224,6 +241,8 @@ async function saveEdit(projectId: string) {
 
       <input ref="uploadInputRef" class="visually-hidden" type="file" accept=".ply,.spz" @change="handleUpload" />
       <WaitOverlay
+        :cancellable="!waitView.complete"
+        @cancel="cancelUpload()"
         :visible="waitView.visible"
         :phase="waitView.phase"
         :title="waitView.title"

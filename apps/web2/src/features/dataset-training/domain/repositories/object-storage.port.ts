@@ -1,5 +1,5 @@
 export type UploadProgress = (loaded: number, total: number) => void
 
 export interface ObjectStoragePort {
-  put(uploadUrl: string, blob: Blob, contentType: string, onProgress?: UploadProgress): Promise<void>
+  put(uploadUrl: string, blob: Blob, contentType: string, onProgress?: UploadProgress, signal?: AbortSignal): Promise<void>
 }

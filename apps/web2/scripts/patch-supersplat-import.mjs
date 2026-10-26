@@ -45,17 +45,26 @@ const withExportProgressAckLogged =
 const withExportProgressAck =
   'Pk=t=>{window.addEventListener("message",async e=>{const n=e.source;if(!n||!e.data||"object"!=typeof e.data)return;if(e.data.type===Ak){n.postMessage({type:Ak,result:t.invoke("scene.dirty")},e.origin);return}if("supersplat:import-local"===e.data.type&&e.data.fileName&&e.data.buffer){try{await t.invoke("import",[{filename:e.data.fileName,contents:new File([e.data.buffer],e.data.fileName)}]);n.postMessage({type:"supersplat:import-local-done"},e.origin)}catch(s){n.postMessage({type:"supersplat:import-local-error",message:String(s&&s.message||s)},e.origin)}return}if("supersplat:export-ply"===e.data.type){n.postMessage({type:"supersplat:export-ply-progress",loaded:0},e.origin);try{await new Promise(v=>setTimeout(v,0));const s=e.data.fileName||"export.ply",f=String(s).toLowerCase(),i=!!e.data.compressed||f.endsWith(".compressed.ply"),a=f.endsWith(".spz")?"spz":i?"compressedPly":"ply",r={filename:s,splatIdx:"all",serializeSettings:{maxSHBands:3},compressedPly:i,spzVersion:4},o=[];let p=0;const l={seek:async()=>{},write:async u=>{o.push(u);p+=u&&(u.byteLength||u.size||(typeof u==="string"?u.length:0))||0;n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin)},truncate:async()=>{},close:async()=>{},abort:async()=>{}};const h=setInterval(()=>n.postMessage({type:"supersplat:export-ply-progress",loaded:p},e.origin),5e3);try{await t.invoke("scene.write",a,r,l)}finally{clearInterval(h)}const c=await(new Blob(o)).arrayBuffer();n.postMessage({type:"supersplat:export-ply-result",fileName:s,buffer:c},e.origin,[c])}catch(s){n.postMessage({type:"supersplat:export-ply-error",message:String(s&&s.message||s)},e.origin)}}})}'
 
+const withExportSpzVersions = withExportProgressAck.replace('spzVersion:4', 'spzVersion:e.data.spzVersion===3?3:4')
+
 for (const file of files) {
+  // Keep the prebuilt vendor intact; apply the app protocol to generated copies only.
+  if (path.resolve(file) === path.resolve(here, '../../../vendors/supersplat/index.js')) continue
   if (!fs.existsSync(file)) {
     console.log('skip missing', file)
     continue
   }
   let s = fs.readFileSync(file, 'utf8')
-  if (s.includes(withExportProgressAck)) {
-    console.log('already has export-ply let p', file)
+  if (s.includes(withExportSpzVersions)) {
+    console.log('already has SPZ version selection', file)
     continue
   }
-  const next = withExportProgressAck
+  const next = withExportSpzVersions
+  if (s.includes(withExportProgressAck)) {
+    fs.writeFileSync(file, s.replace(withExportProgressAck, next))
+    console.log('patched SPZ version selection', file)
+    continue
+  }
   if (s.includes(withExportProgressAckLogged)) {
     s = s.replace(withExportProgressAckLogged, next)
     fs.writeFileSync(file, s)

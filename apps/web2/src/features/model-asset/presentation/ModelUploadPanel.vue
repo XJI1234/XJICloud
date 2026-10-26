@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { useProjectWorkspace } from '@/features/project/presentation/composables/useProjectWorkspace'
 import AppButton from '@/presentation/components/AppButton.vue'
 import WaitOverlay from '@/presentation/components/WaitOverlay.vue'
 import { useWaitSession } from '@/presentation/composables/useWaitSession'
@@ -32,6 +33,11 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const router = useRouter()
+const workspace = useProjectWorkspace()
+const stopWorkspace = workspace.subscribe(() => {
+  if (workspace.activeProjectId() !== props.projectId) { inflight.value.forEach(item => item.abort.abort()) }
+})
+onBeforeUnmount(stopWorkspace)
 const modelsApi = useModelAssets()
 const { formatDateTime } = useFormatDateTime()
 const wait = useWaitSession()
@@ -44,11 +50,15 @@ const downloadById = ref<Record<string, true>>({})
 const loading = ref(false)
 const listError = ref('')
 const actionError = ref('')
+let disposed = false
+let listEpoch = 0
 
 const sortedModels = computed(() => sortModelsByUpdatedAtDesc(models.value))
 const hasRows = computed(() => inflight.value.length > 0 || sortedModels.value.length > 0)
 
 async function loadModels() {
+  const generation = ++listEpoch
+  const projectId = props.projectId
   if (!props.projectId) {
     models.value = []
     return
@@ -56,6 +66,7 @@ async function loadModels() {
   loading.value = true
   listError.value = ''
   const [error, data] = await modelsApi.list(props.projectId)
+  if (disposed || generation !== listEpoch || projectId !== props.projectId) return
   loading.value = false
   if (error) {
     listError.value = formatDomainError(t, error)
@@ -108,6 +119,7 @@ async function handleUpload(event: Event) {
     file,
     signal: row.abort.signal,
     onProgress: ({ loaded, total }) => {
+      if (disposed || row.abort.signal.aborted) return
       const percent = total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0
       const rate = row.tracker.push(loaded, Date.now())
       const speed = rate != null ? formatTransferSpeed(rate) : row.speed
@@ -119,6 +131,7 @@ async function handleUpload(event: Event) {
     },
   })
 
+  if (disposed) return
   if (row.abort.signal.aborted) {
     inflight.value = inflight.value.filter((item) => item.localId !== localId)
     wait.hide()
@@ -205,6 +218,12 @@ watch(
   },
 )
 
+onBeforeUnmount(() => {
+  disposed = true
+  listEpoch++
+  inflight.value.forEach(item => item.abort.abort())
+})
+
 onMounted(() => {
   void loadModels()
 })
@@ -272,6 +291,8 @@ onMounted(() => {
     <p v-if="actionError" class="upload-error">{{ actionError }}</p>
     <input ref="uploadInputRef" class="visually-hidden" type="file" accept=".ply,.spz" @change="handleUpload" />
     <WaitOverlay
+      :cancellable="!waitView.complete"
+      @cancel="inflight.forEach(cancelUpload)"
       :visible="waitView.visible"
       :phase="waitView.phase"
       :title="waitView.title"

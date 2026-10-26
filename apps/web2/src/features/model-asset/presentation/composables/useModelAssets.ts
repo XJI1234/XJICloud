@@ -28,7 +28,7 @@ export function useModelAssets() {
     downloadBytes: (
       modelId: string,
       onProgress?: (loaded: number, total: number) => void,
-      options?: { cacheBust?: string | number; revision?: ModelCacheRevision },
+      options?: { cacheBust?: string | number; revision?: ModelCacheRevision; signal?: AbortSignal },
     ) => container.models.downloadBytes(modelId, onProgress, options),
     downloadToDisk: (model: ModelAsset, onProgress?: (loaded: number, total: number) => void) =>
       downloadModelToDiskUseCase({ models: container.models }, model, onProgress),
@@ -37,7 +37,8 @@ export function useModelAssets() {
       versionId: string,
       onProgress?: (loaded: number, total: number) => void,
       revision?: ModelCacheRevision,
-    ) => downloadModelVersionBytesUseCase({ models: container.models }, modelId, versionId, onProgress, revision),
+      signal?: AbortSignal,
+    ) => downloadModelVersionBytesUseCase({ models: container.models }, modelId, versionId, onProgress, revision, signal),
     createDownloadToken: (modelId: string) => container.models.createDownloadToken(modelId),
     listVersions: (modelId: string) => listModelVersionsUseCase({ models: container.models }, modelId),
     restoreVersion: (modelId: string, versionId: string) =>

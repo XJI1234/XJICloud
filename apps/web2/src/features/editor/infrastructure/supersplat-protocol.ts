@@ -48,19 +48,19 @@ export type ImportLocalErrorMessage = {
 }
 
 export function isDirtyResponse(data: unknown): data is DirtyResponse {
-  return Boolean(data && typeof data === 'object' && (data as DirtyResponse).type === IS_SCENE_DIRTY)
+  return Boolean(data && typeof data === 'object' && (data as DirtyResponse).type === IS_SCENE_DIRTY && typeof (data as DirtyResponse).result === 'boolean')
 }
 
 export function isExportProgress(data: unknown): data is ExportPlyProgressMessage {
-  return Boolean(data && typeof data === 'object' && (data as ExportPlyProgressMessage).type === EXPORT_PLY_PROGRESS)
+  return Boolean(data && typeof data === 'object' && (data as ExportPlyProgressMessage).type === EXPORT_PLY_PROGRESS && Number.isFinite((data as ExportPlyProgressMessage).loaded) && (data as ExportPlyProgressMessage).loaded >= 0)
 }
 
 export function isExportResult(data: unknown): data is ExportPlyResultMessage {
-  return Boolean(data && typeof data === 'object' && (data as ExportPlyResultMessage).type === EXPORT_PLY_RESULT)
+  return Boolean(data && typeof data === 'object' && (data as ExportPlyResultMessage).type === EXPORT_PLY_RESULT && (data as ExportPlyResultMessage).buffer instanceof ArrayBuffer && typeof (data as ExportPlyResultMessage).fileName === 'string')
 }
 
 export function isExportError(data: unknown): data is ExportPlyErrorMessage {
-  return Boolean(data && typeof data === 'object' && (data as ExportPlyErrorMessage).type === EXPORT_PLY_ERROR)
+  return Boolean(data && typeof data === 'object' && (data as ExportPlyErrorMessage).type === EXPORT_PLY_ERROR && typeof (data as ExportPlyErrorMessage).message === 'string')
 }
 
 export function isImportLocalDone(data: unknown): data is ImportLocalDoneMessage {
@@ -68,7 +68,7 @@ export function isImportLocalDone(data: unknown): data is ImportLocalDoneMessage
 }
 
 export function isImportLocalError(data: unknown): data is ImportLocalErrorMessage {
-  return Boolean(data && typeof data === 'object' && (data as ImportLocalErrorMessage).type === IMPORT_LOCAL_ERROR)
+  return Boolean(data && typeof data === 'object' && (data as ImportLocalErrorMessage).type === IMPORT_LOCAL_ERROR && typeof (data as ImportLocalErrorMessage).message === 'string')
 }
 
 export function buildSuperSplatSrc(options: {

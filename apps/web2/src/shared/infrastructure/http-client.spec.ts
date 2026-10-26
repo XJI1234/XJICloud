@@ -3,6 +3,17 @@ import { ApiError } from '@xjicloud/shared'
 import { createHttpClient, mapHttpError } from './http-client'
 
 describe('http client', () => {
+  it('does not invalidate a new session when an old 401 arrives', async () => {
+    let token = 'old', notified = 0
+    let finish!: (value: Response) => void
+    const pending = new Promise<Response>(resolve => { finish = resolve })
+    const http = createHttpClient({ fetchImpl: () => pending, tokenProvider: { getToken: () => token }, unauthorized: { notifyUnauthorized: () => { notified++ } } })
+    const response = http.request('/secure')
+    token = 'new'
+    finish(new Response(JSON.stringify({ success: false }), { status: 401 }))
+    await expect(response).rejects.toBeInstanceOf(ApiError)
+    expect(notified).toBe(0)
+  })
   it('attaches bearer token and unwraps ApiResponse', async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
       const headers = new Headers(init?.headers)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppButton from '@/presentation/components/AppButton.vue'
@@ -22,6 +22,10 @@ const errorMessage = ref('')
 const activeProjectId = ref<string | null>(workspace.activeProjectId())
 const activeProject = computed(() => projects.value.find((project) => project.id === activeProjectId.value) ?? null)
 
+const stopWorkspace = workspace.subscribe(() => {
+  activeProjectId.value = workspace.activeProjectId()
+})
+onBeforeUnmount(stopWorkspace)
 onMounted(async () => {
   const [error, data] = await workspace.load()
   if (error) {
