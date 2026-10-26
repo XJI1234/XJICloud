@@ -192,7 +192,7 @@ HTTP 客户端属于 **shared infrastructure**，不是某个 BC 的领域。各
 | Port | `ViewerStoragePort`（列表、字节、config、export） |
 | UI | `LayerViewerView`、`Native3DGSViewer`、`useViewerStorage` |
 
-画布由固定 `@native3dgs/web@0.2.2-preview.3` 与官方 `/vue` composable 提供 WebGPU；SDK 仅在 presentation 引擎边界出现。`ViewerSession` 只管宿主加载 identity、取消、错误映射、相机命令与截图。demo（`:5186`，`demo/native3dgs`）与云页使用同一组件，不复制调试查看器。
+画布由固定 `@native3dgs/web@0.2.2-preview.4` 与官方 `/vue` composable 提供 WebGPU；preview.4 对 SPZ v4 使用有界 Zstd/OPFS 分批解码，并通过可选 `snapshot.decoder` 字段提供批次与内存诊断。SDK 仅在 presentation 引擎边界出现。`ViewerSession` 只管宿主加载 identity、取消、错误映射、相机命令与截图。demo（`:5186`，`demo/native3dgs`）与云页使用同一组件，不复制调试查看器。
 
 只读功能：本机 PLY/SPZ、选择工程模型、取消下载/解码、关闭、固定/自由浏览、适配/重置/Y翻转、缩放、本机 PNG 截图。不提供查看页上传/删除、标注/擦除/修改模型；资产管理和高级编辑仍由各自 BC 负责。云页保留 `?modelId=`，模型字节通过原有带 Bearer 的仓储与 OPFS 缓存取得 File；HTTP 下载新增可选 AbortSignal，旧调用保持兼容。候选失败/取消保留旧场景，新打开或卸载使旧事务失效。
 

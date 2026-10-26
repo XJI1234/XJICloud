@@ -109,8 +109,8 @@ importers:
   apps/web2:
     dependencies:
       '@native3dgs/web':
-        specifier: file:vendor/native3dgs-web-0.2.2-preview.3.tgz
-        version: file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz(vue@3.5.40(typescript@6.0.3))
+        specifier: file:vendor/native3dgs-web-0.2.2-preview.4.tgz
+        version: file:apps/web2/vendor/native3dgs-web-0.2.2-preview.4.tgz(vue@3.5.40(typescript@6.0.3))
       '@phosphor-icons/vue':
         specifier: ^2.2.1
         version: 2.2.1(vue@3.5.40(typescript@6.0.3))
@@ -443,9 +443,9 @@ packages:
       '@emnapi/core': ^2.0.0-alpha.3
       '@emnapi/runtime': ^2.0.0-alpha.3
 
-  '@native3dgs/web@file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz':
-    resolution: {integrity: sha512-eLNY7svFdESryB7mF5onqlgs0Ul7iHWJzHOsX6GZN/a0TP6nehSRSfkOEs4TSEXehpfZ+TYPQxSEF4Sdh/RD/Q==, tarball: file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz}
-    version: 0.2.2-preview.3
+  '@native3dgs/web@file:apps/web2/vendor/native3dgs-web-0.2.2-preview.4.tgz':
+    resolution: {integrity: sha512-ovKSXAG6RQTkwMSReloLYkM6kXgpIkg2LggIXuGfMJA11Gf+mT4v6/zuRsMk/HBvpCAqxV+aXsTg6G+Plvyddw==, tarball: file:apps/web2/vendor/native3dgs-web-0.2.2-preview.4.tgz}
+    version: 0.2.2-preview.4
     engines: {node: '>=24.14.0'}
     peerDependencies:
       react: '>=19 <20'
@@ -1601,7 +1601,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@native3dgs/web@file:apps/web2/vendor/native3dgs-web-0.2.2-preview.3.tgz(vue@3.5.40(typescript@6.0.3))':
+  '@native3dgs/web@file:apps/web2/vendor/native3dgs-web-0.2.2-preview.4.tgz(vue@3.5.40(typescript@6.0.3))':
     optionalDependencies:
       vue: 3.5.40(typescript@6.0.3)
 

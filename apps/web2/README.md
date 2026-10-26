@@ -57,7 +57,7 @@ node apps/web2/scripts/create-viewer-test-models.mjs
 
 入口 `demo/native3dgs` 与云平台复用同一 `Native3DGSViewer`。只提供打开/拖放、取消/关闭、固定/自由浏览、适配/重置/Y 翻转、缩放和本机 PNG 截图，不带模板的诊断面板。
 
-查看器使用 `@native3dgs/web@0.2.2-preview.3`；来源和校验信息见 [vendor/README.md](vendor/README.md)。支持二进制 Graphdeco PLY、基础 SPZ，不支持 ASCII PLY。云文件仍走带 Bearer 的仓储下载与 OPFS 缓存，不使用 SDK 的裸 URL 加载，不迁移存储。旧 viewer-config 未记录坐标系，新引擎不直接套用其相机，而自动取景并提示；不覆盖旧配置。
+查看器使用 `@native3dgs/web@0.2.2-preview.4`；来源和校验信息见 [vendor/README.md](vendor/README.md)。支持二进制 Graphdeco PLY、SPZ v1–v4（v4 使用 SDK 的有界 Zstd/OPFS 分批解码），不支持 ASCII PLY。云文件仍走带 Bearer 的仓储下载与 OPFS 缓存，不使用 SDK 的裸 URL 加载，不迁移存储。旧 viewer-config 未记录坐标系，新引擎不直接套用其相机，而自动取景并提示；不覆盖旧配置。
 
 部署需要 HTTPS（localhost 为开发例外）和可用 WebGPU。保留整个 `gs-assets/`，mjs/Worker 返回 JavaScript MIME、WASM 返回 `application/wasm`，缺文件应返回 404 而不是 SPA HTML。**不要给全站强加 COOP/COEP**：云页 auto 解码可回退单线程，避免影响地图和高级编辑。独立 demo 单独提供隔离头，不代表云页也使用多线程。资源不足/不支持能力会明确提示，不静默降质量。
 
