@@ -20,6 +20,7 @@ export function useProjectWorkspace() {
     remove: (id: string) => deleteProjectUseCase(ws, id),
     open: (id: string) => setActiveProjectUseCase(ws, id),
     activeProjectId: () => container.workspace.getActiveProjectId(),
+    subscribe: (listener: () => void) => container.workspace.subscribe(listener),
     recent: (projects: Parameters<typeof listRecentProjectsUseCase>[0]) =>
       listRecentProjectsUseCase(projects, container.workspace.readRecentEntries()),
   }

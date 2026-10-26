@@ -48,7 +48,7 @@ router.beforeEach((to) => {
   const session = getContainer().session.read()
   const redirect = resolveAuthNavigation({
     isAuthenticated: isAuthenticated(session),
-    isPublicLogin: Boolean(to.meta.public && to.name === 'login'),
+    isPublicLogin: Boolean(to.meta.public && to.name === 'login' && to.query.logout !== '1'),
     requiresAuth: Boolean(to.meta.requiresAuth),
     fullPath: to.fullPath,
   })

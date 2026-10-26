@@ -10,10 +10,18 @@ export type ModelUploadProgress = {
   total: number
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); reject(new DomainError('OPERATION_CANCELLED')) }
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve() }, ms)
+    if (signal?.aborted) abort()
+    else signal?.addEventListener('abort', abort, { once: true })
   })
+}
+
+function retryable(error: DomainError) {
+  return (error.code === 'NETWORK' && (error.status == null || error.status >= 500)) ||
+    (error.code === 'UNKNOWN' && (error.status ?? 0) >= 500)
 }
 
 export async function uploadModelUseCase(
@@ -33,13 +41,14 @@ export async function uploadModelUseCase(
     return err(formatError)
   }
 
-  const [sessionError, created] = await deps.models.createUploadSession(input.projectId, input.file.name, input.file.size)
+  if (input.signal?.aborted) return err(new DomainError('OPERATION_CANCELLED'))
+  const [sessionError, created] = await deps.models.createUploadSession(input.projectId, input.file.name, input.file.size, input.signal)
   if (sessionError || !created) {
-    return err(sessionError ?? new DomainError('UNKNOWN'))
+    return err(input.signal?.aborted ? new DomainError('OPERATION_CANCELLED') : sessionError ?? new DomainError('UNKNOWN'))
   }
 
   let session = created
-  input.onProgress?.({ loaded: session.receivedBytes, total: input.file.size })
+  if (!input.signal?.aborted) input.onProgress?.({ loaded: session.receivedBytes, total: input.file.size })
 
   const abortSession = async () => {
     await deps.models.abortUpload(session.sessionId)
@@ -49,7 +58,7 @@ export async function uploadModelUseCase(
     while (session.receivedBytes < input.file.size) {
       if (input.signal?.aborted) {
         await abortSession()
-        return err(new DomainError('NETWORK'))
+        return err(new DomainError('OPERATION_CANCELLED'))
       }
       const range = nextChunkRange(session.receivedBytes, input.file.size, session.chunkSizeBytes)
       if (!range) {
@@ -60,13 +69,14 @@ export async function uploadModelUseCase(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         if (input.signal?.aborted) {
           await abortSession()
-          return err(new DomainError('NETWORK'))
+          return err(new DomainError('OPERATION_CANCELLED'))
         }
         const [chunkError, chunkResult] = await deps.models.putChunk(
           session.sessionId,
           blob,
           { start: range.start, endInclusive: range.endInclusive, total: input.file.size },
           (loaded) => {
+            if (input.signal?.aborted) return
             const total = input.file.size
             const sent = range.start + loaded
             input.onProgress?.({
@@ -84,8 +94,11 @@ export async function uploadModelUseCase(
           lastError = null
           break
         }
+        if (input.signal?.aborted) throw new DomainError('OPERATION_CANCELLED')
         lastError = chunkError ?? new DomainError('NETWORK')
-        const [refreshError, refreshed] = await deps.models.getUploadSession(session.sessionId)
+        if (!retryable(lastError)) return err(lastError)
+        const [refreshError, refreshed] = await deps.models.getUploadSession(session.sessionId, input.signal)
+        if (input.signal?.aborted) throw new DomainError('OPERATION_CANCELLED')
         if (!refreshError && refreshed) {
           session = refreshed
           if (session.receivedBytes > range.start) {
@@ -93,7 +106,7 @@ export async function uploadModelUseCase(
             break
           }
         }
-        await wait(500 * 2 ** attempt)
+        await wait(500 * 2 ** attempt, input.signal)
       }
       if (lastError) {
         return err(lastError)
@@ -107,25 +120,28 @@ export async function uploadModelUseCase(
 
     if (input.signal?.aborted) {
       await abortSession()
-      return err(new DomainError('NETWORK'))
+      return err(new DomainError('OPERATION_CANCELLED'))
     }
 
     let completeError: DomainError | null = null
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const [error, model] = await deps.models.completeUpload(session.sessionId)
+      if (input.signal?.aborted) throw new DomainError('OPERATION_CANCELLED')
+      const [error, model] = await deps.models.completeUpload(session.sessionId, input.signal)
       if (!error && model) {
         input.onProgress?.({ loaded: input.file.size, total: input.file.size })
         return ok(model)
       }
+      if (input.signal?.aborted) throw new DomainError('OPERATION_CANCELLED')
       completeError = error ?? new DomainError('NETWORK')
-      await wait(500 * 2 ** attempt)
+      if (!retryable(completeError)) return err(completeError)
+      await wait(500 * 2 ** attempt, input.signal)
     }
     return err(completeError ?? new DomainError('NETWORK'))
   } catch (error) {
-    if (session.receivedBytes < input.file.size) {
+    if (input.signal?.aborted || session.receivedBytes < input.file.size) {
       await abortSession()
     }
-    return err(error instanceof DomainError ? error : new DomainError('NETWORK'))
+    return err(input.signal?.aborted ? new DomainError('OPERATION_CANCELLED') : error instanceof DomainError ? error : new DomainError('NETWORK'))
   }
 }
 
@@ -176,11 +192,12 @@ export async function downloadModelVersionBytesUseCase(
   versionId: string,
   onProgress?: (loaded: number, total: number) => void,
   revision?: { updatedAt: string; sizeBytes: number; fileName: string },
+  signal?: AbortSignal,
 ): Promise<Result<ArrayBuffer>> {
   if (!modelId || !versionId || versionId === 'current') {
     return err(new DomainError('UNKNOWN'))
   }
-  return deps.models.downloadVersionBytes(modelId, versionId, onProgress, revision ? { revision } : undefined)
+  return deps.models.downloadVersionBytes(modelId, versionId, onProgress, { revision, signal })
 }
 
 export async function downloadModelToDiskUseCase(

@@ -1,0 +1,168 @@
+{
+  "cycles": [
+    {
+      "safToObservedReadyMs": 18381,
+      "memory": {
+        "pssKiB": 928551,
+        "rssKiB": 1097836
+      },
+      "cycle": 1
+    },
+    {
+      "safToObservedReadyMs": 18189,
+      "memory": {
+        "pssKiB": 975895,
+        "rssKiB": 1145188
+      },
+      "cycle": 2
+    },
+    {
+      "safToObservedReadyMs": 18534,
+      "memory": {
+        "pssKiB": 1004990,
+        "rssKiB": 1174288
+      },
+      "cycle": 3
+    },
+    {
+      "safToObservedReadyMs": 18462,
+      "memory": {
+        "pssKiB": 979827,
+        "rssKiB": 1149132
+      },
+      "cycle": 4
+    },
+    {
+      "safToObservedReadyMs": 18297,
+      "memory": {
+        "pssKiB": 878696,
+        "rssKiB": 1048004
+      },
+      "cycle": 5
+    },
+    {
+      "safToObservedReadyMs": 18514,
+      "memory": {
+        "pssKiB": 1004980,
+        "rssKiB": 1174288
+      },
+      "cycle": 6
+    },
+    {
+      "safToObservedReadyMs": 18282,
+      "memory": {
+        "pssKiB": 979979,
+        "rssKiB": 1149296
+      },
+      "cycle": 7
+    },
+    {
+      "safToObservedReadyMs": 18271,
+      "memory": {
+        "pssKiB": 829544,
+        "rssKiB": 998848
+      },
+      "cycle": 8
+    },
+    {
+      "safToObservedReadyMs": 18499,
+      "memory": {
+        "pssKiB": 1005324,
+        "rssKiB": 1174628
+      },
+      "cycle": 9
+    },
+    {
+      "safToObservedReadyMs": 18314,
+      "memory": {
+        "pssKiB": 930215,
+        "rssKiB": 1099520
+      },
+      "cycle": 10
+    },
+    {
+      "safToObservedReadyMs": 18555,
+      "memory": {
+        "pssKiB": 930199,
+        "rssKiB": 1099508
+      },
+      "cycle": 11
+    },
+    {
+      "safToObservedReadyMs": 18300,
+      "memory": {
+        "pssKiB": 804731,
+        "rssKiB": 974040
+      },
+      "cycle": 12
+    },
+    {
+      "safToObservedReadyMs": 18433,
+      "memory": {
+        "pssKiB": 829572,
+        "rssKiB": 998876
+      },
+      "cycle": 13
+    },
+    {
+      "safToObservedReadyMs": 18324,
+      "memory": {
+        "pssKiB": 880532,
+        "rssKiB": 1049840
+      },
+      "cycle": 14
+    },
+    {
+      "safToObservedReadyMs": 18103,
+      "memory": {
+        "pssKiB": 1005935,
+        "rssKiB": 1175232
+      },
+      "cycle": 15
+    },
+    {
+      "safToObservedReadyMs": 18278,
+      "memory": {
+        "pssKiB": 1031052,
+        "rssKiB": 1200348
+      },
+      "cycle": 16
+    },
+    {
+      "safToObservedReadyMs": 18137,
+      "memory": {
+        "pssKiB": 980799,
+        "rssKiB": 1150096
+      },
+      "cycle": 17
+    },
+    {
+      "safToObservedReadyMs": 18384,
+      "memory": {
+        "pssKiB": 1031552,
+        "rssKiB": 1200848
+      },
+      "cycle": 18
+    },
+    {
+      "safToObservedReadyMs": 18325,
+      "memory": {
+        "pssKiB": 805660,
+        "rssKiB": 974956
+      },
+      "cycle": 19
+    },
+    {
+      "safToObservedReadyMs": 18446,
+      "memory": {
+        "pssKiB": 981536,
+        "rssKiB": 1150836
+      },
+      "cycle": 20
+    }
+  ],
+  "baseline": {
+    "pssKiB": 927242,
+    "rssKiB": 1096520
+  }
+}

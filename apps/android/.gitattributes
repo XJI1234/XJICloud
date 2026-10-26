@@ -1,0 +1,2 @@
+# Verified upstream payloads must preserve the release bytes on every checkout.
+vendor/native3dgs/** -text

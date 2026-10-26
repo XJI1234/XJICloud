@@ -182,6 +182,7 @@ export default {
     uploadFailed: '上传失败',
   },
   training: {
+    connectionLost: '连接中断，正在尝试恢复；可手动重试。',
     eyebrow: '训练任务',
     title: '训练进度',
     refresh: '刷新',
@@ -271,6 +272,7 @@ export default {
     exportFormat: '文件格式',
     formatPly: 'PLY',
     formatSpz: 'SPZ',
+    spzV3: 'v3（兼容性更佳）',
     exportMode: '保存方式',
     overwriteExisting: '覆盖现有模型',
     saveAsNewModel: '另存为新模型',

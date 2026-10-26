@@ -57,8 +57,8 @@ export async function registerUseCase(
 }
 
 export function logoutUseCase(deps: { session: SessionStore; onWorkspaceReset?: () => void }) {
-  deps.session.clear()
   deps.onWorkspaceReset?.()
+  deps.session.clear()
 }
 
 export async function probeNeedCaptchaUseCase(

@@ -7,7 +7,7 @@ export type TokenProvider = {
 }
 
 export type UnauthorizedHandler = {
-  notifyUnauthorized(): void
+  notifyUnauthorized(token?: string | null): void
 }
 
 export type HttpClient = {
@@ -47,8 +47,8 @@ export function createHttpClient(options: {
 
     const response = await fetchImpl(`${baseUrl}${path}`, { ...init, headers })
 
-    if (shouldLogoutOnStatus(response.status, token)) {
-      options.unauthorized.notifyUnauthorized()
+    if (shouldLogoutOnStatus(response.status, token) && token === options.tokenProvider.getToken()) {
+      options.unauthorized.notifyUnauthorized(token)
     }
 
     if (responseType === 'blob') {
@@ -81,8 +81,8 @@ export function createHttpClient(options: {
     }
 
     const response = await fetchImpl(`${baseUrl}${path}`, { headers, cache: 'no-store', signal })
-    if (shouldLogoutOnStatus(response.status, token)) {
-      options.unauthorized.notifyUnauthorized()
+    if (shouldLogoutOnStatus(response.status, token) && token === options.tokenProvider.getToken()) {
+      options.unauthorized.notifyUnauthorized(token)
     }
     if (!response.ok) {
       const message = await response.text()
@@ -153,15 +153,15 @@ export function createHttpClient(options: {
       }
       if (signal) {
         if (signal.aborted) {
-          reject(new DomainError('NETWORK'))
+          reject(new DomainError('OPERATION_CANCELLED'))
           return
         }
         signal.addEventListener('abort', onAbort, { once: true })
       }
       xhr.onload = () => {
         signal?.removeEventListener('abort', onAbort)
-        if (shouldLogoutOnStatus(xhr.status, token)) {
-          options.unauthorized.notifyUnauthorized()
+        if (shouldLogoutOnStatus(xhr.status, token) && token === options.tokenProvider.getToken()) {
+          options.unauthorized.notifyUnauthorized(token)
         }
         try {
           const payload = (xhr.responseText
@@ -182,7 +182,7 @@ export function createHttpClient(options: {
       }
       xhr.onabort = () => {
         signal?.removeEventListener('abort', onAbort)
-        reject(new DomainError('NETWORK'))
+        reject(new DomainError('OPERATION_CANCELLED'))
       }
       xhr.send(body)
     })

@@ -1,0 +1,6 @@
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="native3dgs-input" path="native3dgs-input/" />
+    <cache-path name="model-cache" path="model-assets/" />
+    <files-path name="model-sources" path="model-sources/" />
+    <files-path name="training-output" path="training/outputs/" />
+</paths>

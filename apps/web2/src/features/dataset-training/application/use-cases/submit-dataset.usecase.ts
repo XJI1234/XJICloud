@@ -14,8 +14,9 @@ export type SubmitDatasetProgress = {
 
 export async function submitDatasetUseCase(
   deps: { jobs: TrainingJobRepository; objectStorage: ObjectStoragePort },
-  input: { projectId: string; name: string; archive: DatasetArchive; onProgress?: (progress: SubmitDatasetProgress) => void },
+  input: { projectId: string; name: string; archive: DatasetArchive; signal?: AbortSignal; onProgress?: (progress: SubmitDatasetProgress) => void },
 ): Promise<Result<TrainingJob>> {
+  if (input.signal?.aborted) return err(new DomainError('OPERATION_CANCELLED'))
   const name = input.name.trim()
   const [ticketError, ticket] = await deps.jobs.createDataset(input.projectId, input.archive, name)
   if (ticketError || !ticket) {
@@ -24,58 +25,39 @@ export async function submitDatasetUseCase(
 
   const totalBytes = totalArchiveBytes(input.archive)
   let completedBytes = 0
-
+  const checkCancelled = () => { if (input.signal?.aborted) throw new DomainError('OPERATION_CANCELLED') }
   const report = (loaded: number) => {
-    const safeTotal = totalBytes || loaded
-    input.onProgress?.({
-      percent: safeTotal > 0 ? Math.min(100, Math.round((loaded / safeTotal) * 100)) : 0,
-      loaded,
-      total: safeTotal,
-    })
+    if (input.signal?.aborted) return
+    const total = totalBytes || loaded
+    input.onProgress?.({ percent: total > 0 ? Math.min(100, Math.round(loaded / total * 100)) : 0, loaded, total })
   }
-
-  for (const fileItem of input.archive.files) {
-    const uploadItem = ticket.uploads.find((item) => item.archivedName === fileItem.archivedName)
-    if (!uploadItem) {
-      return err(new DomainError('DATASET_MISSING_UPLOAD_URL', undefined, { details: { name: fileItem.archivedName } }))
+  try {
+    checkCancelled()
+    for (const fileItem of input.archive.files) {
+      checkCancelled()
+      const upload = ticket.uploads.find(item => item.archivedName === fileItem.archivedName)
+      if (!upload) throw new DomainError('DATASET_MISSING_UPLOAD_URL')
+      await deps.objectStorage.put(upload.uploadUrl, fileItem.file, fileItem.contentType,
+        loaded => report(completedBytes + loaded), input.signal)
+      checkCancelled()
+      completedBytes += fileItem.sizeBytes
+      report(completedBytes)
     }
-    try {
-      await deps.objectStorage.put(uploadItem.uploadUrl, fileItem.file, fileItem.contentType, (loaded) => {
-        report(completedBytes + loaded)
-      })
-    } catch (error) {
-      return err(
-        error instanceof DomainError
-          ? error
-          : new DomainError('OSS_UPLOAD_FAILED', error instanceof Error ? error.message : String(error)),
-      )
-    }
-    completedBytes += fileItem.sizeBytes
-    report(completedBytes)
+    checkCancelled()
+    const manifestUrl = ticket.uploads.find(item => item.archivedName === 'manifest.json')?.uploadUrl || ticket.manifestUploadUrl
+    if (!manifestUrl) throw new DomainError('DATASET_MISSING_UPLOAD_URL')
+    await deps.objectStorage.put(manifestUrl, input.archive.manifestBlob, 'application/json',
+      loaded => report(completedBytes + loaded), input.signal)
+    checkCancelled()
+    // Once completion reaches the server, cancellation cannot roll it back.
+    const result = await deps.jobs.completeDataset(input.projectId, ticket.jobId)
+    if (!result[0]) report(totalBytes)
+    return result
+  } catch (error) {
+    const code = input.signal?.aborted ? 'OPERATION_CANCELLED' : error instanceof DomainError ? error.code : 'OSS_UPLOAD_FAILED'
+    if (input.signal?.aborted) await deps.jobs.cancel(ticket.jobId)
+    return err(new DomainError(code, undefined, { details: { jobId: ticket.jobId } }))
   }
-
-  const manifestUpload = ticket.uploads.find((item) => item.archivedName === 'manifest.json')
-  if (manifestUpload) {
-    try {
-      await deps.objectStorage.put(
-        manifestUpload.uploadUrl,
-        input.archive.manifestBlob,
-        'application/json',
-        (loaded) => {
-          report(completedBytes + loaded)
-        },
-      )
-    } catch (error) {
-      return err(
-        error instanceof DomainError
-          ? error
-          : new DomainError('OSS_UPLOAD_FAILED', error instanceof Error ? error.message : String(error)),
-      )
-    }
-  }
-
-  report(totalBytes)
-  return deps.jobs.completeDataset(input.projectId, ticket.jobId)
 }
 
 export async function cancelOrDeleteJobUseCase(

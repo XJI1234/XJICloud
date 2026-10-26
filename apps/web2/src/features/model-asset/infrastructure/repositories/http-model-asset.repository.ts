@@ -36,12 +36,17 @@ async function readCached(
   if (!cache) {
     return null
   }
-  const entries = await cache.list()
-  const meta = entries.find((entry) => entry.cacheKey === cacheKey) ?? null
-  if (!isCacheRevisionHit(meta, revision)) {
+  try {
+    const entries = await cache.list()
+    const meta = entries.find((entry) => entry.cacheKey === cacheKey) ?? null
+    if (!isCacheRevisionHit(meta, revision)) {
+      return null
+    }
+    return await cache.get(cacheKey)
+  } catch {
+    console.warn('Model cache read unavailable; using network')
     return null
   }
-  return cache.get(cacheKey)
 }
 
 async function writeCached(
@@ -77,8 +82,19 @@ async function dropModelCache(cache: CloudModelCachePort | undefined, modelId: s
 
 export function createHttpModelAssetRepository(
   http: HttpClient,
-  cache?: CloudModelCachePort,
+  cacheProvider?: CloudModelCachePort | (() => CloudModelCachePort | undefined),
+  getAccount?: () => string | null,
 ): ModelAssetRepository {
+  const invalidated = new Set<string>()
+  const revisions = new Map<string, number>()
+  const resolveCache = () => typeof cacheProvider === 'function' ? cacheProvider() : cacheProvider
+  async function invalidate(cache: CloudModelCachePort | undefined, modelId: string) {
+    invalidated.add(modelId)
+    revisions.set(modelId, (revisions.get(modelId) ?? 0) + 1)
+    try { await dropModelCache(cache, modelId) } catch {
+      console.warn('Model cache invalidation unavailable; bypassing cached model')
+    }
+  }
   return {
     async list(projectId): Promise<Result<ModelAsset[]>> {
       try {
@@ -88,20 +104,21 @@ export function createHttpModelAssetRepository(
         return err(mapHttpError(error))
       }
     },
-    async createUploadSession(projectId, fileName, sizeBytes): Promise<Result<ModelUploadSession>> {
+    async createUploadSession(projectId, fileName, sizeBytes, signal): Promise<Result<ModelUploadSession>> {
       try {
         const dto = await http.request<UploadSessionDto>(`/api/v1/projects/${projectId}/models/upload-sessions`, {
           method: 'POST',
           body: JSON.stringify({ fileName, sizeBytes }),
+          signal,
         })
         return ok(mapUploadSessionFromDto(dto))
       } catch (error) {
         return err(mapHttpError(error))
       }
     },
-    async getUploadSession(sessionId): Promise<Result<ModelUploadSession>> {
+    async getUploadSession(sessionId, signal): Promise<Result<ModelUploadSession>> {
       try {
-        const dto = await http.request<UploadSessionDto>(`/api/v1/models/upload-sessions/${sessionId}`)
+        const dto = await http.request<UploadSessionDto>(`/api/v1/models/upload-sessions/${sessionId}`, { signal })
         return ok(mapUploadSessionFromDto(dto))
       } catch (error) {
         return err(mapHttpError(error))
@@ -124,10 +141,11 @@ export function createHttpModelAssetRepository(
         return err(mapHttpError(error))
       }
     },
-    async completeUpload(sessionId): Promise<Result<ModelAsset>> {
+    async completeUpload(sessionId, signal): Promise<Result<ModelAsset>> {
       try {
         const dto = await http.request<ModelSummaryDto>(`/api/v1/models/upload-sessions/${sessionId}/complete`, {
           method: 'POST',
+          signal,
         })
         return ok(mapModelFromDto(dto))
       } catch (error) {
@@ -143,9 +161,10 @@ export function createHttpModelAssetRepository(
       }
     },
     async delete(modelId): Promise<Result<void>> {
+      const cache = resolveCache()
       try {
         await http.request(`/api/v1/models/${modelId}`, { method: 'DELETE' })
-        await dropModelCache(cache, modelId)
+        await invalidate(cache, modelId)
         return ok(undefined)
       } catch (error) {
         return err(mapHttpError(error))
@@ -162,14 +181,25 @@ export function createHttpModelAssetRepository(
       }
     },
     async downloadBytes(modelId, onProgress, options): Promise<Result<ArrayBuffer>> {
+      const owner = getAccount?.()
+      const revision = revisions.get(modelId) ?? 0
+      const checkOwner = () => {
+        if ((getAccount && owner !== getAccount()) || revision !== (revisions.get(modelId) ?? 0)) {
+          throw new DomainError('OPERATION_CANCELLED')
+        }
+      }
+      const cache = resolveCache()
       const cacheKey = liveModelCacheKey(modelId)
       try {
         options?.signal?.throwIfAborted()
-        const cached = await readCached(cache, cacheKey, options?.revision)
+        checkOwner()
+        const cached = invalidated.has(modelId) ? null : await readCached(cache, cacheKey, options?.revision)
         options?.signal?.throwIfAborted()
+        checkOwner()
         if (cached) {
           onProgress?.(cached.byteLength, cached.byteLength)
           options?.signal?.throwIfAborted()
+          checkOwner()
           return ok(cached)
         }
         const params = new URLSearchParams()
@@ -180,8 +210,9 @@ export function createHttpModelAssetRepository(
         const query = params.toString()
         const buffer = await http.downloadBytes(`/api/v1/models/${modelId}/download?${query}`, onProgress, options?.signal)
         options?.signal?.throwIfAborted()
+        checkOwner()
         await writeCached(
-          cache,
+          invalidated.has(modelId) ? undefined : cache,
           {
             cacheKey,
             modelId,
@@ -193,17 +224,32 @@ export function createHttpModelAssetRepository(
           buffer,
         )
         options?.signal?.throwIfAborted()
+        checkOwner()
         return ok(buffer)
       } catch (error) {
         return err(options?.signal?.aborted ? new DomainError('OPERATION_CANCELLED') : mapHttpError(error))
       }
     },
     async downloadVersionBytes(modelId, versionId, onProgress, options): Promise<Result<ArrayBuffer>> {
+      const owner = getAccount?.()
+      const revision = revisions.get(modelId) ?? 0
+      const checkOwner = () => {
+        if ((getAccount && owner !== getAccount()) || revision !== (revisions.get(modelId) ?? 0)) {
+          throw new DomainError('OPERATION_CANCELLED')
+        }
+      }
+      const cache = resolveCache()
       const cacheKey = historyModelCacheKey(modelId, versionId)
       try {
-        const cached = await readCached(cache, cacheKey, options?.revision)
+        options?.signal?.throwIfAborted()
+        checkOwner()
+        const cached = invalidated.has(modelId) ? null : await readCached(cache, cacheKey, options?.revision)
+        options?.signal?.throwIfAborted()
+        checkOwner()
         if (cached) {
           onProgress?.(cached.byteLength, cached.byteLength)
+          options?.signal?.throwIfAborted()
+          checkOwner()
           return ok(cached)
         }
         const params = new URLSearchParams({
@@ -212,9 +258,12 @@ export function createHttpModelAssetRepository(
         const buffer = await http.downloadBytes(
           `/api/v1/models/${modelId}/versions/${encodeURIComponent(versionId)}/file?${params.toString()}`,
           onProgress,
+          options?.signal,
         )
+        options?.signal?.throwIfAborted()
+        checkOwner()
         await writeCached(
-          cache,
+          invalidated.has(modelId) ? undefined : cache,
           {
             cacheKey,
             modelId,
@@ -225,12 +274,15 @@ export function createHttpModelAssetRepository(
           },
           buffer,
         )
+        options?.signal?.throwIfAborted()
+        checkOwner()
         return ok(buffer)
       } catch (error) {
-        return err(mapHttpError(error))
+        return err(options?.signal?.aborted ? new DomainError('OPERATION_CANCELLED') : mapHttpError(error))
       }
     },
     async listCached(): Promise<Result<CachedModelFile[]>> {
+      const cache = resolveCache()
       if (!cache) {
         return ok([])
       }
@@ -241,6 +293,7 @@ export function createHttpModelAssetRepository(
       }
     },
     async removeCached(cacheKeys): Promise<Result<void>> {
+      const cache = resolveCache()
       if (!cache) {
         return ok(undefined)
       }
@@ -251,7 +304,8 @@ export function createHttpModelAssetRepository(
         return err(mapHttpError(error))
       }
     },
-    async uploadExport(modelId, file, fileName, onProgress): Promise<Result<ModelAsset>> {
+    async uploadExport(modelId, file, fileName, onProgress, signal): Promise<Result<ModelAsset>> {
+      const cache = resolveCache()
       try {
         const formData = new FormData()
         formData.append('file', file, fileName)
@@ -260,8 +314,9 @@ export function createHttpModelAssetRepository(
           formData,
           {},
           onProgress,
+          signal,
         )
-        await dropModelCache(cache, modelId)
+        await invalidate(cache, modelId)
         return ok(mapModelFromDto(dto))
       } catch (error) {
         return err(mapHttpError(error))
@@ -276,12 +331,13 @@ export function createHttpModelAssetRepository(
       }
     },
     async restoreVersion(modelId, versionId): Promise<Result<ModelAsset>> {
+      const cache = resolveCache()
       try {
         const dto = await http.request<ModelSummaryDto>(`/api/v1/models/${modelId}/versions/restore`, {
           method: 'POST',
           body: JSON.stringify({ versionId }),
         })
-        await dropModelCache(cache, modelId)
+        await invalidate(cache, modelId)
         return ok(mapModelFromDto(dto))
       } catch (error) {
         return err(mapHttpError(error))

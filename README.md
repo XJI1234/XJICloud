@@ -15,6 +15,7 @@ XJICloud/
 ├── apps/
 │   ├── web2/                # 当前用户前端 @xjicloud/web2（:5176，DDD）
 │   ├── web/                 # 已弃用：旧用户前端 @xjicloud/web（:5174）
+│   ├── android/             # Flutter Android 客户端，Native3DGS 原生查看
 │   └── admin/               # 管理面板 @xjicloud/admin（:5175，base /admin/）
 ├── packages/
 │   ├── spark/               # Spark 2.0 渲染库 @xjicloud/spark
@@ -36,6 +37,7 @@ XJICloud/
 |------|------|----------|
 | 用户前端（当前） | `apps/web2`, `packages/spark`, `rust` | `pnpm dev` / `pnpm test:web2` |
 | 用户前端（已弃用） | `apps/web` | `pnpm dev:web-legacy` |
+| Android 客户端 | `apps/android` | 见 [移动端说明](apps/android/README.md) |
 | 管理前端 | `apps/admin` | `pnpm --filter @xjicloud/admin dev` |
 | 后端 | `services/backend` | `cd services/backend && mvn spring-boot:run` |
 | Worker | `services/gpu-worker` | `docker build -t xjicloud/gpu-worker services/gpu-worker` |

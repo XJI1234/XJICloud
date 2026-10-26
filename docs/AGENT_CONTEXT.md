@@ -19,7 +19,7 @@
 
 技术栈：**Vue 3.5 + Vite + pnpm workspace**（当前用户端为 `apps/web2`，前端 DDD，无 Pinia 作为业务源）；**Spring Boot 3.3 + Java 17**（后端）、**Redis**（任务队列）、**S3 兼容 OSS**（MinIO / 阿里云 OSS）、**Python GPU Worker 容器**（Alibaba Cloud Linux 3）、**Rust/WASM**（浏览器端 Spark）。
 
-**桌面端（Electron/Tauri）已移除**，仅保留 Web。
+**桌面端（Electron/Tauri）已移除**。移动客户端位于 `apps/android`：Flutter Android 宿主与 Native3DGS 0.2.2 本地桥，Identity、Project、Model-asset、Dataset-training、Viewer 五个 BC 已落地。四 Tab 和中央上传提供账号、工程 CRUD/最近、PLY/SPZ 分片及私有租约缓存、图片 OSS 前台上传/任务观察、本机及云模型查看；普通入口为真实产品，`main_probe.dart` 仅开发。2026-10-20 已在 Android 16 / Adreno 750 / 4KB 页真机验证分阶段路径，详细结果和未覆盖项见其 `docs/verification/`。部署 Worker 未观察完成，不能宣称完整训练/产物 E2E；固定 decoder 不支持 16KB 页，原生白画布因无背景 API 与暗画布设计存在明确偏差。维护前读该目录 `AGENTS.md`、`docs/` 与 `plans/`，不得把 mock 或构建成功当作设备验收。
 
 ---
 
@@ -27,6 +27,7 @@
 
 ```
 XJICloud/
+├── apps/android/             # Flutter Android 客户端，五个 BC / Native3DGS 原生查看
 ├── apps/web2/                # 当前用户前端 @xjicloud/web2（:5176，DDD）
 ├── apps/web/                 # 已弃用：旧用户前端 @xjicloud/web（:5174）
 ├── apps/admin/               # 管理前端 @xjicloud/admin（:5175，base /admin/）
@@ -255,7 +256,7 @@ CREATE TABLE model_versions (
 
 ## 7. 当前用户前端（`apps/web2/`）
 
-**这是唯一的用户产品面。** 完整架构知识库：[WEB2_FRONTEND.md](./WEB2_FRONTEND.md)。包说明：[apps/web2/README.md](../apps/web2/README.md)。Agent 硬规则：[apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。
+**这是当前 Web 用户产品面。** Android 客户端另见 `apps/android`；Web 完整架构知识库：[WEB2_FRONTEND.md](./WEB2_FRONTEND.md)。包说明：[apps/web2/README.md](../apps/web2/README.md)。Agent 硬规则：[apps/web2/AGENTS.md](../apps/web2/AGENTS.md)。
 
 - 包名 `@xjicloud/web2`，端口 **5176**，`/api` 代理到 8080
 - 在旧版 `apps/web` 的产品能力之上，用前端 DDD 重构：`features/{bc}/{domain,application,infrastructure,presentation}` + `app/create-container.ts` 组合根

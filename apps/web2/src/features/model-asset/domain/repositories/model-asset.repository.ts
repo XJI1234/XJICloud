@@ -18,8 +18,8 @@ export type ChunkProgress = (loaded: number, total: number) => void
 
 export interface ModelAssetRepository {
   list(projectId: string): Promise<Result<ModelAsset[]>>
-  createUploadSession(projectId: string, fileName: string, sizeBytes: number): Promise<Result<ModelUploadSession>>
-  getUploadSession(sessionId: string): Promise<Result<ModelUploadSession>>
+  createUploadSession(projectId: string, fileName: string, sizeBytes: number, signal?: AbortSignal): Promise<Result<ModelUploadSession>>
+  getUploadSession(sessionId: string, signal?: AbortSignal): Promise<Result<ModelUploadSession>>
   putChunk(
     sessionId: string,
     chunk: Blob,
@@ -27,7 +27,7 @@ export interface ModelAssetRepository {
     onProgress?: ChunkProgress,
     signal?: AbortSignal,
   ): Promise<Result<{ receivedBytes: number }>>
-  completeUpload(sessionId: string): Promise<Result<ModelAsset>>
+  completeUpload(sessionId: string, signal?: AbortSignal): Promise<Result<ModelAsset>>
   abortUpload(sessionId: string): Promise<Result<void>>
   delete(modelId: string): Promise<Result<void>>
   createDownloadToken(modelId: string): Promise<Result<DownloadToken>>
@@ -40,7 +40,7 @@ export interface ModelAssetRepository {
     modelId: string,
     versionId: string,
     onProgress?: (loaded: number, total: number) => void,
-    options?: { revision?: ModelCacheRevision },
+    options?: { revision?: ModelCacheRevision; signal?: AbortSignal },
   ): Promise<Result<ArrayBuffer>>
   listCached(): Promise<Result<CachedModelFile[]>>
   removeCached(cacheKeys: string[]): Promise<Result<void>>
@@ -49,6 +49,7 @@ export interface ModelAssetRepository {
     file: Blob,
     fileName: string,
     onProgress?: ChunkProgress,
+    signal?: AbortSignal,
   ): Promise<Result<ModelAsset>>
   listVersions(modelId: string): Promise<Result<ModelVersion[]>>
   restoreVersion(modelId: string, versionId: string): Promise<Result<ModelAsset>>

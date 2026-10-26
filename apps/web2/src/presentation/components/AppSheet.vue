@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useModalFocus } from '@/presentation/composables/useModalFocus'
 import { prefersReducedMotion } from '@/presentation/motion'
 
 const props = withDefaults(
@@ -80,11 +81,7 @@ function positionPopover() {
   }
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && props.visible) {
-    emit('close')
-  }
-}
+useModalFocus(() => props.visible, panelRef, () => emit('close'))
 
 function onResize() {
   updateNarrow()
@@ -95,18 +92,20 @@ function onResize() {
 
 watch(
   () => props.visible,
-  async (visible) => {
+  async (visible, _old, onCleanup) => {
+    let cancelled = false
+    onCleanup(() => { cancelled = true })
     if (visible) {
       updateNarrow()
       await nextTick()
+      if (cancelled) return
       positionPopover()
-      document.addEventListener('keydown', onKeydown)
       window.addEventListener('resize', onResize)
     } else {
-      document.removeEventListener('keydown', onKeydown)
       window.removeEventListener('resize', onResize)
     }
   },
+  { immediate: true },
 )
 
 watch(
@@ -120,7 +119,6 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', onResize)
 })
 </script>
@@ -138,6 +136,7 @@ onBeforeUnmount(() => {
           :class="panelClass"
           :style="effectiveMode === 'popover' ? popoverStyle : undefined"
           role="dialog"
+          tabindex="-1"
           aria-modal="true"
           :aria-labelledby="title ? titleId : undefined"
           @click.stop

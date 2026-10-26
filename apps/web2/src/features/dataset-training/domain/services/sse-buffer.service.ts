@@ -1,5 +1,5 @@
 export function extractSseJsonPayloads(buffer: string): { payloads: unknown[]; rest: string } {
-  const chunks = buffer.split('\n\n')
+  const chunks = buffer.replace(/\r\n/g, '\n').split('\n\n')
   const rest = chunks.pop() ?? ''
   const payloads: unknown[] = []
 

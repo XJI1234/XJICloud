@@ -182,6 +182,7 @@ export default {
     uploadFailed: 'Upload failed',
   },
   training: {
+    connectionLost: 'Connection lost. Recovering; you can also retry.',
     eyebrow: 'Training Jobs',
     title: 'Training Progress',
     refresh: 'Refresh',
@@ -271,6 +272,7 @@ export default {
     exportFormat: 'File format',
     formatPly: 'PLY',
     formatSpz: 'SPZ',
+    spzV3: 'v3 (better compatibility)',
     exportMode: 'Save mode',
     overwriteExisting: 'Overwrite current model',
     saveAsNewModel: 'Save as new model',

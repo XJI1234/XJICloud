@@ -1,0 +1,908 @@
+{
+  "date": "2026-10-20",
+  "device": "Lenovo TB710FU / Android 16 / Adreno 750 / 4096-byte pages",
+  "artifactSha256": "a1c7bdb195608680e3b5cf1e3a4805247848ab7f98311ab26dbc6605cc2bfa77",
+  "commit": "f5548a936182183691772f75d611927362aeb59c",
+  "mode": "ordinary-main arm64 profile",
+  "fixture": {
+    "points": 262144,
+    "bytes": 17826295,
+    "sha256": "269e11e5c394984fdf3de7485466af2d3060247c49757b7fa829c96f79676ec2"
+  },
+  "workload": "600 seconds continuous injected single-pointer orbit, 16 ms input pacing, native canvas 3200x2000 window",
+  "method": "SurfaceFlinger native BLAST layer timestats; each sample dumps and clears the observation window. Percentiles identify histogram buckets, not exact measured milliseconds. FPS is the actual SurfaceFlinger averageFPS field.",
+  "limitations": [
+    "Synthetic 262144-splat scene; no large real-world quality/performance certification.",
+    "USB charging; battery temperature is not GPU junction temperature. Thermal status 0 does not prove absence of GPU DVFS.",
+    "No precise Flutter jank, GPU timing, 1% low FPS or leak-free claim. Legacy latency/Perfetto app FrameTimeline did not expose useful native frames.",
+    "One device/GPU, default SDK quality, fixed white canvas."
+  ],
+  "samples": [
+    {
+      "elapsedSeconds": 0,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 817502,
+          "TOTAL RSS": 986096,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28217,
+          "TOTAL RSS": 151552,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 269,
+      "surface": null
+    },
+    {
+      "elapsedSeconds": 30.2,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 780130,
+          "TOTAL RSS": 949276,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28908,
+          "TOTAL RSS": 152768,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 269,
+      "surface": {
+        "frames": 1585,
+        "surfaceFlingerAverageFPS": 55.653,
+        "presentIntervalSamples": 1585,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            529
+          ],
+          [
+            20,
+            989
+          ],
+          [
+            27,
+            65
+          ],
+          [
+            34,
+            2
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 60.11,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 780808,
+          "TOTAL RSS": 949992,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28530,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 271,
+      "surface": {
+        "frames": 1586,
+        "surfaceFlingerAverageFPS": 55.745,
+        "presentIntervalSamples": 1586,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            522
+          ],
+          [
+            20,
+            1011
+          ],
+          [
+            27,
+            51
+          ],
+          [
+            34,
+            2
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 90.01,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 780938,
+          "TOTAL RSS": 950132,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28530,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 271,
+      "surface": {
+        "frames": 1583,
+        "surfaceFlingerAverageFPS": 55.632,
+        "presentIntervalSamples": 1583,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            537
+          ],
+          [
+            20,
+            969
+          ],
+          [
+            27,
+            76
+          ],
+          [
+            42,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 120.19,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 781164,
+          "TOTAL RSS": 950384,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28540,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 275,
+      "surface": {
+        "frames": 1596,
+        "surfaceFlingerAverageFPS": 55.678,
+        "presentIntervalSamples": 1596,
+        "presentIntervalNonzeroBins": [
+          [
+            6,
+            1
+          ],
+          [
+            13,
+            516
+          ],
+          [
+            20,
+            1026
+          ],
+          [
+            27,
+            53
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 150.07,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 781493,
+          "TOTAL RSS": 950724,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28540,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 275,
+      "surface": {
+        "frames": 1582,
+        "surfaceFlingerAverageFPS": 55.583,
+        "presentIntervalSamples": 1582,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            520
+          ],
+          [
+            20,
+            996
+          ],
+          [
+            27,
+            66
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 180.25,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 781764,
+          "TOTAL RSS": 951000,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28540,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 275,
+      "surface": {
+        "frames": 1601,
+        "surfaceFlingerAverageFPS": 55.726,
+        "presentIntervalSamples": 1601,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            536
+          ],
+          [
+            20,
+            1000
+          ],
+          [
+            27,
+            64
+          ],
+          [
+            34,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 210.19,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 781864,
+          "TOTAL RSS": 951108,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28540,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 277,
+      "surface": {
+        "frames": 1585,
+        "surfaceFlingerAverageFPS": 55.708,
+        "presentIntervalSamples": 1585,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            532
+          ],
+          [
+            20,
+            987
+          ],
+          [
+            27,
+            64
+          ],
+          [
+            34,
+            2
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 240.1,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 782101,
+          "TOTAL RSS": 951348,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28540,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 277,
+      "surface": {
+        "frames": 1576,
+        "surfaceFlingerAverageFPS": 55.481,
+        "presentIntervalSamples": 1576,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            530
+          ],
+          [
+            20,
+            963
+          ],
+          [
+            27,
+            82
+          ],
+          [
+            42,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 27,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 270.2,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 782804,
+          "TOTAL RSS": 952056,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28540,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 281,
+      "surface": {
+        "frames": 1598,
+        "surfaceFlingerAverageFPS": 55.615,
+        "presentIntervalSamples": 1598,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            528
+          ],
+          [
+            20,
+            1006
+          ],
+          [
+            27,
+            61
+          ],
+          [
+            34,
+            3
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 300.14,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 783027,
+          "TOTAL RSS": 952280,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28540,
+          "TOTAL RSS": 152388,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 281,
+      "surface": {
+        "frames": 1598,
+        "surfaceFlingerAverageFPS": 55.943,
+        "presentIntervalSamples": 1598,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            535
+          ],
+          [
+            20,
+            1014
+          ],
+          [
+            27,
+            48
+          ],
+          [
+            34,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 330.16,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 783048,
+          "TOTAL RSS": 952304,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 281,
+      "surface": {
+        "frames": 1586,
+        "surfaceFlingerAverageFPS": 55.745,
+        "presentIntervalSamples": 1586,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            536
+          ],
+          [
+            20,
+            982
+          ],
+          [
+            27,
+            67
+          ],
+          [
+            34,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 360.07,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 783169,
+          "TOTAL RSS": 952428,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 281,
+      "surface": {
+        "frames": 1593,
+        "surfaceFlingerAverageFPS": 55.908,
+        "presentIntervalSamples": 1593,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            546
+          ],
+          [
+            20,
+            984
+          ],
+          [
+            27,
+            61
+          ],
+          [
+            34,
+            2
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 390.02,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 783204,
+          "TOTAL RSS": 952464,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 283,
+      "surface": {
+        "frames": 1594,
+        "surfaceFlingerAverageFPS": 55.891,
+        "presentIntervalSamples": 1594,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            534
+          ],
+          [
+            20,
+            1008
+          ],
+          [
+            27,
+            50
+          ],
+          [
+            34,
+            2
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 420.25,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 783309,
+          "TOTAL RSS": 952572,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 283,
+      "surface": {
+        "frames": 1589,
+        "surfaceFlingerAverageFPS": 55.432,
+        "presentIntervalSamples": 1589,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            520
+          ],
+          [
+            20,
+            998
+          ],
+          [
+            27,
+            68
+          ],
+          [
+            34,
+            2
+          ],
+          [
+            42,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 450.11,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 783288,
+          "TOTAL RSS": 952552,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 285,
+      "surface": {
+        "frames": 1593,
+        "surfaceFlingerAverageFPS": 55.936,
+        "presentIntervalSamples": 1593,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            539
+          ],
+          [
+            20,
+            998
+          ],
+          [
+            27,
+            56
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 480.04,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 783332,
+          "TOTAL RSS": 952596,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 285,
+      "surface": {
+        "frames": 1587,
+        "surfaceFlingerAverageFPS": 55.823,
+        "presentIntervalSamples": 1587,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            540
+          ],
+          [
+            20,
+            980
+          ],
+          [
+            27,
+            67
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 510.18,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 784916,
+          "TOTAL RSS": 954180,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 285,
+      "surface": {
+        "frames": 1603,
+        "surfaceFlingerAverageFPS": 55.895,
+        "presentIntervalSamples": 1603,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            541
+          ],
+          [
+            20,
+            1004
+          ],
+          [
+            27,
+            58
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 540.08,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 784257,
+          "TOTAL RSS": 953524,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 285,
+      "surface": {
+        "frames": 1585,
+        "surfaceFlingerAverageFPS": 55.68,
+        "presentIntervalSamples": 1585,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            534
+          ],
+          [
+            20,
+            980
+          ],
+          [
+            27,
+            70
+          ],
+          [
+            34,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 570.25,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 784296,
+          "TOTAL RSS": 953564,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28544,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 287,
+      "surface": {
+        "frames": 1600,
+        "surfaceFlingerAverageFPS": 55.757,
+        "presentIntervalSamples": 1600,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            542
+          ],
+          [
+            20,
+            989
+          ],
+          [
+            27,
+            68
+          ],
+          [
+            34,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    },
+    {
+      "elapsedSeconds": 601.7,
+      "processes": {
+        "com.xjicloud.mobile": {
+          "TOTAL PSS": 784666,
+          "TOTAL RSS": 953848,
+          "TOTAL SWAP PSS": null
+        },
+        "native3dgs_decoder": {
+          "TOTAL PSS": 28572,
+          "TOTAL RSS": 152392,
+          "TOTAL SWAP PSS": null
+        }
+      },
+      "thermalStatus": 0,
+      "batteryDeciCelsius": 287,
+      "surface": {
+        "frames": 1596,
+        "surfaceFlingerAverageFPS": 55.787,
+        "presentIntervalSamples": 1596,
+        "presentIntervalNonzeroBins": [
+          [
+            13,
+            528
+          ],
+          [
+            20,
+            1014
+          ],
+          [
+            27,
+            53
+          ],
+          [
+            34,
+            1
+          ]
+        ],
+        "p50HistogramBucketMs": 20,
+        "p90HistogramBucketMs": 20,
+        "p95HistogramBucketMs": 20,
+        "p99HistogramBucketMs": 27
+      }
+    }
+  ]
+}
