@@ -262,7 +262,7 @@ CREATE TABLE model_versions (
 - 在旧版 `apps/web` 的产品能力之上，用前端 DDD 重构：`features/{bc}/{domain,application,infrastructure,presentation}` + `app/create-container.ts` 组合根
 - BC：identity、project、dataset-training、model-asset、viewer、editor
 - **UI 主题：** 浅色产品壳（`--surface #f5f6f8`，强调色 `--accent #3d6b8a`，`system-ui`）+ 暗色 3D 画布。不是旧版 Twilight Amber 暗色壳。
-- `/app/layer` 为 Native3DGS WebGPU 只读查看；独立 Vue demo 位于 `apps/web2/demo/native3dgs`（`:5186`），与云页复用同一组件。固定 SDK `0.2.2-preview.3` 要求 Node 24.14+，资产按 manifest 校验后部署；`/app/supersplat` 允许无云端模型进入并打开本地文件；`/app/settings` 管理 OPFS 模型缓存
+- `/app/layer` 为 Native3DGS WebGPU 只读查看；独立 Vue demo 位于 `apps/web2/demo/native3dgs`（`:5186`），与云页复用同一组件。固定 SDK `0.2.2-preview.4` 要求 Node 24.14+，支持有界 SPZ v4 解码，资产按 manifest 校验后部署；`/app/supersplat` 允许无云端模型进入并打开本地文件；`/app/settings` 管理 OPFS 模型缓存
 - `GET /models/{id}/download` 的字节由 web2 `model-asset` 仓储经 OPFS 按 modelId + 修订（`updatedAt`+`sizeBytes`）缓存，查看器与高级编辑共用；覆盖导出/恢复会使该模型缓存失效
 - 测试：`pnpm test:web2`；构建：`pnpm build` / `pnpm build:web2`；开发：`pnpm dev`（指向 web2）
 - 查看器只负责本机/工程模型浏览、取消/关闭、固定/自由、适配/重置/Y 翻转、缩放/PNG 截图；不提供上传/删除/编辑。云模型仍由已有鉴权仓储下载为 File 并缓存，下载支持可选 AbortSignal。不使用 SDK 裸 URL 绕过用户 JWT；PLY/SPZ 不迁 OSS。
